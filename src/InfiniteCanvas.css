@@ -1,0 +1,240 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.canvas-container {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+  overflow: hidden;
+  background-color: #0f172a;
+  user-select: none;
+  touch-action: none;
+}
+
+.canvas-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: radial-gradient(#334155 1px, transparent 1px);
+  z-index: 0;
+}
+
+.canvas-world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  z-index: 1;
+}
+
+.media-item {
+  position: absolute;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  background: #1e293b;
+  cursor: grab;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  will-change: transform;
+}
+
+.media-item:active {
+  cursor: grabbing;
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.7), 0 0 0 2px rgba(139, 92, 246, 0.5);
+  transform: scale(1.02);
+}
+
+.media-item img,
+.media-item video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Let drag events pass through */
+}
+
+.delete-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease, background 0.2s ease, transform 0.2s ease;
+  z-index: 2;
+}
+
+.media-item:hover .delete-btn {
+  opacity: 1;
+}
+
+.delete-btn:hover {
+  background: rgba(220, 38, 38, 0.8);
+  transform: scale(1.1);
+}
+
+.ui-overlay {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  padding: 24px;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #f8fafc;
+  z-index: 10;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+.ui-overlay h1 {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  font-weight: 700;
+  background: #3b82f6;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.ui-overlay p {
+  margin: 0;
+  font-size: 14px;
+  color: #cbd5e1;
+}
+
+.resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 20px;
+  height: 20px;
+  cursor: se-resize;
+  background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.4) 50%);
+  z-index: 5;
+  border-bottom-right-radius: 12px;
+}
+
+.resize-handle:hover {
+  background: linear-gradient(135deg, transparent 50%, rgba(139, 92, 246, 0.8) 50%);
+}
+
+.selection-box {
+  position: absolute;
+  border: 1px solid rgba(139, 92, 246, 0.8);
+  background-color: rgba(139, 92, 246, 0.2);
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.media-item.selected {
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.8), 0 10px 30px -5px rgba(0, 0, 0, 0.5);
+}
+
+.reset-btn {
+  position: absolute;
+  top: 10px;
+  right: 50px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease, background 0.2s ease, transform 0.2s ease;
+  z-index: 2;
+}
+
+.media-item:hover .reset-btn {
+  opacity: 1;
+}
+
+.reset-btn:hover {
+  background: rgba(59, 130, 246, 0.8);
+  transform: scale(1.1);
+}
+
+.toolbar {
+  margin-top: 16px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.hud-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  height: 26px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: #cbd5e1;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.hud-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: #e2e8f0;
+  text-transform: uppercase;
+}
+
+.hud-btn svg {
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.hud-btn:hover {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: rgba(139, 92, 246, 0.45);
+  color: #e2e8f0;
+}
+
+.hud-btn:hover svg {
+  opacity: 1;
+}
+
+.hud-btn:active {
+  background: rgba(139, 92, 246, 0.25);
+}
+
+.ui-overlay .item-count {
+  margin-top: 0;
+  font-weight: 600;
+  color: #94a3b8;
+}

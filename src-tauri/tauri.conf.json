@@ -1,24 +1,28 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "sigma",
+  "productName": "tauri-app",
   "version": "0.1.0",
-  "identifier": "com.sigma.app",
+  "identifier": "com.desktop.canvas",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
   "app": {
     "windows": [
       {
-        "title": "sigma",
+        "title": "tauri-app",
         "width": 800,
         "height": 600
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**"]
+      }
     }
   },
   "bundle": {
