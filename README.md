@@ -15,7 +15,7 @@ An infinitely scalable media canvas for assets and portfolios.
 
 ## Features
 
-Film edit planning, ML/dataset triage, moodboarding with massive clips, evidence intel boards: just throw a bunch of media down and think about spatially.
+Film edit planning, ML/dataset triage, moodboarding with massive clips, evidence intel boards: just throw a bunch of media down and think about it spatially.
 
 - Save your config preserves the just the video location, so you can load up templates at any time.
 - Lightweight: currently under 1K LoC
@@ -33,3 +33,7 @@ pnpm tauri dev
 ```sh
 pnpm build
 ```
+
+## Development
+
+Massive WIP. I'll continue development if there's any further interest.
