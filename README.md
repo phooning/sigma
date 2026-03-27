@@ -3,7 +3,7 @@
 An infinitely scalable media canvas for collages and portfolios.
 
 <div align="center">
-  <video src="https://github.com/phooning/sigma/raw/refs/heads/main/fixtures/demo.mp4" 
+  <video src="https://github.com/user-attachments/assets/646810a7-b566-4168-8cd3-a6a06a22df72" 
          autoplay 
          loop 
          muted 
