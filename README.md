@@ -1,6 +1,6 @@
 # Sigma
 
-An infinitely scalable media canvas for collages and portfolios.
+An infinitely scalable media canvas for assets and portfolios.
 
 <div align="center">
   <video src="https://github.com/user-attachments/assets/646810a7-b566-4168-8cd3-a6a06a22df72" 
@@ -13,7 +13,13 @@ An infinitely scalable media canvas for collages and portfolios.
   </video>
 </div>
 
-Saving your config preserves the just the video location, so you can load up templates at any time.
+## Features
+
+Film edit planning, ML/dataset triage, moodboarding with massive clips, evidence intel boards: just throw a bunch of media down and think about spatially.
+
+- Save your config preserves the just the video location, so you can load up templates at any time.
+- Lightweight: currently under 1K LoC
+- Video/images as first class assets in spatial state
 
 ## Get Started
 
