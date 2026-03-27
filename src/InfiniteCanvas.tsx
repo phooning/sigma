@@ -51,6 +51,12 @@ export default function InfiniteCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const startDragRef = useRef<{ x: number; y: number } | null>(null);
 
+  const startPanning = (pointerId: number, clientX: number, clientY: number) => {
+    setIsPanning(true);
+    startDragRef.current = { x: clientX, y: clientY };
+    containerRef.current?.setPointerCapture(pointerId);
+  };
+
   useEffect(() => {
     const preventDragDefaults = (e: DragEvent) => {
       e.preventDefault();
@@ -157,9 +163,7 @@ export default function InfiniteCanvas() {
         setSelectedItems(new Set());
         e.currentTarget.setPointerCapture(e.pointerId);
       } else if (e.button === 1 || e.button === 2) {
-        setIsPanning(true);
-        startDragRef.current = { x: e.clientX, y: e.clientY };
-        e.currentTarget.setPointerCapture(e.pointerId);
+        startPanning(e.pointerId, e.clientX, e.clientY);
       }
     }
   };
@@ -246,6 +250,12 @@ export default function InfiniteCanvas() {
     }
 
     e.stopPropagation();
+
+    if (e.button === 1 || e.button === 2) {
+      e.preventDefault();
+      startPanning(e.pointerId, e.clientX, e.clientY);
+      return;
+    }
 
     const isResize = (e.target as HTMLElement).classList.contains(
       "resize-handle"
