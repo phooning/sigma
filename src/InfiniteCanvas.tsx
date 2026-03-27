@@ -9,7 +9,7 @@ import type { DragDropEvent } from "@tauri-apps/api/webview";
 import { Event } from "@tauri-apps/api/event";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { v4 as uuidv4 } from "uuid";
-import { save, open } from "@tauri-apps/plugin-dialog";
+import { save, open, message } from "@tauri-apps/plugin-dialog";
 import { writeTextFile, readTextFile } from "@tauri-apps/plugin-fs";
 import "./InfiniteCanvas.css";
 import { ISelectionBox, SelectionBox } from "./components/SelectionBox";
@@ -51,7 +51,11 @@ export default function InfiniteCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const startDragRef = useRef<{ x: number; y: number } | null>(null);
 
-  const startPanning = (pointerId: number, clientX: number, clientY: number) => {
+  const startPanning = (
+    pointerId: number,
+    clientX: number,
+    clientY: number
+  ) => {
     setIsPanning(true);
     startDragRef.current = { x: clientX, y: clientY };
     containerRef.current?.setPointerCapture(pointerId);
@@ -380,6 +384,8 @@ export default function InfiniteCanvas() {
   const saveConfig = async () => {
     try {
       const filePath = await save({
+        title: "Save canvas",
+        defaultPath: "canvas.json",
         filters: [
           {
             name: "Canvas Config",
@@ -388,12 +394,26 @@ export default function InfiniteCanvas() {
         ]
       });
 
-      if (filePath) {
-        const configData = JSON.stringify({ items, viewport });
-        await writeTextFile(filePath, configData);
+      if (!filePath) {
+        // User cancelled action.
+        return;
       }
+      const configData = JSON.stringify({ items, viewport });
+      await writeTextFile(filePath, configData);
+
+      await message("Config saved successfully.", {
+        title: "Save completed",
+        kind: "info"
+      });
     } catch (err) {
-      console.error("Failed to save:", err);
+      const text =
+        err instanceof Error ? err.message : "Unknown error while saving.";
+
+      console.error("Failed to save config:", err);
+      await message(`Failed to save config:\n\n${text}`, {
+        title: "Save failed",
+        kind: "error"
+      });
     }
   };
 

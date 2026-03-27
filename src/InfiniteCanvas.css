@@ -93,33 +93,21 @@ body {
 
 .ui-overlay {
   position: absolute;
-  top: 24px;
-  left: 24px;
-  padding: 24px;
-  border-radius: 16px;
-  background: rgba(15, 23, 42, 0.6);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #f8fafc;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(18, 19, 20, 0.20);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f3f4f6;
   z-index: 10;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-}
-
-.ui-overlay h1 {
-  margin: 0 0 8px 0;
-  font-size: 24px;
-  font-weight: 700;
-  background: #3b82f6;
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.ui-overlay p {
-  margin: 0;
-  font-size: 14px;
-  color: #cbd5e1;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
 }
 
 .resize-handle {
@@ -182,10 +170,10 @@ body {
 }
 
 .toolbar {
-  margin-top: 16px;
   display: flex;
   gap: 12px;
   align-items: center;
+  justify-content: flex-end;
 }
 
 .hud-btn {
@@ -193,25 +181,26 @@ body {
   align-items: center;
   gap: 6px;
   padding: 0 12px;
-  height: 26px;
-  background: rgba(255, 255, 255, 0.05);
+  height: 28px;
+  background: rgba(31, 41, 55, 0.42);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 4px;
-  color: #cbd5e1;
+  color: #e5e7eb;
   font-family: inherit;
   font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
 .hud-title {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.18em;
-  color: #e2e8f0;
-  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #f8fafc;
+  text-transform: none;
 }
 
 .hud-btn svg {
@@ -220,9 +209,9 @@ body {
 }
 
 .hud-btn:hover {
-  background: rgba(139, 92, 246, 0.15);
-  border-color: rgba(139, 92, 246, 0.45);
-  color: #e2e8f0;
+  background: rgba(17, 24, 39, 0.65);
+  border-color: rgba(229, 231, 235, 0.24);
+  color: #f9fafb;
 }
 
 .hud-btn:hover svg {
@@ -230,11 +219,14 @@ body {
 }
 
 .hud-btn:active {
-  background: rgba(139, 92, 246, 0.25);
+  background: rgba(17, 24, 39, 0.82);
 }
 
 .ui-overlay .item-count {
   margin-top: 0;
   font-weight: 600;
-  color: #94a3b8;
+  color: rgba(243, 244, 246, 0.74);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }

@@ -8,6 +8,8 @@
     "opener:default",
     "fs:default",
     "dialog:default",
+    "dialog:allow-save",
+    "fs:allow-write-text-file",
     "os:default",
     "core:window:default",
     "core:event:default"
