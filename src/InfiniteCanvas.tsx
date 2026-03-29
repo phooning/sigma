@@ -15,6 +15,11 @@ import "./InfiniteCanvas.css";
 import { ISelectionBox, SelectionBox } from "./components/SelectionBox";
 import { Hud } from "./components/Hud";
 import { MediaFrameActions } from "./components/MediaFrameActions";
+import {
+  hasExtension,
+  VIDEO_EXTENSIONS,
+  IMAGE_EXTENSIONS
+} from "./utils/media";
 
 export type MediaItemType = "image" | "video";
 
@@ -86,17 +91,8 @@ export default function InfiniteCanvas() {
           const promises = event.payload.paths.map((filePath, index) => {
             return new Promise<MediaItem | null>((resolve) => {
               const lowerPath = filePath.toLowerCase();
-              const isVideo =
-                lowerPath.endsWith(".mp4") ||
-                lowerPath.endsWith(".webm") ||
-                lowerPath.endsWith(".mov") ||
-                lowerPath.endsWith(".mkv");
-              const isImage =
-                lowerPath.endsWith(".png") ||
-                lowerPath.endsWith(".jpg") ||
-                lowerPath.endsWith(".jpeg") ||
-                lowerPath.endsWith(".gif") ||
-                lowerPath.endsWith(".webp");
+              const isVideo = hasExtension(lowerPath, VIDEO_EXTENSIONS);
+              const isImage = hasExtension(lowerPath, IMAGE_EXTENSIONS);
 
               if (!isVideo && !isImage) return resolve(null);
 
