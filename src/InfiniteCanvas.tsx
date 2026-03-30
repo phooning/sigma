@@ -15,11 +15,7 @@ import "./InfiniteCanvas.css";
 import { ISelectionBox, SelectionBox } from "./components/SelectionBox";
 import { Hud } from "./components/Hud";
 import { MediaFrameActions } from "./components/MediaFrameActions";
-import {
-  hasExtension,
-  VIDEO_EXTENSIONS,
-  IMAGE_EXTENSIONS
-} from "./utils/media";
+import { VIDEO_EXTENSIONS, IMAGE_EXTENSIONS } from "./utils/media";
 
 export type MediaItemType = "image" | "video";
 
@@ -46,7 +42,6 @@ export default function InfiniteCanvas() {
   const [isPanning, setIsPanning] = useState(false);
   const [draggingItem, setDraggingItem] = useState<string | null>(null);
   const [resizingItem, setResizingItem] = useState<string | null>(null);
-
   const [selectionBox, setSelectionBox] = useState<ISelectionBox | null>(null);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
 
@@ -90,9 +85,10 @@ export default function InfiniteCanvas() {
 
           const promises = event.payload.paths.map((filePath, index) => {
             return new Promise<MediaItem | null>((resolve) => {
-              const lowerPath = filePath.toLowerCase();
-              const isVideo = hasExtension(lowerPath, VIDEO_EXTENSIONS);
-              const isImage = hasExtension(lowerPath, IMAGE_EXTENSIONS);
+              const ext = filePath.split(".").pop()?.toLowerCase();
+
+              const isVideo = VIDEO_EXTENSIONS.includes(ext ?? "");
+              const isImage = IMAGE_EXTENSIONS.includes(ext ?? "");
 
               if (!isVideo && !isImage) return resolve(null);
 
@@ -430,7 +426,7 @@ export default function InfiniteCanvas() {
 
         if (data.items) {
           // Re-generate URLs using convertFileSrc locally in case app restarted or paths changed
-          const loadedItems = data.items.map((i: any) => ({
+          const loadedItems = data.items.map((i: MediaItem) => ({
             ...i,
             url: convertFileSrc(i.filePath)
           }));
@@ -478,6 +474,7 @@ export default function InfiniteCanvas() {
         }}
       >
         {items.map((item) => {
+          const { id, url } = item;
           const itemLeft = item.x;
           const itemTop = item.y;
           const itemRight = item.x + item.width;
@@ -494,23 +491,23 @@ export default function InfiniteCanvas() {
 
           return (
             <div
-              key={item.id}
-              className={`media-item ${selectedItems.has(item.id) ? "selected" : ""}`}
+              key={id}
+              className={`media-item ${selectedItems.has(id) ? "selected" : ""}`}
               style={{
                 left: item.x,
                 top: item.y,
                 width: item.width,
                 height: item.height,
                 zIndex:
-                  draggingItem === item.id ||
-                  resizingItem === item.id ||
-                  selectedItems.has(item.id)
+                  draggingItem === id ||
+                  resizingItem === id ||
+                  selectedItems.has(id)
                     ? 100
                     : 1
               }}
-              onPointerDown={(e) => handleItemPointerDown(item.id, e)}
-              onPointerMove={(e) => handleItemPointerMove(item.id, e)}
-              onPointerUp={(e) => handleItemPointerUp(item.id, e)}
+              onPointerDown={(e) => handleItemPointerDown(id, e)}
+              onPointerMove={(e) => handleItemPointerMove(id, e)}
+              onPointerUp={(e) => handleItemPointerUp(id, e)}
             >
               <MediaFrameActions
                 item={item}
@@ -519,17 +516,17 @@ export default function InfiniteCanvas() {
               />
               {item.type === "image" ? (
                 <img
-                  src={item.url}
+                  src={url}
                   alt="canvas item"
                   draggable={false}
                   onDragStart={(e) => e.preventDefault()}
                 />
               ) : (
-                <video src={item.url} autoPlay loop muted playsInline />
+                <video src={url} autoPlay loop muted playsInline />
               )}
               <div
                 className="resize-handle"
-                onPointerDown={(e) => handleItemPointerDown(item.id, e)}
+                onPointerDown={(e) => handleItemPointerDown(id, e)}
               ></div>
             </div>
           );
