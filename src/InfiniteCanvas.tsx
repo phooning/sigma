@@ -29,7 +29,75 @@ import {
 } from "./components/ImageActions";
 import { loadFromStorage } from "./utils/fs";
 import { saveConfig } from "./components/HudActions";
-import { handleZoomAction, onDropMedia } from "./components/CanvasActions";
+import {
+  getWheelInputType,
+  handlePanAction,
+  handleZoomAction,
+  isMacOS,
+  onDropMedia,
+} from "./components/CanvasActions";
+
+type CanvasHotkeyConfig = {
+  itemsRef: React.RefObject<MediaItem[]>;
+  selectedItemsRef: React.RefObject<Set<string>>;
+  setItems: React.Dispatch<React.SetStateAction<MediaItem[]>>;
+  setSelectedItems: React.Dispatch<React.SetStateAction<Set<string>>>;
+  setEditingCropItem: React.Dispatch<React.SetStateAction<string | null>>;
+};
+
+const isEditableTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) return false;
+
+  return Boolean(
+    target.closest("input, textarea, select, [contenteditable='true']"),
+  );
+};
+
+const loadCanvasHotkeys = ({
+  itemsRef,
+  selectedItemsRef,
+  setItems,
+  setSelectedItems,
+  setEditingCropItem,
+}: CanvasHotkeyConfig) => {
+  const handleKeyDown = (event: KeyboardEvent) => {
+    if (isEditableTarget(event.target)) return;
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setSelectedItems(new Set());
+      setEditingCropItem(null);
+      return;
+    }
+
+    if ((event.key === "Delete" || event.key === "Backspace")) {
+      const selected = selectedItemsRef.current;
+      if (selected.size === 0) return;
+
+      event.preventDefault();
+      setItems((prev) => prev.filter((item) => !selected.has(item.id)));
+      setSelectedItems(new Set());
+      setEditingCropItem(null);
+      return;
+    }
+
+    const isSelectAll =
+      event.key.toLowerCase() === "a" &&
+      (isMacOS() ? event.metaKey : event.ctrlKey);
+
+    if (isSelectAll) {
+      event.preventDefault();
+      setSelectedItems(new Set(itemsRef.current.map((item) => item.id)));
+      setEditingCropItem(null);
+    }
+  };
+
+  window.addEventListener("keydown", handleKeyDown);
+
+  return () => {
+    window.removeEventListener("keydown", handleKeyDown);
+  };
+};
 
 export default function InfiniteCanvas() {
   const [items, setItems] = useState<MediaItem[]>([]);
@@ -44,6 +112,10 @@ export default function InfiniteCanvas() {
 
   const viewportRef = useRef(viewport);
   viewportRef.current = viewport;
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const selectedItemsRef = useRef(selectedItems);
+  selectedItemsRef.current = selectedItems;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const startDragRef = useRef<{ x: number; y: number } | null>(null);
@@ -63,6 +135,16 @@ export default function InfiniteCanvas() {
     startDragRef.current = { x: clientX, y: clientY };
     containerRef.current?.setPointerCapture(pointerId);
   };
+
+  useEffect(() => {
+    return loadCanvasHotkeys({
+      itemsRef,
+      selectedItemsRef,
+      setItems,
+      setSelectedItems,
+      setEditingCropItem,
+    });
+  }, []);
 
   useEffect(() => {
     const preventDragDefaults = (e: DragEvent) => {
@@ -185,7 +267,12 @@ export default function InfiniteCanvas() {
   };
 
   const handleWheel = (e: ReactWheelEvent) => {
-    const data = handleZoomAction({ e, viewport, containerRef });
+    e.preventDefault();
+    const data =
+      getWheelInputType(e) === "trackpad-pan"
+        ? handlePanAction({ e, viewport })
+        : handleZoomAction({ e, viewport, containerRef });
+
     if (data) {
       setViewport(data);
     }
