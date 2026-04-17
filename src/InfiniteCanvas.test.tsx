@@ -219,5 +219,79 @@ describe('InfiniteCanvas Application', () => {
 
       expect(screen.queryByAltText('canvas item')).not.toBeInTheDocument();
     });
+
+    it('crops an image in place from side and corner handles', async () => {
+      const mediaItem = document.querySelector('.media-item') as HTMLElement;
+      const image = screen.getByAltText('canvas item') as HTMLImageElement;
+      const cropBtn = document.querySelector('.crop-btn') as HTMLElement;
+
+      expect(cropBtn).toBeInTheDocument();
+
+      await act(async () => {
+        fireEvent.click(cropBtn);
+      });
+
+      expect(document.querySelectorAll('.crop-handle')).toHaveLength(8);
+
+      const startLeft = parseFloat(mediaItem.style.left);
+      const startTop = parseFloat(mediaItem.style.top);
+      const westHandle = document.querySelector('.crop-handle-w') as HTMLElement;
+
+      await act(async () => {
+        fireEvent.pointerDown(westHandle, {
+          clientX: 0,
+          clientY: 0,
+          pointerId: 8,
+          button: 0
+        });
+      });
+      await act(async () => {
+        fireEvent.pointerMove(mediaItem, {
+          clientX: 120,
+          clientY: 0,
+          pointerId: 8,
+          button: 0
+        });
+      });
+      await act(async () => {
+        fireEvent.pointerUp(mediaItem, { pointerId: 8, button: 0 });
+      });
+
+      expect(mediaItem.style.left).toBe(`${startLeft + 120}px`);
+      expect(mediaItem.style.width).toBe('1160px');
+      expect(image.style.left).toBe('-120px');
+      expect(image.style.width).toBe('1280px');
+
+      const northWestHandle = document.querySelector(
+        '.crop-handle-nw'
+      ) as HTMLElement;
+
+      await act(async () => {
+        fireEvent.pointerDown(northWestHandle, {
+          clientX: 120,
+          clientY: 0,
+          pointerId: 9,
+          button: 0
+        });
+      });
+      await act(async () => {
+        fireEvent.pointerMove(mediaItem, {
+          clientX: 70,
+          clientY: 80,
+          pointerId: 9,
+          button: 0
+        });
+      });
+      await act(async () => {
+        fireEvent.pointerUp(mediaItem, { pointerId: 9, button: 0 });
+      });
+
+      expect(mediaItem.style.left).toBe(`${startLeft + 70}px`);
+      expect(mediaItem.style.top).toBe(`${startTop + 80}px`);
+      expect(mediaItem.style.width).toBe('1210px');
+      expect(mediaItem.style.height).toBe('880px');
+      expect(image.style.left).toBe('-70px');
+      expect(image.style.top).toBe('-80px');
+    });
   });
 });

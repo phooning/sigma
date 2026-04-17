@@ -19,6 +19,13 @@ import { VIDEO_EXTENSIONS, IMAGE_EXTENSIONS } from "./utils/media";
 
 export type MediaItemType = "image" | "video";
 
+export interface CropInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
 export interface MediaItem {
   id: string;
   type: MediaItemType;
@@ -28,6 +35,7 @@ export interface MediaItem {
   y: number;
   width: number;
   height: number;
+  crop?: CropInsets;
 }
 
 interface Viewport {
@@ -36,12 +44,25 @@ interface Viewport {
   zoom: number;
 }
 
+type CropHandle = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
+
+const CROP_HANDLES: CropHandle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+const MIN_MEDIA_SIZE = 100;
+const EMPTY_CROP: CropInsets = { top: 0, right: 0, bottom: 0, left: 0 };
+
+const getCrop = (item: MediaItem): CropInsets => item.crop ?? EMPTY_CROP;
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(Math.max(value, min), max);
+
 export default function InfiniteCanvas() {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, zoom: 1 });
   const [isPanning, setIsPanning] = useState(false);
   const [draggingItem, setDraggingItem] = useState<string | null>(null);
   const [resizingItem, setResizingItem] = useState<string | null>(null);
+  const [editingCropItem, setEditingCropItem] = useState<string | null>(null);
+  const [croppingItem, setCroppingItem] = useState<string | null>(null);
   const [selectionBox, setSelectionBox] = useState<ISelectionBox | null>(null);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
 
@@ -52,8 +73,19 @@ export default function InfiniteCanvas() {
   const startDragRef = useRef<{ x: number; y: number } | null>(null);
   const resizeStartRef = useRef<Map<
     string,
-    { width: number; height: number }
+    { width: number; height: number; crop: CropInsets }
   > | null>(null);
+  const cropHandleRef = useRef<CropHandle | null>(null);
+  const cropStartRef = useRef<
+    | {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        crop: CropInsets;
+      }
+    | null
+  >(null);
 
   const startPanning = (
     pointerId: number,
@@ -161,6 +193,7 @@ export default function InfiniteCanvas() {
           endY: clientY
         });
         setSelectedItems(new Set());
+        setEditingCropItem(null);
         e.currentTarget.setPointerCapture(e.pointerId);
       } else if (e.button === 1 || e.button === 2) {
         startPanning(e.pointerId, e.clientX, e.clientY);
@@ -245,7 +278,7 @@ export default function InfiniteCanvas() {
   };
 
   const handleItemPointerDown = (id: string, e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest(".reset-btn, .delete-btn")) {
+    if ((e.target as HTMLElement).closest(".reset-btn, .delete-btn, .crop-btn")) {
       return;
     }
 
@@ -257,6 +290,9 @@ export default function InfiniteCanvas() {
       return;
     }
 
+    const cropHandle = (e.target as HTMLElement).closest<HTMLElement>(
+      ".crop-handle"
+    )?.dataset.cropHandle as CropHandle | undefined;
     const isResize = (e.target as HTMLElement).classList.contains(
       "resize-handle"
     );
@@ -265,8 +301,26 @@ export default function InfiniteCanvas() {
       setSelectedItems(new Set([id]));
     }
 
-    if (isResize) {
+    if (cropHandle) {
+      const cropItem = items.find((item) => item.id === id);
+      if (!cropItem || cropItem.type !== "image") return;
+
+      setEditingCropItem(id);
+      setCroppingItem(id);
+      setDraggingItem(null);
+      setResizingItem(null);
+      cropHandleRef.current = cropHandle;
+      cropStartRef.current = {
+        x: cropItem.x,
+        y: cropItem.y,
+        width: cropItem.width,
+        height: cropItem.height,
+        crop: { ...getCrop(cropItem) }
+      };
+      resizeStartRef.current = null;
+    } else if (isResize) {
       setResizingItem(id);
+      setCroppingItem(null);
       const resizeIds = selectedItems.has(id) ? selectedItems : new Set([id]);
       resizeStartRef.current = new Map(
         items
@@ -275,12 +329,14 @@ export default function InfiniteCanvas() {
             item.id,
             {
               width: item.width,
-              height: item.height
+              height: item.height,
+              crop: { ...getCrop(item) }
             }
           ])
       );
     } else {
       setDraggingItem(id);
+      setCroppingItem(null);
       resizeStartRef.current = null;
     }
 
@@ -330,8 +386,11 @@ export default function InfiniteCanvas() {
           if (!startSize) return item;
 
           if (e.shiftKey) {
-            const candidateWidth = Math.max(100, startSize.width + dx);
-            const candidateHeight = Math.max(100, startSize.height + dy);
+            const candidateWidth = Math.max(MIN_MEDIA_SIZE, startSize.width + dx);
+            const candidateHeight = Math.max(
+              MIN_MEDIA_SIZE,
+              startSize.height + dy
+            );
             const widthScale = candidateWidth / startSize.width;
             const heightScale = candidateHeight / startSize.height;
             const dominantScale =
@@ -339,34 +398,114 @@ export default function InfiniteCanvas() {
                 ? widthScale
                 : heightScale;
             const minScale = Math.max(
-              100 / startSize.width,
-              100 / startSize.height
+              MIN_MEDIA_SIZE / startSize.width,
+              MIN_MEDIA_SIZE / startSize.height
             );
             const scale = Math.max(dominantScale, minScale);
 
             return {
               ...item,
               width: startSize.width * scale,
-              height: startSize.height * scale
+              height: startSize.height * scale,
+              crop: {
+                top: startSize.crop.top * scale,
+                right: startSize.crop.right * scale,
+                bottom: startSize.crop.bottom * scale,
+                left: startSize.crop.left * scale
+              }
             };
           }
 
+          const nextWidth = Math.max(MIN_MEDIA_SIZE, startSize.width + dx);
+          const nextHeight = Math.max(MIN_MEDIA_SIZE, startSize.height + dy);
+          const widthScale = nextWidth / startSize.width;
+          const heightScale = nextHeight / startSize.height;
+
           return {
             ...item,
-            width: Math.max(100, startSize.width + dx),
-            height: Math.max(100, startSize.height + dy)
+            width: nextWidth,
+            height: nextHeight,
+            crop: {
+              top: startSize.crop.top * heightScale,
+              right: startSize.crop.right * widthScale,
+              bottom: startSize.crop.bottom * heightScale,
+              left: startSize.crop.left * widthScale
+            }
           };
+        })
+      );
+    } else if (croppingItem === id && startDragRef.current) {
+      const cropStart = cropStartRef.current;
+      const cropHandle = cropHandleRef.current;
+      if (!cropStart || !cropHandle) return;
+
+      const dx = (e.clientX - startDragRef.current.x) / viewport.zoom;
+      const dy = (e.clientY - startDragRef.current.y) / viewport.zoom;
+
+      setItems((prev) =>
+        prev.map((item) => {
+          if (item.id !== id) return item;
+
+          let { x, y, width, height } = cropStart;
+          const crop = { ...cropStart.crop };
+
+          if (cropHandle.includes("w")) {
+            const leftDelta = clamp(
+              dx,
+              -cropStart.crop.left,
+              cropStart.width - MIN_MEDIA_SIZE
+            );
+            x = cropStart.x + leftDelta;
+            width = cropStart.width - leftDelta;
+            crop.left = cropStart.crop.left + leftDelta;
+          }
+
+          if (cropHandle.includes("e")) {
+            const rightDelta = clamp(
+              dx,
+              MIN_MEDIA_SIZE - cropStart.width,
+              cropStart.crop.right
+            );
+            width = cropStart.width + rightDelta;
+            crop.right = cropStart.crop.right - rightDelta;
+          }
+
+          if (cropHandle.includes("n")) {
+            const topDelta = clamp(
+              dy,
+              -cropStart.crop.top,
+              cropStart.height - MIN_MEDIA_SIZE
+            );
+            y = cropStart.y + topDelta;
+            height = cropStart.height - topDelta;
+            crop.top = cropStart.crop.top + topDelta;
+          }
+
+          if (cropHandle.includes("s")) {
+            const bottomDelta = clamp(
+              dy,
+              MIN_MEDIA_SIZE - cropStart.height,
+              cropStart.crop.bottom
+            );
+            height = cropStart.height + bottomDelta;
+            crop.bottom = cropStart.crop.bottom - bottomDelta;
+          }
+
+          return { ...item, x, y, width, height, crop };
         })
       );
     }
   };
 
   const handleItemPointerUp = (id: string, e: React.PointerEvent) => {
-    if (draggingItem === id || resizingItem === id) {
+    if (draggingItem === id || resizingItem === id || croppingItem === id) {
       setDraggingItem(null);
       setResizingItem(null);
+      setCroppingItem(null);
       startDragRef.current = null;
       resizeStartRef.current = null;
+      cropHandleRef.current = null;
+      cropStartRef.current = null;
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
   };
@@ -379,6 +518,13 @@ export default function InfiniteCanvas() {
       newSet.delete(id);
       return newSet;
     });
+    setEditingCropItem((prev) => (prev === id ? null : prev));
+  };
+
+  const startCropEdit = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingCropItem((prev) => (prev === id ? null : id));
+    setSelectedItems(new Set([id]));
   };
 
   const resetSize = (id: string, e: React.MouseEvent) => {
@@ -405,7 +551,12 @@ export default function InfiniteCanvas() {
           if (i.id === id) {
             const w = intrinsicWidth || 400;
             const h = intrinsicHeight || 300;
-            return { ...i, width: 1280, height: (h / w) * 1280 };
+            return {
+              ...i,
+              width: 1280,
+              height: (h / w) * 1280,
+              crop: { ...EMPTY_CROP }
+            };
           }
           return i;
         })
@@ -515,6 +666,7 @@ export default function InfiniteCanvas() {
       >
         {items.map((item) => {
           const { id, url } = item;
+          const crop = getCrop(item);
           const itemLeft = item.x;
           const itemTop = item.y;
           const itemRight = item.x + item.width;
@@ -532,7 +684,9 @@ export default function InfiniteCanvas() {
           return (
             <div
               key={id}
-              className={`media-item ${selectedItems.has(id) ? "selected" : ""}`}
+              className={`media-item ${selectedItems.has(id) ? "selected" : ""} ${
+                editingCropItem === id ? "crop-editing" : ""
+              }`}
               style={{
                 left: item.x,
                 top: item.y,
@@ -541,6 +695,8 @@ export default function InfiniteCanvas() {
                 zIndex:
                   draggingItem === id ||
                   resizingItem === id ||
+                  croppingItem === id ||
+                  editingCropItem === id ||
                   selectedItems.has(id)
                     ? 100
                     : 1
@@ -553,16 +709,46 @@ export default function InfiniteCanvas() {
                 item={item}
                 resetSize={resetSize}
                 deleteItem={deleteItem}
+                startCropEdit={startCropEdit}
+                isCropEditing={editingCropItem === id}
               />
               {item.type === "image" ? (
-                <img
-                  src={url}
-                  alt="canvas item"
-                  draggable={false}
-                  onDragStart={(e) => e.preventDefault()}
-                />
+                <>
+                  <img
+                    className="media-content"
+                    src={url}
+                    alt="canvas item"
+                    draggable={false}
+                    onDragStart={(e) => e.preventDefault()}
+                    style={{
+                      left: -crop.left,
+                      top: -crop.top,
+                      width: item.width + crop.left + crop.right,
+                      height: item.height + crop.top + crop.bottom
+                    }}
+                  />
+                  {editingCropItem === id && (
+                    <div className="crop-overlay" aria-hidden="true">
+                      {CROP_HANDLES.map((handle) => (
+                        <div
+                          key={handle}
+                          className={`crop-handle crop-handle-${handle}`}
+                          data-crop-handle={handle}
+                          onPointerDown={(e) => handleItemPointerDown(id, e)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
               ) : (
-                <video src={url} autoPlay loop muted playsInline />
+                <video
+                  className="media-content"
+                  src={url}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                />
               )}
               <div
                 className="resize-handle"

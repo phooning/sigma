@@ -46,24 +46,39 @@ body {
   will-change: transform;
 }
 
+.media-item.crop-editing {
+  cursor: default;
+}
+
 .media-item:active {
   cursor: grabbing;
   box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.7), 0 0 0 2px rgba(139, 92, 246, 0.5);
   transform: scale(1.02);
 }
 
-.media-item img,
-.media-item video {
+.media-item.crop-editing:active {
+  cursor: default;
+  transform: none;
+}
+
+.media-content {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   /* Let drag events pass through */
 }
 
-.delete-btn {
+.media-item img.media-content {
+  inset: auto;
+}
+
+.reset-btn,
+.delete-btn,
+.crop-btn {
   position: absolute;
   top: 10px;
-  right: 10px;
   width: 32px;
   height: 32px;
   border-radius: 50%;
@@ -82,12 +97,41 @@ body {
   z-index: 2;
 }
 
-.media-item:hover .delete-btn {
+.delete-btn {
+  right: 10px;
+}
+
+.reset-btn {
+  right: 50px;
+  font-size: 16px;
+}
+
+.crop-btn {
+  right: 90px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.media-item:hover .delete-btn,
+.media-item:hover .reset-btn,
+.media-item:hover .crop-btn,
+.media-item.crop-editing .crop-btn {
   opacity: 1;
 }
 
 .delete-btn:hover {
   background: rgba(220, 38, 38, 0.8);
+  transform: scale(1.1);
+}
+
+.reset-btn:hover {
+  background: rgba(59, 130, 246, 0.8);
+  transform: scale(1.1);
+}
+
+.crop-btn:hover,
+.crop-btn[aria-pressed="true"] {
+  background: rgba(20, 184, 166, 0.8);
   transform: scale(1.1);
 }
 
@@ -138,35 +182,101 @@ body {
   box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.8), 0 10px 30px -5px rgba(0, 0, 0, 0.5);
 }
 
-.reset-btn {
+.crop-overlay {
   position: absolute;
-  top: 10px;
-  right: 50px;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: rgba(15, 23, 42, 0.6);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.2s ease, background 0.2s ease, transform 0.2s ease;
-  z-index: 2;
+  inset: 0;
+  border: 2px solid rgba(20, 184, 166, 0.9);
+  background-image:
+    linear-gradient(
+      to right,
+      transparent 33.333%,
+      rgba(255, 255, 255, 0.35) 33.333%,
+      rgba(255, 255, 255, 0.35) calc(33.333% + 1px),
+      transparent calc(33.333% + 1px),
+      transparent 66.666%,
+      rgba(255, 255, 255, 0.35) 66.666%,
+      rgba(255, 255, 255, 0.35) calc(66.666% + 1px),
+      transparent calc(66.666% + 1px)
+    ),
+    linear-gradient(
+      to bottom,
+      transparent 33.333%,
+      rgba(255, 255, 255, 0.35) 33.333%,
+      rgba(255, 255, 255, 0.35) calc(33.333% + 1px),
+      transparent calc(33.333% + 1px),
+      transparent 66.666%,
+      rgba(255, 255, 255, 0.35) 66.666%,
+      rgba(255, 255, 255, 0.35) calc(66.666% + 1px),
+      transparent calc(66.666% + 1px)
+    );
+  pointer-events: none;
+  z-index: 6;
 }
 
-.media-item:hover .reset-btn {
-  opacity: 1;
+.crop-handle {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  margin: -9px;
+  border: 2px solid #f8fafc;
+  border-radius: 4px;
+  background: #14b8a6;
+  pointer-events: auto;
+  z-index: 7;
 }
 
-.reset-btn:hover {
-  background: rgba(59, 130, 246, 0.8);
-  transform: scale(1.1);
+.crop-handle-n,
+.crop-handle-s {
+  left: 50%;
+}
+
+.crop-handle-e,
+.crop-handle-w {
+  top: 50%;
+}
+
+.crop-handle-n {
+  top: 0;
+  cursor: n-resize;
+}
+
+.crop-handle-ne {
+  top: 0;
+  right: 0;
+  cursor: ne-resize;
+}
+
+.crop-handle-e {
+  right: 0;
+  cursor: e-resize;
+}
+
+.crop-handle-se {
+  right: 0;
+  bottom: 0;
+  cursor: se-resize;
+}
+
+.crop-handle-s {
+  bottom: 0;
+  cursor: s-resize;
+}
+
+.crop-handle-sw {
+  bottom: 0;
+  left: 0;
+  cursor: sw-resize;
+}
+
+.crop-handle-w {
+  left: 0;
+  cursor: w-resize;
+}
+
+.crop-handle-nw {
+  top: 0;
+  left: 0;
+  cursor: nw-resize;
 }
 
 .toolbar {
