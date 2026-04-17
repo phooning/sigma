@@ -4,6 +4,48 @@ import { v4 as uuidv4 } from "uuid";
 import { IMAGE_EXTENSIONS, VIDEO_EXTENSIONS } from "../utils/media";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
+export type WheelInputType = "trackpad-pan" | "zoom";
+
+export const isMacOS = () =>
+  /mac/i.test(navigator.platform) ||
+  navigator.userAgent.includes("Macintosh");
+
+export const getWheelInputType = (e: WheelEvent): WheelInputType => {
+  if (!isMacOS()) return "zoom";
+
+  const isPinchGesture = e.ctrlKey;
+  if (isPinchGesture) return "zoom";
+
+  const isPixelScroll = e.deltaMode === 0;
+  const hasHorizontalScroll = Math.abs(e.deltaX) > 0;
+  const hasFractionalDelta = !Number.isInteger(e.deltaY);
+  const hasSmallDelta = Math.abs(e.deltaY) < 50;
+  const isLargeIntegerWheelStep =
+    Number.isInteger(e.deltaY) && Math.abs(e.deltaY) >= 100;
+
+  if (
+    isPixelScroll &&
+    !isLargeIntegerWheelStep &&
+    (hasHorizontalScroll || hasFractionalDelta || hasSmallDelta)
+  ) {
+    return "trackpad-pan";
+  }
+
+  return "zoom";
+};
+
+export const handlePanAction = ({
+  e,
+  viewport,
+}: {
+  e: WheelEvent;
+  viewport: Viewport;
+}) => ({
+  x: viewport.x - e.deltaX / viewport.zoom,
+  y: viewport.y - e.deltaY / viewport.zoom,
+  zoom: viewport.zoom,
+});
+
 export const handleZoomAction = ({
   e,
   viewport,
