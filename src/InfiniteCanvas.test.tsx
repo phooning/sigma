@@ -4,6 +4,9 @@ import InfiniteCanvas from './InfiniteCanvas';
 
 // Mock Tauri APIs
 let dropCallback: any = null;
+const { revealItemInDirMock } = vi.hoisted(() => ({
+  revealItemInDirMock: vi.fn()
+}));
 
 vi.mock('@tauri-apps/api/webview', () => ({
   getCurrentWebview: () => ({
@@ -19,8 +22,13 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({
+  message: vi.fn(),
   save: vi.fn(),
   open: vi.fn()
+}));
+
+vi.mock('@tauri-apps/plugin-opener', () => ({
+  revealItemInDir: revealItemInDirMock
 }));
 
 vi.mock('@tauri-apps/plugin-fs', () => ({
@@ -218,6 +226,18 @@ describe('InfiniteCanvas Application', () => {
       });
 
       expect(screen.queryByAltText('canvas item')).not.toBeInTheDocument();
+    });
+
+    it('reveals the media file in the system file browser', async () => {
+      const revealBtn = document.querySelector('.reveal-btn') as HTMLElement;
+      expect(revealBtn).toBeInTheDocument();
+
+      await act(async () => {
+        fireEvent.pointerDown(revealBtn, { pointerId: 10, button: 0 });
+        fireEvent.click(revealBtn);
+      });
+
+      expect(revealItemInDirMock).toHaveBeenCalledWith('/path/to/test.png');
     });
 
     it('crops an image in place from side and corner handles', async () => {

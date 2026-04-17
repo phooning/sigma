@@ -9,11 +9,12 @@ import type { DragDropEvent } from "@tauri-apps/api/webview";
 import { Event } from "@tauri-apps/api/event";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { message } from "@tauri-apps/plugin-dialog";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import "./InfiniteCanvas.css";
 import { ISelectionBox, SelectionBox } from "./components/SelectionBox";
 import { Hud } from "./components/Hud";
 import { MediaFrameActions } from "./components/MediaFrameActions";
-import { EMPTY_CROP, getCrop } from "./utils/media";
+import { CROP_HANDLES, EMPTY_CROP, getCrop } from "./utils/media";
 import {
   CropHandle,
   CropInsets,
@@ -193,7 +194,9 @@ export default function InfiniteCanvas() {
 
   const handleItemPointerDown = (id: string, e: React.PointerEvent) => {
     if (
-      (e.target as HTMLElement).closest(".reset-btn, .delete-btn, .crop-btn")
+      (e.target as HTMLElement).closest(
+        ".reset-btn, .delete-btn, .crop-btn, .reveal-btn",
+      )
     ) {
       return;
     }
@@ -219,7 +222,7 @@ export default function InfiniteCanvas() {
 
     if (cropHandle) {
       const cropItem = items.find((item) => item.id === id);
-      if (!cropItem || cropItem.type !== "image") return;
+      if (!cropItem) return;
 
       setEditingCropItem(id);
       setCroppingItem(id);
@@ -349,6 +352,21 @@ export default function InfiniteCanvas() {
     setSelectedItems(new Set([id]));
   };
 
+  const revealItem = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+
+    try {
+      await revealItemInDir(item.filePath);
+    } catch (error) {
+      await message(`Failed to show media in folder:\n\n${String(error)}`, {
+        title: "Show in folder failed",
+        kind: "error",
+      });
+    }
+  };
+
   const resetSize = (id: string, e: React.MouseEvent) => {
     const result = resetImageSize(e);
     if (result) {
@@ -475,6 +493,7 @@ export default function InfiniteCanvas() {
             >
               <MediaFrameActions
                 item={item}
+                revealItem={revealItem}
                 resetSize={resetSize}
                 deleteItem={deleteItem}
                 startCropEdit={startCropEdit}
@@ -490,16 +509,36 @@ export default function InfiniteCanvas() {
                   handleItemPointerDown={handleItemPointerDown}
                 />
               ) : (
-                <video
-                  className="media-content"
-                  src={url}
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                  draggable={false}
-                  onDragStart={(e) => e.preventDefault()}
-                />
+                <>
+                  <video
+                    className="media-content"
+                    src={url}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    draggable={false}
+                    onDragStart={(e) => e.preventDefault()}
+                    style={{
+                      left: -crop.left,
+                      top: -crop.top,
+                      width: item.width + crop.left + crop.right,
+                      height: item.height + crop.top + crop.bottom,
+                    }}
+                  />
+                  {editingCropItem === id && (
+                    <div className="crop-overlay" aria-hidden="true">
+                      {CROP_HANDLES.map((handle) => (
+                        <div
+                          key={handle}
+                          className={`crop-handle crop-handle-${handle}`}
+                          data-crop-handle={handle}
+                          onPointerDown={(e) => handleItemPointerDown(id, e)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
               <div
                 className="resize-handle"
