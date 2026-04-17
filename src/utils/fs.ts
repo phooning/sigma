@@ -4,6 +4,8 @@ import { MediaItem, Viewport } from "./media.types";
 
 type TErrorReason = "cancelled" | "invalid" | "error";
 
+type StoredMediaItem = Omit<MediaItem, "url"> & { url?: string };
+
 type TLoadResult =
   | { ok: true; data: { items: MediaItem[]; viewport: Viewport } }
   | { ok: false; reason: TErrorReason; error?: unknown };
@@ -11,6 +13,199 @@ type TLoadResult =
 type TSaveResult =
   | { ok: true }
   | { ok: false; reason: TErrorReason; error?: unknown };
+
+type ParsedPath = {
+  root: string;
+  segments: string[];
+};
+
+const toForwardSlashes = (path: string) => path.replace(/\\/g, "/");
+
+const getPreferredSeparator = (path: string) =>
+  path.includes("\\") ? "\\" : "/";
+
+const normalizeSegments = (segments: string[], isAbsolute: boolean) => {
+  const normalized: string[] = [];
+
+  for (const segment of segments) {
+    if (!segment || segment === ".") continue;
+
+    if (segment === "..") {
+      const previous = normalized[normalized.length - 1];
+      if (previous && previous !== "..") {
+        normalized.pop();
+      } else if (!isAbsolute) {
+        normalized.push(segment);
+      }
+      continue;
+    }
+
+    normalized.push(segment);
+  }
+
+  return normalized;
+};
+
+const parsePath = (path: string): ParsedPath => {
+  const normalizedPath = toForwardSlashes(path);
+  const driveMatch = normalizedPath.match(/^([a-zA-Z]:)(?:\/|$)/);
+
+  if (driveMatch) {
+    const root = `${driveMatch[1]}/`;
+    const rest = normalizedPath.slice(root.length);
+    return {
+      root,
+      segments: normalizeSegments(rest.split("/"), true),
+    };
+  }
+
+  if (normalizedPath.startsWith("//")) {
+    const parts = normalizedPath.slice(2).split("/");
+    const rootParts = parts.slice(0, 2);
+    const rest = parts.slice(2);
+
+    if (rootParts.length === 2 && rootParts.every(Boolean)) {
+      return {
+        root: `//${rootParts.join("/")}`,
+        segments: normalizeSegments(rest, true),
+      };
+    }
+  }
+
+  if (normalizedPath.startsWith("/")) {
+    return {
+      root: "/",
+      segments: normalizeSegments(normalizedPath.slice(1).split("/"), true),
+    };
+  }
+
+  return {
+    root: "",
+    segments: normalizeSegments(normalizedPath.split("/"), false),
+  };
+};
+
+const formatPath = ({ root, segments }: ParsedPath, separator = "/") => {
+  if (!root) return segments.join(separator) || ".";
+
+  const formattedRoot = root.replace(/\//g, separator);
+  if (segments.length === 0) return formattedRoot;
+
+  return formattedRoot.endsWith(separator)
+    ? `${formattedRoot}${segments.join(separator)}`
+    : `${formattedRoot}${separator}${segments.join(separator)}`;
+};
+
+const isAbsolutePath = (path: string) => parsePath(path).root !== "";
+
+const normalizePath = (path: string, separator = getPreferredSeparator(path)) =>
+  formatPath(parsePath(path), separator);
+
+const rootsMatch = (a: ParsedPath, b: ParsedPath) =>
+  a.root.toLowerCase() === b.root.toLowerCase();
+
+const isWindowsRoot = (path: ParsedPath) => /^[a-zA-Z]:\//.test(path.root);
+
+const segmentsMatch = (a: string, b: string, ignoreCase: boolean) =>
+  ignoreCase ? a.toLowerCase() === b.toLowerCase() : a === b;
+
+export const getProjectRootForConfig = (configPath: string) => {
+  const separator = getPreferredSeparator(configPath);
+  const parsed = parsePath(configPath);
+
+  if (parsed.segments.length === 0) {
+    return formatPath(parsed, separator);
+  }
+
+  return formatPath(
+    {
+      root: parsed.root,
+      segments: parsed.segments.slice(0, -1),
+    },
+    separator,
+  );
+};
+
+export const toProjectRelativePath = (
+  projectRoot: string,
+  filePath: string,
+) => {
+  if (!isAbsolutePath(filePath)) {
+    return normalizePath(filePath, "/");
+  }
+
+  const root = parsePath(projectRoot);
+  const target = parsePath(filePath);
+
+  if (!rootsMatch(root, target)) {
+    return normalizePath(filePath);
+  }
+
+  let commonSegments = 0;
+  const ignoreSegmentCase = isWindowsRoot(root);
+  while (
+    commonSegments < root.segments.length &&
+    commonSegments < target.segments.length &&
+    segmentsMatch(
+      root.segments[commonSegments],
+      target.segments[commonSegments],
+      ignoreSegmentCase,
+    )
+  ) {
+    commonSegments += 1;
+  }
+
+  const parentSegments = root.segments
+    .slice(commonSegments)
+    .map(() => "..");
+  const childSegments = target.segments.slice(commonSegments);
+
+  return [...parentSegments, ...childSegments].join("/") || ".";
+};
+
+export const resolveProjectPath = (projectRoot: string, filePath: string) => {
+  if (isAbsolutePath(filePath)) {
+    return normalizePath(filePath);
+  }
+
+  const separator = getPreferredSeparator(projectRoot);
+  const root = parsePath(projectRoot);
+  const relative = parsePath(filePath);
+
+  return formatPath(
+    {
+      root: root.root,
+      segments: normalizeSegments(
+        [...root.segments, ...relative.segments],
+        root.root !== "",
+      ),
+    },
+    separator,
+  );
+};
+
+const serializeItemForStorage = (
+  item: MediaItem,
+  projectRoot: string,
+): StoredMediaItem => ({
+  id: item.id,
+  type: item.type,
+  filePath: toProjectRelativePath(projectRoot, item.filePath),
+  x: item.x,
+  y: item.y,
+  width: item.width,
+  height: item.height,
+  ...(item.crop ? { crop: item.crop } : {}),
+});
+
+const hydrateItemFromStorage = (
+  item: StoredMediaItem,
+  projectRoot: string,
+): MediaItem => ({
+  ...item,
+  filePath: resolveProjectPath(projectRoot, item.filePath),
+  url: "",
+});
 
 export const saveToStorage = async (
   items: MediaItem[],
@@ -32,7 +227,12 @@ export const saveToStorage = async (
       return { ok: false, reason: "cancelled" };
     }
 
-    const configData = JSON.stringify({ items, viewport });
+    const projectRoot = getProjectRootForConfig(filePath);
+    const configData = JSON.stringify({
+      items: items.map((item) => serializeItemForStorage(item, projectRoot)),
+      viewport,
+    });
+
     await writeTextFile(filePath, configData);
 
     return { ok: true };
@@ -63,7 +263,17 @@ export const loadFromStorage = async (): Promise<TLoadResult> => {
     if (!data.items) {
       return { ok: false, reason: "invalid" };
     }
-    return { ok: true, data };
+
+    const projectRoot = getProjectRootForConfig(selected);
+    return {
+      ok: true,
+      data: {
+        ...data,
+        items: data.items.map((item: StoredMediaItem) =>
+          hydrateItemFromStorage(item, projectRoot),
+        ),
+      },
+    };
   } catch (err) {
     console.error("Failed to load:", err);
     return { ok: false, reason: "error", error: err };
