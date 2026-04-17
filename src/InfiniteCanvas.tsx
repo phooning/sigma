@@ -3,35 +3,33 @@ import {
   useRef,
   useEffect,
   WheelEvent as ReactWheelEvent,
-  useCallback,
 } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { DragDropEvent } from "@tauri-apps/api/webview";
 import { Event } from "@tauri-apps/api/event";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { v4 as uuidv4 } from "uuid";
-import { save, message } from "@tauri-apps/plugin-dialog";
-import { writeTextFile } from "@tauri-apps/plugin-fs";
+import { message } from "@tauri-apps/plugin-dialog";
 import "./InfiniteCanvas.css";
 import { ISelectionBox, SelectionBox } from "./components/SelectionBox";
 import { Hud } from "./components/Hud";
 import { MediaFrameActions } from "./components/MediaFrameActions";
-import {
-  VIDEO_EXTENSIONS,
-  IMAGE_EXTENSIONS,
-  MIN_MEDIA_SIZE,
-  clamp,
-  EMPTY_CROP,
-  getCrop,
-} from "./utils/media";
+import { EMPTY_CROP, getCrop } from "./utils/media";
 import {
   CropHandle,
   CropInsets,
   MediaItem,
   Viewport,
 } from "./utils/media.types";
-import { ImageActions } from "./components/ImageActions";
-import { loadFromStorage, saveToStorage } from "./utils/fs";
+import {
+  handleImageCrop,
+  handleImageResize,
+  ImageActions,
+  resetImageSize,
+  TCropStart,
+} from "./components/ImageActions";
+import { loadFromStorage } from "./utils/fs";
+import { saveConfig } from "./components/HudActions";
+import { handleZoomAction, onDropMedia } from "./components/CanvasActions";
 
 export default function InfiniteCanvas() {
   const [items, setItems] = useState<MediaItem[]>([]);
@@ -54,13 +52,7 @@ export default function InfiniteCanvas() {
     { width: number; height: number; crop: CropInsets }
   > | null>(null);
   const cropHandleRef = useRef<CropHandle | null>(null);
-  const cropStartRef = useRef<{
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    crop: CropInsets;
-  } | null>(null);
+  const cropStartRef = useRef<TCropStart>(null);
 
   const startPanning = (
     pointerId: number,
@@ -87,47 +79,9 @@ export default function InfiniteCanvas() {
     const unlistenPromise = getCurrentWebview().onDragDropEvent(
       (event: Event<DragDropEvent>) => {
         if (event.payload.type === "drop") {
-          const centerX =
-            -viewportRef.current.x +
-            window.innerWidth / 2 / viewportRef.current.zoom;
-          const centerY =
-            -viewportRef.current.y +
-            window.innerHeight / 2 / viewportRef.current.zoom;
-
-          const promises = event.payload.paths.map((filePath, index) => {
-            return new Promise<MediaItem | null>((resolve) => {
-              const ext = filePath.split(".").pop()?.toLowerCase();
-
-              const isVideo = VIDEO_EXTENSIONS.includes(ext ?? "");
-              const isImage = IMAGE_EXTENSIONS.includes(ext ?? "");
-
-              if (!isVideo && !isImage) return resolve(null);
-
-              const url = convertFileSrc(filePath);
-              const createItem = (w: number, h: number): MediaItem => ({
-                id: uuidv4(),
-                type: isVideo ? "video" : "image",
-                filePath,
-                url,
-                x: centerX + index * 1350,
-                y: centerY,
-                width: 1280,
-                height: w ? (h / w) * 1280 : 720,
-              });
-
-              if (isImage) {
-                const img = new Image();
-                img.onload = () => resolve(createItem(img.width, img.height));
-                img.onerror = () => resolve(createItem(1280, 720));
-                img.src = url;
-              } else {
-                const video = document.createElement("video");
-                video.onloadedmetadata = () =>
-                  resolve(createItem(video.videoWidth, video.videoHeight));
-                video.onerror = () => resolve(createItem(1280, 720));
-                video.src = url;
-              }
-            });
+          const promises = onDropMedia({
+            paths: event.payload.paths,
+            viewportRef,
           });
 
           Promise.all(promises).then((results) => {
@@ -231,24 +185,9 @@ export default function InfiniteCanvas() {
   };
 
   const handleWheel = (e: ReactWheelEvent) => {
-    const zoomFactor = -e.deltaY * 0.001;
-    const newZoom = Math.max(
-      0.05,
-      Math.min(viewport.zoom * (1 + zoomFactor), 5),
-    );
-
-    if (containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-
-      const prevX = mouseX / viewport.zoom - viewport.x;
-      const prevY = mouseY / viewport.zoom - viewport.y;
-
-      const newX = mouseX / newZoom - prevX;
-      const newY = mouseY / newZoom - prevY;
-
-      setViewport({ x: newX, y: newY, zoom: newZoom });
+    const data = handleZoomAction({ e, viewport, containerRef });
+    if (data) {
+      setViewport(data);
     }
   };
 
@@ -358,60 +297,12 @@ export default function InfiniteCanvas() {
       const resizeStart = resizeStartRef.current;
 
       setItems((prev) =>
-        prev.map((item) => {
-          const startSize = resizeStart?.get(item.id);
-          if (!startSize) return item;
-
-          if (e.shiftKey) {
-            const candidateWidth = Math.max(
-              MIN_MEDIA_SIZE,
-              startSize.width + dx,
-            );
-            const candidateHeight = Math.max(
-              MIN_MEDIA_SIZE,
-              startSize.height + dy,
-            );
-            const widthScale = candidateWidth / startSize.width;
-            const heightScale = candidateHeight / startSize.height;
-            const dominantScale =
-              Math.abs(widthScale - 1) > Math.abs(heightScale - 1)
-                ? widthScale
-                : heightScale;
-            const minScale = Math.max(
-              MIN_MEDIA_SIZE / startSize.width,
-              MIN_MEDIA_SIZE / startSize.height,
-            );
-            const scale = Math.max(dominantScale, minScale);
-
-            return {
-              ...item,
-              width: startSize.width * scale,
-              height: startSize.height * scale,
-              crop: {
-                top: startSize.crop.top * scale,
-                right: startSize.crop.right * scale,
-                bottom: startSize.crop.bottom * scale,
-                left: startSize.crop.left * scale,
-              },
-            };
-          }
-
-          const nextWidth = Math.max(MIN_MEDIA_SIZE, startSize.width + dx);
-          const nextHeight = Math.max(MIN_MEDIA_SIZE, startSize.height + dy);
-          const widthScale = nextWidth / startSize.width;
-          const heightScale = nextHeight / startSize.height;
-
-          return {
-            ...item,
-            width: nextWidth,
-            height: nextHeight,
-            crop: {
-              top: startSize.crop.top * heightScale,
-              right: startSize.crop.right * widthScale,
-              bottom: startSize.crop.bottom * heightScale,
-              left: startSize.crop.left * widthScale,
-            },
-          };
+        handleImageResize({
+          dx,
+          dy,
+          prev,
+          resizeStart,
+          isHoldingShift: !!e.shiftKey,
         }),
       );
     } else if (croppingItem === id && startDragRef.current) {
@@ -423,56 +314,7 @@ export default function InfiniteCanvas() {
       const dy = (e.clientY - startDragRef.current.y) / viewport.zoom;
 
       setItems((prev) =>
-        prev.map((item) => {
-          if (item.id !== id) return item;
-
-          let { x, y, width, height } = cropStart;
-          const crop = { ...cropStart.crop };
-
-          if (cropHandle.includes("w")) {
-            const leftDelta = clamp(
-              dx,
-              -cropStart.crop.left,
-              cropStart.width - MIN_MEDIA_SIZE,
-            );
-            x = cropStart.x + leftDelta;
-            width = cropStart.width - leftDelta;
-            crop.left = cropStart.crop.left + leftDelta;
-          }
-
-          if (cropHandle.includes("e")) {
-            const rightDelta = clamp(
-              dx,
-              MIN_MEDIA_SIZE - cropStart.width,
-              cropStart.crop.right,
-            );
-            width = cropStart.width + rightDelta;
-            crop.right = cropStart.crop.right - rightDelta;
-          }
-
-          if (cropHandle.includes("n")) {
-            const topDelta = clamp(
-              dy,
-              -cropStart.crop.top,
-              cropStart.height - MIN_MEDIA_SIZE,
-            );
-            y = cropStart.y + topDelta;
-            height = cropStart.height - topDelta;
-            crop.top = cropStart.crop.top + topDelta;
-          }
-
-          if (cropHandle.includes("s")) {
-            const bottomDelta = clamp(
-              dy,
-              MIN_MEDIA_SIZE - cropStart.height,
-              cropStart.crop.bottom,
-            );
-            height = cropStart.height + bottomDelta;
-            crop.bottom = cropStart.crop.bottom - bottomDelta;
-          }
-
-          return { ...item, x, y, width, height, crop };
-        }),
+        handleImageCrop({ id, dx, dy, prev, cropStart, cropHandle }),
       );
     }
   };
@@ -508,24 +350,9 @@ export default function InfiniteCanvas() {
   };
 
   const resetSize = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const target = e.currentTarget as HTMLElement;
-    const mediaEl = target.parentElement?.querySelector("img, video") as
-      | HTMLImageElement
-      | HTMLVideoElement;
-
-    if (mediaEl) {
-      let intrinsicWidth = 400;
-      let intrinsicHeight = 300;
-
-      if (mediaEl.tagName === "IMG") {
-        intrinsicWidth = (mediaEl as HTMLImageElement).naturalWidth;
-        intrinsicHeight = (mediaEl as HTMLImageElement).naturalHeight;
-      } else if (mediaEl.tagName === "VIDEO") {
-        intrinsicWidth = (mediaEl as HTMLVideoElement).videoWidth;
-        intrinsicHeight = (mediaEl as HTMLVideoElement).videoHeight;
-      }
-
+    const result = resetImageSize(e);
+    if (result) {
+      const { intrinsicHeight, intrinsicWidth } = result;
       setItems((prev) =>
         prev.map((i) => {
           if (i.id === id) {
@@ -542,29 +369,6 @@ export default function InfiniteCanvas() {
         }),
       );
     }
-  };
-
-  const saveConfig = async () => {
-    const result = await saveToStorage(items, viewport);
-
-    if (!result.ok) {
-      const text =
-        result.error instanceof Error
-          ? result.error.message
-          : "Unknown error while saving.";
-
-      console.error("Failed to save config:", result.error);
-      await message(`Failed to save config:\n\n${text}`, {
-        title: "Save failed",
-        kind: "error",
-      });
-      return;
-    }
-
-    await message("Config saved successfully.", {
-      title: "Save completed",
-      kind: "info",
-    });
   };
 
   const screenWidth = window.innerWidth / viewport.zoom;
@@ -693,6 +497,8 @@ export default function InfiniteCanvas() {
                   loop
                   muted
                   playsInline
+                  draggable={false}
+                  onDragStart={(e) => e.preventDefault()}
                 />
               )}
               <div
@@ -705,7 +511,11 @@ export default function InfiniteCanvas() {
       </div>
 
       {selectionBox && <SelectionBox selectionBox={selectionBox} />}
-      <Hud items={items} saveConfig={saveConfig} loadConfig={loadConfig} />
+      <Hud
+        items={items}
+        saveConfig={() => saveConfig({ items, viewport })}
+        loadConfig={loadConfig}
+      />
     </div>
   );
 }

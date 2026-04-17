@@ -1,11 +1,11 @@
-import { MediaItem } from "../InfiniteCanvas";
+import { MediaItem } from "../utils/media.types";
 
 function MediaFrameActions({
   item,
   resetSize,
   deleteItem,
   startCropEdit,
-  isCropEditing
+  isCropEditing,
 }: {
   item: MediaItem;
   resetSize: (id: string, e: React.MouseEvent) => void;
