@@ -1,4 +1,4 @@
-import { MediaItem } from "../InfiniteCanvas";
+import { MediaItem } from "../utils/media.types";
 
 export interface ISelectionBox {
   startX: number;
@@ -10,7 +10,7 @@ export interface ISelectionBox {
 const Hud = ({
   items,
   saveConfig,
-  loadConfig
+  loadConfig,
 }: {
   items: MediaItem[];
   saveConfig: () => void;

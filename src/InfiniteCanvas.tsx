@@ -2,58 +2,36 @@ import {
   useState,
   useRef,
   useEffect,
-  WheelEvent as ReactWheelEvent
+  WheelEvent as ReactWheelEvent,
+  useCallback,
 } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { DragDropEvent } from "@tauri-apps/api/webview";
 import { Event } from "@tauri-apps/api/event";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { v4 as uuidv4 } from "uuid";
-import { save, open, message } from "@tauri-apps/plugin-dialog";
-import { writeTextFile, readTextFile } from "@tauri-apps/plugin-fs";
+import { save, message } from "@tauri-apps/plugin-dialog";
+import { writeTextFile } from "@tauri-apps/plugin-fs";
 import "./InfiniteCanvas.css";
 import { ISelectionBox, SelectionBox } from "./components/SelectionBox";
 import { Hud } from "./components/Hud";
 import { MediaFrameActions } from "./components/MediaFrameActions";
-import { VIDEO_EXTENSIONS, IMAGE_EXTENSIONS } from "./utils/media";
-
-export type MediaItemType = "image" | "video";
-
-export interface CropInsets {
-  top: number;
-  right: number;
-  bottom: number;
-  left: number;
-}
-
-export interface MediaItem {
-  id: string;
-  type: MediaItemType;
-  filePath: string;
-  url: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  crop?: CropInsets;
-}
-
-interface Viewport {
-  x: number;
-  y: number;
-  zoom: number;
-}
-
-type CropHandle = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
-
-const CROP_HANDLES: CropHandle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
-const MIN_MEDIA_SIZE = 100;
-const EMPTY_CROP: CropInsets = { top: 0, right: 0, bottom: 0, left: 0 };
-
-const getCrop = (item: MediaItem): CropInsets => item.crop ?? EMPTY_CROP;
-
-const clamp = (value: number, min: number, max: number) =>
-  Math.min(Math.max(value, min), max);
+import {
+  VIDEO_EXTENSIONS,
+  IMAGE_EXTENSIONS,
+  MIN_MEDIA_SIZE,
+  clamp,
+  EMPTY_CROP,
+  getCrop,
+} from "./utils/media";
+import {
+  CropHandle,
+  CropInsets,
+  MediaItem,
+  Viewport,
+} from "./utils/media.types";
+import { ImageActions } from "./components/ImageActions";
+import { loadFromStorage, saveToStorage } from "./utils/fs";
 
 export default function InfiniteCanvas() {
   const [items, setItems] = useState<MediaItem[]>([]);
@@ -76,21 +54,18 @@ export default function InfiniteCanvas() {
     { width: number; height: number; crop: CropInsets }
   > | null>(null);
   const cropHandleRef = useRef<CropHandle | null>(null);
-  const cropStartRef = useRef<
-    | {
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-        crop: CropInsets;
-      }
-    | null
-  >(null);
+  const cropStartRef = useRef<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    crop: CropInsets;
+  } | null>(null);
 
   const startPanning = (
     pointerId: number,
     clientX: number,
-    clientY: number
+    clientY: number,
   ) => {
     setIsPanning(true);
     startDragRef.current = { x: clientX, y: clientY };
@@ -137,7 +112,7 @@ export default function InfiniteCanvas() {
                 x: centerX + index * 1350,
                 y: centerY,
                 width: 1280,
-                height: w ? (h / w) * 1280 : 720
+                height: w ? (h / w) * 1280 : 720,
               });
 
               if (isImage) {
@@ -157,14 +132,14 @@ export default function InfiniteCanvas() {
 
           Promise.all(promises).then((results) => {
             const validItems = results.filter(
-              (item): item is MediaItem => item !== null
+              (item): item is MediaItem => item !== null,
             );
             if (validItems.length > 0) {
               setItems((prev) => [...prev, ...validItems]);
             }
           });
         }
-      }
+      },
     );
 
     return () => {
@@ -190,7 +165,7 @@ export default function InfiniteCanvas() {
           startX: clientX,
           startY: clientY,
           endX: clientX,
-          endY: clientY
+          endY: clientY,
         });
         setSelectedItems(new Set());
         setEditingCropItem(null);
@@ -214,7 +189,7 @@ export default function InfiniteCanvas() {
       const clientY = e.clientY - rect.top;
 
       setSelectionBox((prev) =>
-        prev ? { ...prev, endX: clientX, endY: clientY } : null
+        prev ? { ...prev, endX: clientX, endY: clientY } : null,
       );
 
       const startWorldX = selectionBox.startX / viewport.zoom - viewport.x;
@@ -259,7 +234,7 @@ export default function InfiniteCanvas() {
     const zoomFactor = -e.deltaY * 0.001;
     const newZoom = Math.max(
       0.05,
-      Math.min(viewport.zoom * (1 + zoomFactor), 5)
+      Math.min(viewport.zoom * (1 + zoomFactor), 5),
     );
 
     if (containerRef.current) {
@@ -278,7 +253,9 @@ export default function InfiniteCanvas() {
   };
 
   const handleItemPointerDown = (id: string, e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest(".reset-btn, .delete-btn, .crop-btn")) {
+    if (
+      (e.target as HTMLElement).closest(".reset-btn, .delete-btn, .crop-btn")
+    ) {
       return;
     }
 
@@ -291,10 +268,10 @@ export default function InfiniteCanvas() {
     }
 
     const cropHandle = (e.target as HTMLElement).closest<HTMLElement>(
-      ".crop-handle"
+      ".crop-handle",
     )?.dataset.cropHandle as CropHandle | undefined;
     const isResize = (e.target as HTMLElement).classList.contains(
-      "resize-handle"
+      "resize-handle",
     );
 
     if (!selectedItems.has(id)) {
@@ -315,7 +292,7 @@ export default function InfiniteCanvas() {
         y: cropItem.y,
         width: cropItem.width,
         height: cropItem.height,
-        crop: { ...getCrop(cropItem) }
+        crop: { ...getCrop(cropItem) },
       };
       resizeStartRef.current = null;
     } else if (isResize) {
@@ -330,9 +307,9 @@ export default function InfiniteCanvas() {
             {
               width: item.width,
               height: item.height,
-              crop: { ...getCrop(item) }
-            }
-          ])
+              crop: { ...getCrop(item) },
+            },
+          ]),
       );
     } else {
       setDraggingItem(id);
@@ -370,8 +347,8 @@ export default function InfiniteCanvas() {
         prev.map((item) =>
           selectedItems.has(item.id)
             ? { ...item, x: item.x + dx, y: item.y + dy }
-            : item
-        )
+            : item,
+        ),
       );
 
       startDragRef.current = { x: e.clientX, y: e.clientY };
@@ -386,10 +363,13 @@ export default function InfiniteCanvas() {
           if (!startSize) return item;
 
           if (e.shiftKey) {
-            const candidateWidth = Math.max(MIN_MEDIA_SIZE, startSize.width + dx);
+            const candidateWidth = Math.max(
+              MIN_MEDIA_SIZE,
+              startSize.width + dx,
+            );
             const candidateHeight = Math.max(
               MIN_MEDIA_SIZE,
-              startSize.height + dy
+              startSize.height + dy,
             );
             const widthScale = candidateWidth / startSize.width;
             const heightScale = candidateHeight / startSize.height;
@@ -399,7 +379,7 @@ export default function InfiniteCanvas() {
                 : heightScale;
             const minScale = Math.max(
               MIN_MEDIA_SIZE / startSize.width,
-              MIN_MEDIA_SIZE / startSize.height
+              MIN_MEDIA_SIZE / startSize.height,
             );
             const scale = Math.max(dominantScale, minScale);
 
@@ -411,8 +391,8 @@ export default function InfiniteCanvas() {
                 top: startSize.crop.top * scale,
                 right: startSize.crop.right * scale,
                 bottom: startSize.crop.bottom * scale,
-                left: startSize.crop.left * scale
-              }
+                left: startSize.crop.left * scale,
+              },
             };
           }
 
@@ -429,10 +409,10 @@ export default function InfiniteCanvas() {
               top: startSize.crop.top * heightScale,
               right: startSize.crop.right * widthScale,
               bottom: startSize.crop.bottom * heightScale,
-              left: startSize.crop.left * widthScale
-            }
+              left: startSize.crop.left * widthScale,
+            },
           };
-        })
+        }),
       );
     } else if (croppingItem === id && startDragRef.current) {
       const cropStart = cropStartRef.current;
@@ -453,7 +433,7 @@ export default function InfiniteCanvas() {
             const leftDelta = clamp(
               dx,
               -cropStart.crop.left,
-              cropStart.width - MIN_MEDIA_SIZE
+              cropStart.width - MIN_MEDIA_SIZE,
             );
             x = cropStart.x + leftDelta;
             width = cropStart.width - leftDelta;
@@ -464,7 +444,7 @@ export default function InfiniteCanvas() {
             const rightDelta = clamp(
               dx,
               MIN_MEDIA_SIZE - cropStart.width,
-              cropStart.crop.right
+              cropStart.crop.right,
             );
             width = cropStart.width + rightDelta;
             crop.right = cropStart.crop.right - rightDelta;
@@ -474,7 +454,7 @@ export default function InfiniteCanvas() {
             const topDelta = clamp(
               dy,
               -cropStart.crop.top,
-              cropStart.height - MIN_MEDIA_SIZE
+              cropStart.height - MIN_MEDIA_SIZE,
             );
             y = cropStart.y + topDelta;
             height = cropStart.height - topDelta;
@@ -485,14 +465,14 @@ export default function InfiniteCanvas() {
             const bottomDelta = clamp(
               dy,
               MIN_MEDIA_SIZE - cropStart.height,
-              cropStart.crop.bottom
+              cropStart.crop.bottom,
             );
             height = cropStart.height + bottomDelta;
             crop.bottom = cropStart.crop.bottom - bottomDelta;
           }
 
           return { ...item, x, y, width, height, crop };
-        })
+        }),
       );
     }
   };
@@ -555,82 +535,36 @@ export default function InfiniteCanvas() {
               ...i,
               width: 1280,
               height: (h / w) * 1280,
-              crop: { ...EMPTY_CROP }
+              crop: { ...EMPTY_CROP },
             };
           }
           return i;
-        })
+        }),
       );
     }
   };
 
   const saveConfig = async () => {
-    try {
-      const filePath = await save({
-        title: "Save canvas",
-        defaultPath: "canvas.json",
-        filters: [
-          {
-            name: "Canvas Config",
-            extensions: ["json"]
-          }
-        ]
-      });
+    const result = await saveToStorage(items, viewport);
 
-      if (!filePath) {
-        // User cancelled action.
-        return;
-      }
-      const configData = JSON.stringify({ items, viewport });
-      await writeTextFile(filePath, configData);
-
-      await message("Config saved successfully.", {
-        title: "Save completed",
-        kind: "info"
-      });
-    } catch (err) {
+    if (!result.ok) {
       const text =
-        err instanceof Error ? err.message : "Unknown error while saving.";
+        result.error instanceof Error
+          ? result.error.message
+          : "Unknown error while saving.";
 
-      console.error("Failed to save config:", err);
+      console.error("Failed to save config:", result.error);
       await message(`Failed to save config:\n\n${text}`, {
         title: "Save failed",
-        kind: "error"
+        kind: "error",
       });
+      return;
     }
-  };
 
-  const loadConfig = async () => {
-    try {
-      const selected = await open({
-        filters: [
-          {
-            name: "Canvas Config",
-            extensions: ["json"]
-          }
-        ]
-      });
-
-      if (selected && typeof selected === "string") {
-        const contents = await readTextFile(selected);
-        const data = JSON.parse(contents);
-
-        if (data.items) {
-          // Re-generate URLs using convertFileSrc locally in case app restarted or paths changed
-          const loadedItems = data.items.map((i: MediaItem) => ({
-            ...i,
-            url: convertFileSrc(i.filePath)
-          }));
-          setItems(loadedItems);
-        }
-        if (data.viewport) {
-          setViewport(data.viewport);
-        }
-        setSelectedItems(new Set());
-      }
-    } catch (err) {
-      console.error("Failed to load:", err);
-    }
+    await message("Config saved successfully.", {
+      title: "Save completed",
+      kind: "info",
+    });
   };
 
   const screenWidth = window.innerWidth / viewport.zoom;
@@ -640,6 +574,34 @@ export default function InfiniteCanvas() {
   const viewRight = viewLeft + screenWidth;
   const viewBottom = viewTop + screenHeight;
   const cullMargin = 500;
+
+  const loadConfig = async () => {
+    const result = await loadFromStorage();
+    if (!result.ok) {
+      if (result.reason !== "cancelled") {
+        await message(`Failed to save config:\n\n${result.reason}`, {
+          title: "Save failed",
+          kind: "error",
+        });
+      }
+
+      return;
+    }
+    const { data } = result;
+
+    if (data.items) {
+      // Re-generate URLs using convertFileSrc locally in case app restarted or paths changed
+      const loadedItems = data.items.map((i) => ({
+        ...i,
+        url: convertFileSrc(i.filePath),
+      }));
+      setItems(loadedItems);
+    }
+    if (data.viewport) {
+      setViewport(data.viewport);
+    }
+    setSelectedItems(new Set());
+  };
 
   return (
     <div
@@ -655,13 +617,13 @@ export default function InfiniteCanvas() {
         className="canvas-background"
         style={{
           backgroundPosition: `${viewport.x * viewport.zoom}px ${viewport.y * viewport.zoom}px`,
-          backgroundSize: `${50 * viewport.zoom}px ${50 * viewport.zoom}px`
+          backgroundSize: `${50 * viewport.zoom}px ${50 * viewport.zoom}px`,
         }}
       />
       <div
         className="canvas-world"
         style={{
-          transform: `scale(${viewport.zoom}) translate(${viewport.x}px, ${viewport.y}px)`
+          transform: `scale(${viewport.zoom}) translate(${viewport.x}px, ${viewport.y}px)`,
         }}
       >
         {items.map((item) => {
@@ -681,6 +643,15 @@ export default function InfiniteCanvas() {
             return null;
           }
 
+          const zIndex =
+            draggingItem === id ||
+            resizingItem === id ||
+            croppingItem === id ||
+            editingCropItem === id ||
+            selectedItems.has(id)
+              ? 100
+              : 1;
+
           return (
             <div
               key={id}
@@ -692,14 +663,7 @@ export default function InfiniteCanvas() {
                 top: item.y,
                 width: item.width,
                 height: item.height,
-                zIndex:
-                  draggingItem === id ||
-                  resizingItem === id ||
-                  croppingItem === id ||
-                  editingCropItem === id ||
-                  selectedItems.has(id)
-                    ? 100
-                    : 1
+                zIndex,
               }}
               onPointerDown={(e) => handleItemPointerDown(id, e)}
               onPointerMove={(e) => handleItemPointerMove(id, e)}
@@ -713,33 +677,14 @@ export default function InfiniteCanvas() {
                 isCropEditing={editingCropItem === id}
               />
               {item.type === "image" ? (
-                <>
-                  <img
-                    className="media-content"
-                    src={url}
-                    alt="canvas item"
-                    draggable={false}
-                    onDragStart={(e) => e.preventDefault()}
-                    style={{
-                      left: -crop.left,
-                      top: -crop.top,
-                      width: item.width + crop.left + crop.right,
-                      height: item.height + crop.top + crop.bottom
-                    }}
-                  />
-                  {editingCropItem === id && (
-                    <div className="crop-overlay" aria-hidden="true">
-                      {CROP_HANDLES.map((handle) => (
-                        <div
-                          key={handle}
-                          className={`crop-handle crop-handle-${handle}`}
-                          data-crop-handle={handle}
-                          onPointerDown={(e) => handleItemPointerDown(id, e)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </>
+                <ImageActions
+                  id={id}
+                  url={url}
+                  crop={crop}
+                  item={item}
+                  editingCropItem={editingCropItem}
+                  handleItemPointerDown={handleItemPointerDown}
+                />
               ) : (
                 <video
                   className="media-content"
@@ -753,7 +698,7 @@ export default function InfiniteCanvas() {
               <div
                 className="resize-handle"
                 onPointerDown={(e) => handleItemPointerDown(id, e)}
-              ></div>
+              />
             </div>
           );
         })}
