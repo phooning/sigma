@@ -50,6 +50,10 @@ export default function InfiniteCanvas() {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const startDragRef = useRef<{ x: number; y: number } | null>(null);
+  const resizeStartRef = useRef<Map<
+    string,
+    { width: number; height: number }
+  > | null>(null);
 
   const startPanning = (
     pointerId: number,
@@ -263,13 +267,26 @@ export default function InfiniteCanvas() {
 
     if (isResize) {
       setResizingItem(id);
+      const resizeIds = selectedItems.has(id) ? selectedItems : new Set([id]);
+      resizeStartRef.current = new Map(
+        items
+          .filter((item) => resizeIds.has(item.id))
+          .map((item) => [
+            item.id,
+            {
+              width: item.width,
+              height: item.height
+            }
+          ])
+      );
     } else {
       setDraggingItem(id);
+      resizeStartRef.current = null;
     }
 
     startDragRef.current = { x: e.clientX, y: e.clientY };
 
-    // Capture container so move events fire gllobally, even when the pointer
+    // Capture container so move events fire globally, even when the pointer
     // leaves the item or container bounds on mid-drag.
     containerRef.current?.setPointerCapture(e.pointerId);
 
@@ -305,20 +322,42 @@ export default function InfiniteCanvas() {
     } else if (resizingItem === id && startDragRef.current) {
       const dx = (e.clientX - startDragRef.current.x) / viewport.zoom;
       const dy = (e.clientY - startDragRef.current.y) / viewport.zoom;
+      const resizeStart = resizeStartRef.current;
 
       setItems((prev) =>
-        prev.map((item) =>
-          selectedItems.has(item.id)
-            ? {
-                ...item,
-                width: Math.max(100, item.width + dx),
-                height: Math.max(100, item.height + dy)
-              }
-            : item
-        )
-      );
+        prev.map((item) => {
+          const startSize = resizeStart?.get(item.id);
+          if (!startSize) return item;
 
-      startDragRef.current = { x: e.clientX, y: e.clientY };
+          if (e.shiftKey) {
+            const candidateWidth = Math.max(100, startSize.width + dx);
+            const candidateHeight = Math.max(100, startSize.height + dy);
+            const widthScale = candidateWidth / startSize.width;
+            const heightScale = candidateHeight / startSize.height;
+            const dominantScale =
+              Math.abs(widthScale - 1) > Math.abs(heightScale - 1)
+                ? widthScale
+                : heightScale;
+            const minScale = Math.max(
+              100 / startSize.width,
+              100 / startSize.height
+            );
+            const scale = Math.max(dominantScale, minScale);
+
+            return {
+              ...item,
+              width: startSize.width * scale,
+              height: startSize.height * scale
+            };
+          }
+
+          return {
+            ...item,
+            width: Math.max(100, startSize.width + dx),
+            height: Math.max(100, startSize.height + dy)
+          };
+        })
+      );
     }
   };
 
@@ -327,6 +366,7 @@ export default function InfiniteCanvas() {
       setDraggingItem(null);
       setResizingItem(null);
       startDragRef.current = null;
+      resizeStartRef.current = null;
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
   };

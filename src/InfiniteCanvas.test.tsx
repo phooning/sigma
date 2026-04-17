@@ -167,6 +167,47 @@ describe('InfiniteCanvas Application', () => {
       expect(mediaItem.style.height).toBe('960px');
     });
 
+    it('locks the current resized aspect ratio when resizing with shift held', async () => {
+      const mediaItem = document.querySelector('.media-item') as HTMLElement;
+      const handle = document.querySelector('.resize-handle') as HTMLElement;
+
+      await act(async () => {
+        fireEvent.pointerDown(handle, { clientX: 0, clientY: 0, pointerId: 6, button: 0 });
+      });
+      await act(async () => {
+        fireEvent.pointerMove(mediaItem, { clientX: 100, clientY: 200, pointerId: 6, button: 0 });
+      });
+      await act(async () => {
+        fireEvent.pointerUp(mediaItem, { pointerId: 6, button: 0 });
+      });
+
+      expect(mediaItem.style.width).toBe('1380px');
+      expect(mediaItem.style.height).toBe('1160px');
+
+      const resizedRatio = 1380 / 1160;
+
+      await act(async () => {
+        fireEvent.pointerDown(handle, { clientX: 0, clientY: 0, pointerId: 7, button: 0 });
+      });
+      await act(async () => {
+        fireEvent.pointerMove(mediaItem, {
+          clientX: 100,
+          clientY: 0,
+          pointerId: 7,
+          button: 0,
+          shiftKey: true
+        });
+      });
+      await act(async () => {
+        fireEvent.pointerUp(mediaItem, { pointerId: 7, button: 0 });
+      });
+
+      const width = parseFloat(mediaItem.style.width);
+      const height = parseFloat(mediaItem.style.height);
+      expect(width).toBeCloseTo(1480);
+      expect(width / height).toBeCloseTo(resizedRatio);
+    });
+
     it('deletes the media item on delete button click', async () => {
       const delBtn = document.querySelector('.delete-btn') as HTMLElement;
       expect(delBtn).toBeInTheDocument();

@@ -33,7 +33,3 @@ pnpm tauri dev
 ```sh
 pnpm build
 ```
-
-## Development
-
-Massive WIP. I'll continue development if there's any further interest.
