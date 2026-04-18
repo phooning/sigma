@@ -23,6 +23,12 @@ interface VideoMediaProps {
 
 type VideoLod = "video" | "thumbnail" | "proxy";
 
+interface LoopState {
+  enabled: boolean;
+  a: number | null;
+  b: number | null;
+}
+
 export const clampVideoTime = (time: number, duration: number) => {
   if (!Number.isFinite(time) || !Number.isFinite(duration) || duration <= 0) {
     return 0;
@@ -72,6 +78,17 @@ export const shouldRequestVideoThumbnail = (zoom: number, item: MediaItem) => {
   );
 };
 
+const getLoopRange = (loop: LoopState) => {
+  if (loop.a === null || loop.b === null || loop.a === loop.b) {
+    return null;
+  }
+
+  return {
+    start: Math.min(loop.a, loop.b),
+    end: Math.max(loop.a, loop.b),
+  };
+};
+
 export function VideoMedia({
   url,
   crop,
@@ -85,11 +102,21 @@ export function VideoMedia({
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [isScrubbing, setIsScrubbing] = useState(false);
+  const [loop, setLoop] = useState<LoopState>({
+    enabled: false,
+    a: null,
+    b: null,
+  });
   const videoRef = useRef<HTMLVideoElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
   const durationRef = useRef(0);
   const isScrubbingRef = useRef(false);
+  const loopRef = useRef<LoopState>({
+    enabled: false,
+    a: null,
+    b: null,
+  });
   const timelineStateRef = useRef({
     anchorTime: 0,
     anchorTimestamp: 0,
@@ -136,6 +163,27 @@ export function VideoMedia({
     );
   }, []);
 
+  const writeLoopPosition = useCallback((nextLoop: LoopState) => {
+    const duration = durationRef.current;
+    const timeline = timelineRef.current;
+    if (duration <= 0 || !timeline) return;
+
+    const aPosition =
+      nextLoop.a === null ? "-100%" : `${(clampVideoTime(nextLoop.a, duration) / duration) * 100}%`;
+    const bPosition =
+      nextLoop.b === null ? "-100%" : `${(clampVideoTime(nextLoop.b, duration) / duration) * 100}%`;
+    const range = getLoopRange(nextLoop);
+    const rangeStart =
+      range === null ? "0%" : `${(clampVideoTime(range.start, duration) / duration) * 100}%`;
+    const rangeEnd =
+      range === null ? "0%" : `${(clampVideoTime(range.end, duration) / duration) * 100}%`;
+
+    timeline.style.setProperty("--video-loop-a-position", aPosition);
+    timeline.style.setProperty("--video-loop-b-position", bPosition);
+    timeline.style.setProperty("--video-loop-start-position", rangeStart);
+    timeline.style.setProperty("--video-loop-end-position", rangeEnd);
+  }, []);
+
   const stopTimelineAnimation = useCallback(() => {
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
@@ -165,6 +213,24 @@ export function VideoMedia({
         state.anchorTime + elapsed * state.playbackRate,
         duration,
       );
+      const loopRange = getLoopRange(loopRef.current);
+
+      if (
+        loopRef.current.enabled &&
+        loopRange !== null &&
+        nextTime >= loopRange.end
+      ) {
+        video.currentTime = loopRange.start;
+        timelineStateRef.current = {
+          anchorTime: loopRange.start,
+          anchorTimestamp: timestamp,
+          playbackRate: video.playbackRate || 1,
+        };
+        setCurrentTime(loopRange.start);
+        writePlayheadPosition(loopRange.start);
+        rafRef.current = requestAnimationFrame(tickTimeline);
+        return;
+      }
 
       writePlayheadPosition(nextTime);
       rafRef.current = requestAnimationFrame(tickTimeline);
@@ -254,6 +320,65 @@ export function VideoMedia({
     setIsScrubbing(nextIsScrubbing);
   }, []);
 
+  const updateLoop = useCallback(
+    (getNextLoop: (previous: LoopState) => LoopState) => {
+      setLoop((previous) => {
+        const nextLoop = getNextLoop(previous);
+        loopRef.current = nextLoop;
+        writeLoopPosition(nextLoop);
+        return nextLoop;
+      });
+    },
+    [writeLoopPosition],
+  );
+
+  const setLoopPoint = useCallback(
+    (point: "a" | "b") => {
+      const video = videoRef.current;
+      const duration = durationRef.current;
+      if (!video || duration <= 0) return;
+
+      const nextPoint = clampVideoTime(video.currentTime, duration);
+      updateLoop((previous) => ({
+        ...previous,
+        [point]: nextPoint,
+        enabled:
+          previous.enabled &&
+          (point === "a" ? previous.b !== null && previous.b !== nextPoint : previous.a !== null && previous.a !== nextPoint),
+      }));
+    },
+    [updateLoop],
+  );
+
+  const toggleLoop = useCallback(() => {
+    const previous = loopRef.current;
+    const range = getLoopRange(previous);
+    const nextLoop = {
+      ...previous,
+      enabled: range === null ? false : !previous.enabled,
+    };
+
+    loopRef.current = nextLoop;
+    setLoop(nextLoop);
+    writeLoopPosition(nextLoop);
+
+    if (nextLoop.enabled && range !== null && videoRef.current) {
+      const video = videoRef.current;
+      if (video.currentTime < range.start || video.currentTime > range.end) {
+        video.currentTime = range.start;
+        syncTimelineFromVideo(range.start);
+      }
+    }
+  }, [syncTimelineFromVideo, writeLoopPosition]);
+
+  const clearLoop = useCallback(() => {
+    updateLoop(() => ({
+      enabled: false,
+      a: null,
+      b: null,
+    }));
+  }, [updateLoop]);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -276,14 +401,17 @@ export function VideoMedia({
     stopTimelineAnimation();
     durationRef.current = 0;
     isScrubbingRef.current = false;
+    loopRef.current = { enabled: false, a: null, b: null };
     setDuration(0);
     setCurrentTime(0);
     setIsScrubbing(false);
+    setLoop({ enabled: false, a: null, b: null });
   }, [stopTimelineAnimation, url]);
 
   useEffect(() => {
     writePlayheadPosition(currentTime);
-  }, [currentTime, duration, writePlayheadPosition]);
+    writeLoopPosition(loop);
+  }, [currentTime, duration, loop, writeLoopPosition, writePlayheadPosition]);
 
   useEffect(() => stopTimelineAnimation, [stopTimelineAnimation]);
 
@@ -352,7 +480,7 @@ export function VideoMedia({
         src={url}
         autoPlay={isInViewport}
         preload={isLoadRequested && isInViewport ? "auto" : "metadata"}
-        loop
+        loop={!loop.enabled}
         muted
         playsInline
         draggable={false}
@@ -452,11 +580,91 @@ export function VideoMedia({
             }}
           >
             <div className="video-timeline-buffer" />
+            {loop.a !== null && (
+              <div
+                className="video-loop-marker video-loop-marker-a"
+                aria-hidden="true"
+              >
+                A
+              </div>
+            )}
+            {loop.b !== null && (
+              <div
+                className="video-loop-marker video-loop-marker-b"
+                aria-hidden="true"
+              >
+                B
+              </div>
+            )}
+            {getLoopRange(loop) !== null && (
+              <div
+                className={`video-loop-range ${loop.enabled ? "is-enabled" : ""}`}
+                aria-hidden="true"
+              />
+            )}
             <div className="video-timeline-progress" />
             <div className="video-timeline-thumb" />
           </div>
           <div className="video-timeline-time">
             {formatVideoTime(currentTime)} / {formatVideoTime(duration)}
+          </div>
+          <div className="video-loop-controls" aria-label="Loop controls">
+            <button
+              type="button"
+              className="video-loop-btn"
+              aria-label="Set loop A point"
+              onPointerDown={stopCanvasGesture}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setLoopPoint("a");
+              }}
+            >
+              A
+            </button>
+            <button
+              type="button"
+              className="video-loop-btn"
+              aria-label="Set loop B point"
+              onPointerDown={stopCanvasGesture}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setLoopPoint("b");
+              }}
+            >
+              B
+            </button>
+            <button
+              type="button"
+              className="video-loop-btn video-loop-toggle"
+              aria-label="Toggle A/B loop"
+              aria-pressed={loop.enabled}
+              disabled={getLoopRange(loop) === null}
+              onPointerDown={stopCanvasGesture}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleLoop();
+              }}
+            >
+              Loop
+            </button>
+            {(loop.a !== null || loop.b !== null) && (
+              <button
+                type="button"
+                className="video-loop-btn"
+                aria-label="Clear A/B loop"
+                onPointerDown={stopCanvasGesture}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  clearLoop();
+                }}
+              >
+                Clear
+              </button>
+            )}
           </div>
         </div>
       )}

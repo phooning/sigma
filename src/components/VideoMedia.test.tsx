@@ -94,4 +94,58 @@ describe("VideoMedia timeline", () => {
     expect(timeline).toHaveAttribute("aria-valuenow", "10");
     expect(timeline).toHaveStyle("--video-playhead-position: 50%");
   });
+
+  it("sets sticky A/B loop markers distinct from the playhead", async () => {
+    let currentTime = 0;
+
+    render(
+      <VideoMedia
+        url="asset:///tmp/video.mp4"
+        crop={crop}
+        item={videoItem}
+        isInViewport
+        zoom={1}
+      />,
+    );
+
+    const video = document.querySelector("video");
+    expect(video).toBeInTheDocument();
+
+    Object.defineProperty(video, "duration", {
+      configurable: true,
+      get: () => 20,
+    });
+    Object.defineProperty(video, "currentTime", {
+      configurable: true,
+      get: () => currentTime,
+      set: (value) => {
+        currentTime = value;
+      },
+    });
+
+    fireEvent.loadedMetadata(video!);
+    const timeline = await screen.findByRole("slider", {
+      name: /video timeline/i,
+    });
+
+    currentTime = 5;
+    fireEvent.timeUpdate(video!);
+    fireEvent.click(screen.getByRole("button", { name: /set loop a point/i }));
+
+    currentTime = 15;
+    fireEvent.timeUpdate(video!);
+    fireEvent.click(screen.getByRole("button", { name: /set loop b point/i }));
+
+    const loopButton = screen.getByRole("button", {
+      name: /toggle a\/b loop/i,
+    });
+    fireEvent.click(loopButton);
+
+    expect(loopButton).toHaveAttribute("aria-pressed", "true");
+    expect(timeline).toHaveStyle("--video-loop-a-position: 25%");
+    expect(timeline).toHaveStyle("--video-loop-b-position: 75%");
+    expect(timeline).toHaveStyle("--video-loop-start-position: 25%");
+    expect(timeline).toHaveStyle("--video-loop-end-position: 75%");
+    expect(timeline).toHaveStyle("--video-playhead-position: 75%");
+  });
 });
