@@ -46,6 +46,7 @@ export const resetFrameSize = ({
 export function MediaFrameActions({
   item,
   revealItem,
+  screenshotItem,
   resetSize,
   deleteItem,
   startCropEdit,
@@ -53,6 +54,7 @@ export function MediaFrameActions({
 }: {
   item: MediaItem;
   revealItem: (id: string, e: React.MouseEvent) => void;
+  screenshotItem: (id: string, e: React.MouseEvent) => void;
   resetSize: (id: string, e: React.MouseEvent) => void;
   deleteItem: (id: string, e: React.MouseEvent) => void;
   startCropEdit: (id: string, e: React.MouseEvent) => void;
@@ -81,6 +83,13 @@ export function MediaFrameActions({
         title="Show in Folder"
       >
         ⌕
+      </button>
+      <button
+        className="screenshot-btn"
+        onClick={(e) => screenshotItem(item.id, e)}
+        title="Save Screenshot"
+      >
+        ⧉
       </button>
       <button
         className="delete-btn"

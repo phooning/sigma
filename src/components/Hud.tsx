@@ -16,6 +16,9 @@ const Hud = ({
   loadConfig,
   settingsMenuItems,
   settingsVersion,
+  screenshotDirectory,
+  chooseScreenshotDirectory,
+  clearScreenshotDirectory,
   isSettingsOpen,
   openSettings,
   closeSettings,
@@ -25,6 +28,9 @@ const Hud = ({
   loadConfig: () => void;
   settingsMenuItems: readonly SettingsMenuItem[];
   settingsVersion: string;
+  screenshotDirectory: string;
+  chooseScreenshotDirectory: () => void;
+  clearScreenshotDirectory: () => void;
   isSettingsOpen: boolean;
   openSettings: () => void;
   closeSettings: () => void;
@@ -179,6 +185,35 @@ const Hud = ({
                 aria-labelledby="settings-panel-title"
               >
                 <h3 id="settings-panel-title">{activeSettingsMenuItem}</h3>
+                {activeSettingsMenuItem === "General" ? (
+                  <div className="settings-field-row">
+                    <div className="settings-field-copy">
+                      <span>Screenshot Directory</span>
+                      <small>
+                        {screenshotDirectory ||
+                          "Choose a folder before the first screenshot."}
+                      </small>
+                    </div>
+                    <div className="settings-field-actions">
+                      <button
+                        type="button"
+                        className="settings-action-btn"
+                        onClick={chooseScreenshotDirectory}
+                      >
+                        Choose
+                      </button>
+                      {screenshotDirectory ? (
+                        <button
+                          type="button"
+                          className="settings-action-btn"
+                          onClick={clearScreenshotDirectory}
+                        >
+                          Clear
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
                 {activeSettingsMenuItem === "Debug" ? (
                   <label className="settings-toggle-row">
                     <span>Development Mode</span>

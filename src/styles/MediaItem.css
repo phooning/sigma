@@ -60,6 +60,7 @@
 .reset-btn,
 .delete-btn,
 .reveal-btn,
+.screenshot-btn,
 .crop-btn {
     position: absolute;
     top: 16px;
@@ -100,8 +101,12 @@
     right: 136px;
     font-size: 26px;
 }
-.crop-btn {
+.screenshot-btn {
     right: 196px;
+    font-size: 22px;
+}
+.crop-btn {
+    right: 256px;
     font-size: 18px;
     font-weight: 700;
 }
@@ -109,6 +114,7 @@
 .media-item:hover .delete-btn,
 .media-item:hover .reset-btn,
 .media-item:hover .reveal-btn,
+.media-item:hover .screenshot-btn,
 .media-item:hover .crop-btn,
 .media-item.crop-editing .crop-btn {
     opacity: 1;
@@ -124,6 +130,10 @@
 }
 .reveal-btn:hover {
     background: rgba(234, 179, 8, 0.85);
+    transform: scale(1.1);
+}
+.screenshot-btn:hover {
+    background: rgba(16, 185, 129, 0.85);
     transform: scale(1.1);
 }
 .crop-btn:hover,

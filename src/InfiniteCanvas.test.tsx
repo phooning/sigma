@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
 import packageJson from '../package.json';
 import InfiniteCanvas from './InfiniteCanvas';
 
@@ -37,6 +38,10 @@ vi.mock('@tauri-apps/api/core', () => ({
       return Promise.resolve(`/tmp/${args?.path?.includes('heavy_video.mkv') ? 'heavy' : 'video'}-thumb.jpg`);
     }
 
+    if (command === 'save_media_screenshot') {
+      return Promise.resolve('/shots/test-screenshot.png');
+    }
+
     return Promise.resolve(null);
   })
 }));
@@ -66,6 +71,23 @@ vi.mock('@tauri-apps/plugin-shell', () => ({
 
 describe('InfiniteCanvas Application', () => {
   beforeAll(() => {
+    const storage = new Map<string, string>();
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: vi.fn((key: string) => storage.get(key) ?? null),
+        setItem: vi.fn((key: string, value: string) => {
+          storage.set(key, value);
+        }),
+        removeItem: vi.fn((key: string) => {
+          storage.delete(key);
+        }),
+        clear: vi.fn(() => {
+          storage.clear();
+        })
+      }
+    });
+
     // Mock HTMLImageElement properties and onload for tests
     Object.defineProperty(globalThis.Image.prototype, 'src', {
       set(src) {
@@ -106,6 +128,7 @@ describe('InfiniteCanvas Application', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     dropCallback = null;
   });
 
@@ -134,6 +157,26 @@ describe('InfiniteCanvas Application', () => {
     expect(screen.getByText('FPS')).toBeInTheDocument();
     expect(screen.getByText('Frame time (ms)')).toBeInTheDocument();
     expect(screen.getByText('Video count')).toBeInTheDocument();
+  });
+
+  it('chooses a screenshot directory from general settings', async () => {
+    vi.mocked(open).mockResolvedValue('/shots');
+
+    render(<InfiniteCanvas />);
+
+    fireEvent.click(screen.getByRole('button', { name: /open settings/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Choose' }));
+    });
+
+    expect(open).toHaveBeenCalledWith({
+      directory: true,
+      multiple: false,
+      title: 'Choose screenshot directory',
+      defaultPath: undefined
+    });
+    expect(screen.getByText('/shots')).toBeInTheDocument();
+    expect(localStorage.getItem('sigma:screenshot-directory')).toBe('/shots');
   });
 
   it('drops multiple videos as playable video elements without eager thumbnail work', async () => {
@@ -428,6 +471,64 @@ describe('InfiniteCanvas Application', () => {
       });
 
       expect(revealItemInDirMock).toHaveBeenCalledWith('/path/to/test.png');
+    });
+
+    it('saves a cropped screenshot using source-size crop ratios', async () => {
+      vi.mocked(open).mockResolvedValue('/shots');
+
+      const mediaItem = document.querySelector('.media-item') as HTMLElement;
+      const cropBtn = document.querySelector('.crop-btn') as HTMLElement;
+
+      await act(async () => {
+        fireEvent.click(cropBtn);
+      });
+
+      const westHandle = document.querySelector('.crop-handle-w') as HTMLElement;
+      await act(async () => {
+        fireEvent.pointerDown(westHandle, {
+          clientX: 0,
+          clientY: 0,
+          pointerId: 11,
+          button: 0
+        });
+      });
+      await act(async () => {
+        fireEvent.pointerMove(mediaItem, {
+          clientX: 120,
+          clientY: 0,
+          pointerId: 11,
+          button: 0
+        });
+      });
+      await act(async () => {
+        fireEvent.pointerUp(mediaItem, { pointerId: 11, button: 0 });
+      });
+
+      const screenshotBtn = document.querySelector('.screenshot-btn') as HTMLElement;
+      await act(async () => {
+        fireEvent.pointerDown(screenshotBtn, { pointerId: 12, button: 0 });
+        fireEvent.click(screenshotBtn);
+      });
+
+      expect(open).toHaveBeenCalledWith({
+        directory: true,
+        multiple: false,
+        title: 'Choose screenshot directory'
+      });
+      expect(invoke).toHaveBeenCalledWith('save_media_screenshot', {
+        path: '/path/to/test.png',
+        mediaType: 'image',
+        outputDirectory: '/shots',
+        currentTime: 0,
+        crop: {
+          x: 120 / 1280,
+          y: 0,
+          width: 1160 / 1280,
+          height: 1,
+          boxWidth: 1280,
+          boxHeight: 960
+        }
+      });
     });
 
     it('crops an image in place from side and corner handles', async () => {

@@ -3,7 +3,9 @@ use std::{
     collections::hash_map::DefaultHasher,
     fs,
     hash::{Hash, Hasher},
+    path::{Path, PathBuf},
     process::Command,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use tauri::Manager;
@@ -16,9 +18,16 @@ struct MediaMetadata {
     size: u64,
 }
 
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
+#[derive(serde::Deserialize)]
+struct CropRatio {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    #[serde(rename = "boxWidth")]
+    box_width: Option<f64>,
+    #[serde(rename = "boxHeight")]
+    box_height: Option<f64>,
 }
 
 #[tauri::command]
@@ -62,10 +71,11 @@ fn probe_media_blocking(path: String) -> Result<MediaMetadata, String> {
         Err(_) => return Ok(fallback),
     };
 
-    let Some(stream) = json["streams"]
-        .as_array()
-        .and_then(|streams| streams.iter().find(|stream| stream["codec_type"] == "video"))
-    else {
+    let Some(stream) = json["streams"].as_array().and_then(|streams| {
+        streams
+            .iter()
+            .find(|stream| stream["codec_type"] == "video")
+    }) else {
         return Ok(fallback);
     };
 
@@ -169,6 +179,165 @@ fn generate_video_thumbnail_blocking(
     }
 }
 
+#[tauri::command]
+async fn save_media_screenshot(
+    path: String,
+    media_type: String,
+    output_directory: Option<String>,
+    current_time: Option<f64>,
+    crop: CropRatio,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        save_media_screenshot_blocking(path, media_type, output_directory, current_time, crop)
+    })
+    .await
+    .map_err(|err| format!("Failed to save screenshot: {err}"))?
+}
+
+fn save_media_screenshot_blocking(
+    path: String,
+    media_type: String,
+    output_directory: Option<String>,
+    current_time: Option<f64>,
+    crop: CropRatio,
+) -> Result<String, String> {
+    let metadata = probe_media_blocking(path.clone())?;
+    let source_width = metadata.width.max(1);
+    let source_height = metadata.height.max(1);
+    let (crop_x, crop_y, crop_width, crop_height) = crop_pixels(&crop, source_width, source_height);
+    let crop_filter = format!("crop={crop_width}:{crop_height}:{crop_x}:{crop_y}");
+
+    let output_dir = output_directory
+        .filter(|directory| !directory.trim().is_empty())
+        .map(PathBuf::from)
+        .or_else(|| Path::new(&path).parent().map(Path::to_path_buf))
+        .ok_or("Failed to choose a screenshot output directory")?;
+
+    fs::create_dir_all(&output_dir)
+        .map_err(|err| format!("Failed to create screenshot directory: {err}"))?;
+
+    let output_path = output_dir.join(screenshot_filename(&path)?);
+    let output_path_str = output_path
+        .to_str()
+        .ok_or("Screenshot output path is not valid UTF-8")?;
+
+    let mut args = vec![
+        "-y".to_string(),
+        "-loglevel".to_string(),
+        "error".to_string(),
+    ];
+    if media_type == "video" {
+        let seconds = current_time.unwrap_or(0.0);
+        args.push("-ss".to_string());
+        args.push(format!(
+            "{:.3}",
+            if seconds.is_finite() {
+                seconds.max(0.0)
+            } else {
+                0.0
+            }
+        ));
+    }
+    args.push("-i".to_string());
+    args.push(path);
+    args.push("-frames:v".to_string());
+    args.push("1".to_string());
+    args.push("-vf".to_string());
+    args.push(crop_filter);
+    args.push(output_path_str.to_string());
+
+    let output = Command::new("ffmpeg")
+        .args(args)
+        .output()
+        .map_err(|err| format!("Failed to run ffmpeg: {err}"))?;
+
+    if output.status.success() {
+        Ok(output_path.to_string_lossy().into_owned())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let detail = stderr.trim();
+        if detail.is_empty() {
+            Err("ffmpeg failed to save the screenshot".to_string())
+        } else {
+            Err(format!("ffmpeg failed to save the screenshot: {detail}"))
+        }
+    }
+}
+
+fn crop_pixels(crop: &CropRatio, source_width: u32, source_height: u32) -> (u32, u32, u32, u32) {
+    let (source_x, source_y, visible_source_width, visible_source_height) =
+        cover_crop_source_rect(crop, source_width, source_height);
+
+    let x = (source_x + crop.x.clamp(0.0, 1.0) * visible_source_width)
+        .floor()
+        .max(0.0) as u32;
+    let y = (source_y + crop.y.clamp(0.0, 1.0) * visible_source_height)
+        .floor()
+        .max(0.0) as u32;
+    let x = x.min(source_width - 1);
+    let y = y.min(source_height - 1);
+    let width = (crop.width.clamp(0.0, 1.0) * visible_source_width).round() as u32;
+    let height = (crop.height.clamp(0.0, 1.0) * visible_source_height).round() as u32;
+    let width = width.max(1).min(source_width.saturating_sub(x).max(1));
+    let height = height.max(1).min(source_height.saturating_sub(y).max(1));
+
+    (x, y, width, height)
+}
+
+fn cover_crop_source_rect(
+    crop: &CropRatio,
+    source_width: u32,
+    source_height: u32,
+) -> (f64, f64, f64, f64) {
+    let source_width = source_width as f64;
+    let source_height = source_height as f64;
+    let box_width = crop
+        .box_width
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .unwrap_or(source_width);
+    let box_height = crop
+        .box_height
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .unwrap_or(source_height);
+    let source_aspect = source_width / source_height;
+    let box_aspect = box_width / box_height;
+
+    if source_aspect > box_aspect {
+        let visible_source_width = source_height * box_aspect;
+        let source_x = (source_width - visible_source_width) / 2.0;
+
+        (source_x, 0.0, visible_source_width, source_height)
+    } else {
+        let visible_source_height = source_width / box_aspect;
+        let source_y = (source_height - visible_source_height) / 2.0;
+
+        (0.0, source_y, source_width, visible_source_height)
+    }
+}
+
+fn screenshot_filename(path: &str) -> Result<String, String> {
+    let stem = Path::new(path)
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("media");
+    let sanitized_stem: String = stem
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '-' | '_') {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|err| format!("System clock is before Unix epoch: {err}"))?
+        .as_millis();
+
+    Ok(format!("{sanitized_stem}-screenshot-{timestamp}.png"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -178,10 +347,44 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            greet,
             probe_media,
-            generate_video_thumbnail
+            generate_video_thumbnail,
+            save_media_screenshot
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn crop(x: f64, y: f64, width: f64, height: f64, box_width: f64, box_height: f64) -> CropRatio {
+        CropRatio {
+            x,
+            y,
+            width,
+            height,
+            box_width: Some(box_width),
+            box_height: Some(box_height),
+        }
+    }
+
+    #[test]
+    fn crop_pixels_accounts_for_cover_crop_from_resized_frame() {
+        let result = crop_pixels(&crop(0.0, 0.0, 1.0, 1.0, 1280.0, 960.0), 1920, 1080);
+
+        assert_eq!(result, (240, 0, 1440, 1080));
+    }
+
+    #[test]
+    fn crop_pixels_applies_explicit_crop_inside_cover_crop() {
+        let result = crop_pixels(
+            &crop(120.0 / 1280.0, 0.0, 1160.0 / 1280.0, 1.0, 1280.0, 960.0),
+            1920,
+            1080,
+        );
+
+        assert_eq!(result, (375, 0, 1305, 1080));
+    }
 }
