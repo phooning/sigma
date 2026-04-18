@@ -1,0 +1,119 @@
+.resize-handle {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 20px;
+    height: 20px;
+    cursor: se-resize;
+    background: linear-gradient(
+        135deg,
+        transparent 50%,
+        rgba(255, 255, 255, 0.4) 50%
+    );
+    z-index: 5;
+    border-bottom-right-radius: 12px;
+}
+
+.resize-handle:hover {
+    background: linear-gradient(
+        135deg,
+        transparent 50%,
+        rgba(139, 92, 246, 0.8) 50%
+    );
+}
+
+.selection-box {
+    position: absolute;
+    border: 1px solid rgba(139, 92, 246, 0.8);
+    background-color: rgba(139, 92, 246, 0.2);
+    pointer-events: none;
+    z-index: 1000;
+}
+
+.crop-overlay {
+    position: absolute;
+    inset: 0;
+    border: 2px solid rgba(20, 184, 166, 0.9);
+    background-image:
+        linear-gradient(
+            to right,
+            transparent 33.333%,
+            rgba(255, 255, 255, 0.35) 33.333%,
+            rgba(255, 255, 255, 0.35) calc(33.333% + 1px),
+            transparent calc(33.333% + 1px),
+            transparent 66.666%,
+            rgba(255, 255, 255, 0.35) 66.666%,
+            rgba(255, 255, 255, 0.35) calc(66.666% + 1px),
+            transparent calc(66.666% + 1px)
+        ),
+        linear-gradient(
+            to bottom,
+            transparent 33.333%,
+            rgba(255, 255, 255, 0.35) 33.333%,
+            rgba(255, 255, 255, 0.35) calc(33.333% + 1px),
+            transparent calc(33.333% + 1px),
+            transparent 66.666%,
+            rgba(255, 255, 255, 0.35) 66.666%,
+            rgba(255, 255, 255, 0.35) calc(66.666% + 1px),
+            transparent calc(66.666% + 1px)
+        );
+    pointer-events: none;
+    z-index: 6;
+}
+
+.crop-handle {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    margin: -9px;
+    border: 2px solid #f8fafc;
+    border-radius: 4px;
+    background: #14b8a6;
+    pointer-events: auto;
+    z-index: 7;
+}
+
+.crop-handle-n,
+.crop-handle-s {
+    left: 50%;
+}
+.crop-handle-e,
+.crop-handle-w {
+    top: 50%;
+}
+.crop-handle-n {
+    top: 0;
+    cursor: n-resize;
+}
+.crop-handle-ne {
+    top: 0;
+    right: 0;
+    cursor: ne-resize;
+}
+.crop-handle-e {
+    right: 0;
+    cursor: e-resize;
+}
+.crop-handle-se {
+    right: 0;
+    bottom: 0;
+    cursor: se-resize;
+}
+.crop-handle-s {
+    bottom: 0;
+    cursor: s-resize;
+}
+.crop-handle-sw {
+    bottom: 0;
+    left: 0;
+    cursor: sw-resize;
+}
+.crop-handle-w {
+    left: 0;
+    cursor: w-resize;
+}
+.crop-handle-nw {
+    top: 0;
+    left: 0;
+    cursor: nw-resize;
+}

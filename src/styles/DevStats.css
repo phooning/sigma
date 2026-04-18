@@ -1,0 +1,36 @@
+.development-stats {
+    position: absolute;
+    top: 64px;
+    right: 18px;
+    z-index: 9;
+    width: 190px;
+    padding: 10px 12px;
+    display: grid;
+    gap: 6px;
+    color: #e5e7eb;
+    background: rgba(3, 7, 18, 0.76);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.34);
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 11px;
+    line-height: 1.25;
+    pointer-events: none;
+}
+
+.development-stats div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.development-stats span {
+    color: rgba(229, 231, 235, 0.66);
+}
+
+.development-stats strong {
+    color: #f8fafc;
+    font-size: 12px;
+    font-weight: 700;
+}

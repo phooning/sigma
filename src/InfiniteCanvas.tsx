@@ -1,7 +1,6 @@
 import { useState, useRef, WheelEvent as ReactWheelEvent } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { message } from "@tauri-apps/plugin-dialog";
-import "./InfiniteCanvas.css";
 import { ISelectionBox, SelectionBox } from "./components/SelectionBox";
 import { Hud } from "./components/Hud";
 import { DevelopmentOverlay } from "./components/DevelopmentOverlay";

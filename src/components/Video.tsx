@@ -1,16 +1,27 @@
 import {
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
-  useCallback,
   useEffect,
   useRef,
   useState,
 } from "react";
 import { CropInsets, MediaItem } from "../utils/media.types";
+import { useVideoLoop } from "./useVideoLoop";
+import { useVideoPlayback } from "./useVideoPlayback";
+import { useVideoTimeline } from "./useVideoTimeline";
+import {
+  formatVideoTime,
+  getLoopRange,
+  getVideoLod,
+  initialLoopState,
+  shouldRequestVideoThumbnail,
+} from "./videoUtils";
 
-const THUMBNAIL_MAX_SCREEN_WIDTH = 144;
-const PROXY_MAX_SCREEN_WIDTH = 96;
-const PROXY_MAX_SCREEN_HEIGHT = 72;
+export {
+  clampVideoTime,
+  getVideoLod,
+  shouldRequestVideoThumbnail,
+} from "./videoUtils";
 
 interface VideoMediaProps {
   url: string;
@@ -20,79 +31,6 @@ interface VideoMediaProps {
   zoom: number;
   onThumbnailNeeded?: (item: MediaItem) => void;
 }
-
-type VideoLod = "video" | "thumbnail" | "proxy";
-
-interface LoopState {
-  enabled: boolean;
-  a: number | null;
-  b: number | null;
-}
-
-export const clampVideoTime = (time: number, duration: number) => {
-  if (!Number.isFinite(time) || !Number.isFinite(duration) || duration <= 0) {
-    return 0;
-  }
-
-  return Math.min(Math.max(time, 0), duration);
-};
-
-const formatVideoTime = (time: number) => {
-  const safeTime = Number.isFinite(time) ? Math.max(0, Math.floor(time)) : 0;
-  const minutes = Math.floor(safeTime / 60);
-  const seconds = safeTime % 60;
-
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-};
-
-const getFiniteDuration = (duration: number | undefined) =>
-  typeof duration === "number" && Number.isFinite(duration) && duration > 0
-    ? duration
-    : 0;
-
-export const getVideoLod = (
-  zoom: number,
-  hasThumbnail: boolean,
-  item: MediaItem,
-): VideoLod => {
-  const screenWidth = item.width * zoom;
-  const screenHeight = item.height * zoom;
-
-  if (
-    screenWidth <= PROXY_MAX_SCREEN_WIDTH ||
-    screenHeight <= PROXY_MAX_SCREEN_HEIGHT
-  ) {
-    return "proxy";
-  }
-
-  if (screenWidth <= THUMBNAIL_MAX_SCREEN_WIDTH) {
-    return hasThumbnail ? "thumbnail" : "proxy";
-  }
-
-  return "video";
-};
-
-export const shouldRequestVideoThumbnail = (zoom: number, item: MediaItem) => {
-  const screenWidth = item.width * zoom;
-  const screenHeight = item.height * zoom;
-
-  return (
-    screenWidth <= THUMBNAIL_MAX_SCREEN_WIDTH &&
-    screenWidth > PROXY_MAX_SCREEN_WIDTH &&
-    screenHeight > PROXY_MAX_SCREEN_HEIGHT
-  );
-};
-
-const getLoopRange = (loop: LoopState) => {
-  if (loop.a === null || loop.b === null || loop.a === loop.b) {
-    return null;
-  }
-
-  return {
-    start: Math.min(loop.a, loop.b),
-    end: Math.max(loop.a, loop.b),
-  };
-};
 
 export function VideoMedia({
   url,
@@ -104,37 +42,18 @@ export function VideoMedia({
 }: VideoMediaProps) {
   const [isLoadRequested, setIsLoadRequested] = useState(false);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
-  const [duration, setDuration] = useState(() =>
-    getFiniteDuration(item.duration),
-  );
-  const [currentTime, setCurrentTime] = useState(0);
-  const [isScrubbing, setIsScrubbing] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [loop, setLoop] = useState<LoopState>({
-    enabled: false,
-    a: null,
-    b: null,
-  });
   const videoRef = useRef<HTMLVideoElement>(null);
-  const timelineRef = useRef<HTMLDivElement>(null);
-  const rafRef = useRef<number | null>(null);
-  const durationRef = useRef(getFiniteDuration(item.duration));
-  const isScrubbingRef = useRef(false);
-  const isPausedByUserRef = useRef(false);
-  const loopRef = useRef<LoopState>({
-    enabled: false,
-    a: null,
-    b: null,
-  });
-  const timelineStateRef = useRef({
-    anchorTime: 0,
-    anchorTimestamp: 0,
-    playbackRate: 1,
-  });
+  const externalLoopRef = useRef(initialLoopState);
   const lod = isLoadRequested
     ? "video"
     : getVideoLod(zoom, !!item.thumbnailUrl, item);
   const shouldDeferVideoLoad = !!item.deferVideoLoad && !isLoadRequested;
+
+  const stopCanvasGesture = (
+    e: ReactPointerEvent<HTMLElement> | ReactMouseEvent<HTMLElement>,
+  ) => {
+    e.stopPropagation();
+  };
 
   useEffect(() => {
     if (
@@ -145,313 +64,53 @@ export function VideoMedia({
     }
   }, [item, onThumbnailNeeded, zoom]);
 
-  const playVideo = useCallback(() => {
-    const video = videoRef.current;
-    if (
-      !video ||
-      lod !== "video" ||
-      !isInViewport ||
-      shouldDeferVideoLoad ||
-      isPausedByUserRef.current
-    ) {
-      return;
-    }
-
-    const playPromise = video.play();
-    playPromise
-      ?.then(() => setPlaybackError(null))
-      .catch(() => {
-        setPlaybackError("Playback failed. This file may need transcoding.");
-      });
-  }, [isInViewport, lod, shouldDeferVideoLoad]);
-
-  const writePlayheadPosition = useCallback((time: number) => {
-    const duration = durationRef.current;
-    const timeline = timelineRef.current;
-    if (duration <= 0 || !timeline) return;
-
-    const ratio = clampVideoTime(time, duration) / duration;
-
-    timeline.style.setProperty(
-      "--video-playhead-position",
-      `${ratio * 100}%`,
-    );
-  }, []);
-
-  const writeLoopPosition = useCallback((nextLoop: LoopState) => {
-    const duration = durationRef.current;
-    const timeline = timelineRef.current;
-    if (duration <= 0 || !timeline) return;
-
-    const aPosition =
-      nextLoop.a === null ? "-100%" : `${(clampVideoTime(nextLoop.a, duration) / duration) * 100}%`;
-    const bPosition =
-      nextLoop.b === null ? "-100%" : `${(clampVideoTime(nextLoop.b, duration) / duration) * 100}%`;
-    const range = getLoopRange(nextLoop);
-    const rangeStart =
-      range === null ? "0%" : `${(clampVideoTime(range.start, duration) / duration) * 100}%`;
-    const rangeEnd =
-      range === null ? "0%" : `${(clampVideoTime(range.end, duration) / duration) * 100}%`;
-
-    timeline.style.setProperty("--video-loop-a-position", aPosition);
-    timeline.style.setProperty("--video-loop-b-position", bPosition);
-    timeline.style.setProperty("--video-loop-start-position", rangeStart);
-    timeline.style.setProperty("--video-loop-end-position", rangeEnd);
-  }, []);
-
-  const stopTimelineAnimation = useCallback(() => {
-    if (rafRef.current !== null) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-  }, []);
-
-  const tickTimeline = useCallback(
-    (timestamp: number) => {
-      const video = videoRef.current;
-      const duration = durationRef.current;
-
-      if (
-        !video ||
-        duration <= 0 ||
-        video.paused ||
-        video.ended ||
-        isScrubbingRef.current
-      ) {
-        rafRef.current = null;
-        return;
-      }
-
-      const state = timelineStateRef.current;
-      const elapsed = (timestamp - state.anchorTimestamp) / 1000;
-      const nextTime = clampVideoTime(
-        state.anchorTime + elapsed * state.playbackRate,
-        duration,
-      );
-      const loopRange = getLoopRange(loopRef.current);
-
-      if (
-        loopRef.current.enabled &&
-        loopRange !== null &&
-        nextTime >= loopRange.end
-      ) {
-        video.currentTime = loopRange.start;
-        timelineStateRef.current = {
-          anchorTime: loopRange.start,
-          anchorTimestamp: timestamp,
-          playbackRate: video.playbackRate || 1,
-        };
-        setCurrentTime(loopRange.start);
-        writePlayheadPosition(loopRange.start);
-        rafRef.current = requestAnimationFrame(tickTimeline);
-        return;
-      }
-
-      writePlayheadPosition(nextTime);
-      rafRef.current = requestAnimationFrame(tickTimeline);
-    },
-    [writePlayheadPosition],
-  );
-
-  const startTimelineAnimation = useCallback(() => {
-    const video = videoRef.current;
-    if (!video || durationRef.current <= 0 || isScrubbingRef.current) return;
-
-    timelineStateRef.current = {
-      anchorTime: clampVideoTime(video.currentTime, durationRef.current),
-      anchorTimestamp: performance.now(),
-      playbackRate: video.playbackRate || 1,
-    };
-
-    if (rafRef.current === null) {
-      rafRef.current = requestAnimationFrame(tickTimeline);
-    }
-  }, [tickTimeline]);
-
-  const syncTimelineFromVideo = useCallback(
-    (time: number, nextDuration = durationRef.current) => {
-      const safeDuration = Number.isFinite(nextDuration) ? nextDuration : 0;
-      const nextTime = clampVideoTime(time, safeDuration);
-      const video = videoRef.current;
-
-      durationRef.current = safeDuration;
-      timelineStateRef.current = {
-        anchorTime: nextTime,
-        anchorTimestamp: performance.now(),
-        playbackRate: video?.playbackRate || 1,
-      };
-
-      setCurrentTime(nextTime);
-      writePlayheadPosition(nextTime);
-    },
-    [writePlayheadPosition],
-  );
-
-  const updateVideoMetadata = useCallback(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    const nextDuration =
-      getFiniteDuration(video.duration) || durationRef.current;
-    durationRef.current = nextDuration;
-    setDuration(nextDuration);
-    syncTimelineFromVideo(video.currentTime, nextDuration);
-    playVideo();
-  }, [playVideo, syncTimelineFromVideo]);
-
-  const seekToRatio = useCallback(
-    (ratio: number) => {
-      const video = videoRef.current;
-      const duration = durationRef.current;
-      if (!video || duration <= 0) return;
-
-      const nextTime = clampVideoTime(ratio * duration, duration);
-      video.currentTime = nextTime;
-      syncTimelineFromVideo(nextTime, duration);
-    },
-    [syncTimelineFromVideo],
-  );
-
-  const seekFromPointer = useCallback(
-    (clientX: number) => {
-      const timeline = timelineRef.current;
-      if (!timeline) return;
-
-      const rect = timeline.getBoundingClientRect();
-      const ratio =
-        rect.width > 0 ? (clientX - rect.left) / rect.width : 0;
-      seekToRatio(Math.min(Math.max(ratio, 0), 1));
-    },
-    [seekToRatio],
-  );
-
-  const stopCanvasGesture = (
-    e: ReactPointerEvent<HTMLElement> | ReactMouseEvent<HTMLElement>,
-  ) => {
-    e.stopPropagation();
-  };
-
-  const setTimelineScrubbing = useCallback((nextIsScrubbing: boolean) => {
-    isScrubbingRef.current = nextIsScrubbing;
-    setIsScrubbing(nextIsScrubbing);
-  }, []);
-
-  const updateLoop = useCallback(
-    (getNextLoop: (previous: LoopState) => LoopState) => {
-      setLoop((previous) => {
-        const nextLoop = getNextLoop(previous);
-        loopRef.current = nextLoop;
-        writeLoopPosition(nextLoop);
-        return nextLoop;
-      });
-    },
-    [writeLoopPosition],
-  );
-
-  const setLoopPoint = useCallback(
-    (point: "a" | "b") => {
-      const video = videoRef.current;
-      const duration = durationRef.current;
-      if (!video || duration <= 0) return;
-
-      const nextPoint = clampVideoTime(video.currentTime, duration);
-      updateLoop((previous) => ({
-        ...previous,
-        [point]: nextPoint,
-        enabled:
-          previous.enabled &&
-          (point === "a"
-            ? previous.b !== null && previous.b !== nextPoint
-            : previous.a !== null && previous.a !== nextPoint),
-      }));
-    },
-    [updateLoop],
-  );
-
-  const toggleLoop = useCallback(() => {
-    const previous = loopRef.current;
-    const range = getLoopRange(previous);
-    const nextLoop = {
-      ...previous,
-      enabled: range === null ? false : !previous.enabled,
-    };
-
-    loopRef.current = nextLoop;
-    setLoop(nextLoop);
-    writeLoopPosition(nextLoop);
-
-    if (nextLoop.enabled && range !== null && videoRef.current) {
-      const video = videoRef.current;
-      if (video.currentTime < range.start || video.currentTime > range.end) {
-        video.currentTime = range.start;
-        syncTimelineFromVideo(range.start);
-      }
-    }
-  }, [syncTimelineFromVideo, writeLoopPosition]);
-
-  const clearLoop = useCallback(() => {
-    updateLoop(() => ({
-      enabled: false,
-      a: null,
-      b: null,
-    }));
-  }, [updateLoop]);
-
-  const togglePlayback = useCallback(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    if (video.paused) {
-      isPausedByUserRef.current = false;
-      setIsPaused(false);
-      playVideo();
-      startTimelineAnimation();
-    } else {
-      isPausedByUserRef.current = true;
-      setIsPaused(true);
-      video.pause();
-      stopTimelineAnimation();
-    }
-  }, [playVideo, startTimelineAnimation, stopTimelineAnimation]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    if (lod === "video" && isInViewport && !shouldDeferVideoLoad) {
-      playVideo();
-    } else {
-      video.pause();
-      stopTimelineAnimation();
-    }
-  }, [
-    isInViewport,
-    lod,
-    playVideo,
-    shouldDeferVideoLoad,
+  const {
+    currentTime,
+    duration,
+    durationRef,
+    isScrubbing,
+    isScrubbingRef,
+    timelineRef,
+    seekFromPointer,
+    seekToRatio,
+    setTimelineScrubbing,
+    startTimelineAnimation,
     stopTimelineAnimation,
-  ]);
+    syncPlaybackRate,
+    syncTimelineFromVideo,
+    updateVideoMetadata,
+  } = useVideoTimeline({
+    videoRef,
+    url,
+    item,
+    loopRef: externalLoopRef,
+  });
 
-  useEffect(() => {
-    stopTimelineAnimation();
-    const nextDuration = getFiniteDuration(item.duration);
-    durationRef.current = nextDuration;
-    isScrubbingRef.current = false;
-    isPausedByUserRef.current = false;
-    loopRef.current = { enabled: false, a: null, b: null };
-    setDuration(nextDuration);
-    setCurrentTime(0);
-    setIsScrubbing(false);
-    setIsPaused(false);
-    setLoop({ enabled: false, a: null, b: null });
-  }, [item.duration, stopTimelineAnimation, url]);
+  const { loop, setLoopPoint, toggleLoop, clearLoop } = useVideoLoop({
+    videoRef,
+    timelineRef,
+    durationRef,
+    externalLoopRef,
+    duration,
+    url,
+    syncTimelineFromVideo,
+  });
 
-  useEffect(() => {
-    writePlayheadPosition(currentTime);
-    writeLoopPosition(loop);
-  }, [currentTime, duration, loop, writeLoopPosition, writePlayheadPosition]);
-
-  useEffect(() => stopTimelineAnimation, [stopTimelineAnimation]);
+  const {
+    isPaused,
+    playVideo,
+    togglePlayback,
+    handlePlay,
+    handlePause,
+  } = useVideoPlayback({
+    videoRef,
+    lod,
+    isInViewport,
+    shouldDeferVideoLoad,
+    onPause: stopTimelineAnimation,
+    onPlay: startTimelineAnimation,
+    onPlaybackError: setPlaybackError,
+  });
 
   const mediaStyle = {
     left: -crop.left,
@@ -522,29 +181,19 @@ export function VideoMedia({
         muted
         playsInline
         draggable={false}
-        onLoadedMetadata={updateVideoMetadata}
+        onLoadedMetadata={() => updateVideoMetadata(playVideo)}
         onCanPlay={() => {
           playVideo();
           startTimelineAnimation();
         }}
-        onDurationChange={updateVideoMetadata}
-        onPlay={() => {
-          setIsPaused(false);
-          startTimelineAnimation();
-        }}
-        onPause={() => {
-          setIsPaused(true);
-          stopTimelineAnimation();
-        }}
+        onDurationChange={() => updateVideoMetadata()}
+        onPlay={handlePlay}
+        onPause={handlePause}
         onRateChange={(e) => {
-          timelineStateRef.current = {
-            anchorTime: clampVideoTime(
-              e.currentTarget.currentTime,
-              durationRef.current,
-            ),
-            anchorTimestamp: performance.now(),
-            playbackRate: e.currentTarget.playbackRate || 1,
-          };
+          syncPlaybackRate(
+            e.currentTarget.currentTime,
+            e.currentTarget.playbackRate,
+          );
         }}
         onSeeked={(e) => {
           syncTimelineFromVideo(e.currentTarget.currentTime);
