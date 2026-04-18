@@ -1,9 +1,27 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { CropInsets, MediaItem } from "../utils/media.types";
+import { useVideoLoop } from "./useVideoLoop";
+import { useVideoPlayback } from "./useVideoPlayback";
+import { useVideoTimeline } from "./useVideoTimeline";
+import {
+  formatVideoTime,
+  getLoopRange,
+  getVideoLod,
+  initialLoopState,
+  shouldRequestVideoThumbnail,
+} from "./videoUtils";
 
-const THUMBNAIL_MAX_SCREEN_WIDTH = 144;
-const PROXY_MAX_SCREEN_WIDTH = 96;
-const PROXY_MAX_SCREEN_HEIGHT = 72;
+export {
+  clampVideoTime,
+  getVideoLod,
+  shouldRequestVideoThumbnail,
+} from "./videoUtils";
 
 interface VideoMediaProps {
   url: string;
@@ -13,41 +31,6 @@ interface VideoMediaProps {
   zoom: number;
   onThumbnailNeeded?: (item: MediaItem) => void;
 }
-
-type VideoLod = "video" | "thumbnail" | "proxy";
-
-export const getVideoLod = (
-  zoom: number,
-  hasThumbnail: boolean,
-  item: MediaItem,
-): VideoLod => {
-  const screenWidth = item.width * zoom;
-  const screenHeight = item.height * zoom;
-
-  if (
-    screenWidth <= PROXY_MAX_SCREEN_WIDTH ||
-    screenHeight <= PROXY_MAX_SCREEN_HEIGHT
-  ) {
-    return "proxy";
-  }
-
-  if (screenWidth <= THUMBNAIL_MAX_SCREEN_WIDTH) {
-    return hasThumbnail ? "thumbnail" : "proxy";
-  }
-
-  return "video";
-};
-
-export const shouldRequestVideoThumbnail = (zoom: number, item: MediaItem) => {
-  const screenWidth = item.width * zoom;
-  const screenHeight = item.height * zoom;
-
-  return (
-    screenWidth <= THUMBNAIL_MAX_SCREEN_WIDTH &&
-    screenWidth > PROXY_MAX_SCREEN_WIDTH &&
-    screenHeight > PROXY_MAX_SCREEN_HEIGHT
-  );
-};
 
 export function VideoMedia({
   url,
@@ -60,10 +43,17 @@ export function VideoMedia({
   const [isLoadRequested, setIsLoadRequested] = useState(false);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const externalLoopRef = useRef(initialLoopState);
   const lod = isLoadRequested
     ? "video"
     : getVideoLod(zoom, !!item.thumbnailUrl, item);
   const shouldDeferVideoLoad = !!item.deferVideoLoad && !isLoadRequested;
+
+  const stopCanvasGesture = (
+    e: ReactPointerEvent<HTMLElement> | ReactMouseEvent<HTMLElement>,
+  ) => {
+    e.stopPropagation();
+  };
 
   useEffect(() => {
     if (
@@ -74,30 +64,53 @@ export function VideoMedia({
     }
   }, [item, onThumbnailNeeded, zoom]);
 
-  const playVideo = useCallback(() => {
-    const video = videoRef.current;
-    if (!video || lod !== "video" || !isInViewport || shouldDeferVideoLoad) {
-      return;
-    }
+  const {
+    currentTime,
+    duration,
+    durationRef,
+    isScrubbing,
+    isScrubbingRef,
+    timelineRef,
+    seekFromPointer,
+    seekToRatio,
+    setTimelineScrubbing,
+    startTimelineAnimation,
+    stopTimelineAnimation,
+    syncPlaybackRate,
+    syncTimelineFromVideo,
+    updateVideoMetadata,
+  } = useVideoTimeline({
+    videoRef,
+    url,
+    item,
+    loopRef: externalLoopRef,
+  });
 
-    const playPromise = video.play();
-    playPromise
-      ?.then(() => setPlaybackError(null))
-      .catch(() => {
-        setPlaybackError("Playback failed. This file may need transcoding.");
-      });
-  }, [isInViewport, lod, shouldDeferVideoLoad]);
+  const { loop, setLoopPoint, toggleLoop, clearLoop } = useVideoLoop({
+    videoRef,
+    timelineRef,
+    durationRef,
+    externalLoopRef,
+    duration,
+    url,
+    syncTimelineFromVideo,
+  });
 
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    if (lod === "video" && isInViewport && !shouldDeferVideoLoad) {
-      playVideo();
-    } else {
-      video.pause();
-    }
-  }, [isInViewport, lod, playVideo, shouldDeferVideoLoad]);
+  const {
+    isPaused,
+    playVideo,
+    togglePlayback,
+    handlePlay,
+    handlePause,
+  } = useVideoPlayback({
+    videoRef,
+    lod,
+    isInViewport,
+    shouldDeferVideoLoad,
+    onPause: stopTimelineAnimation,
+    onPlay: startTimelineAnimation,
+    onPlaybackError: setPlaybackError,
+  });
 
   const mediaStyle = {
     left: -crop.left,
@@ -164,19 +177,204 @@ export function VideoMedia({
         src={url}
         autoPlay={isInViewport}
         preload={isLoadRequested && isInViewport ? "auto" : "metadata"}
-        controls={isLoadRequested}
-        loop
+        loop={!loop.enabled}
         muted
         playsInline
         draggable={false}
-        onLoadedMetadata={playVideo}
-        onCanPlay={playVideo}
+        onLoadedMetadata={() => updateVideoMetadata(playVideo)}
+        onCanPlay={() => {
+          playVideo();
+          startTimelineAnimation();
+        }}
+        onDurationChange={() => updateVideoMetadata()}
+        onPlay={handlePlay}
+        onPause={handlePause}
+        onRateChange={(e) => {
+          syncPlaybackRate(
+            e.currentTarget.currentTime,
+            e.currentTarget.playbackRate,
+          );
+        }}
+        onSeeked={(e) => {
+          syncTimelineFromVideo(e.currentTarget.currentTime);
+          startTimelineAnimation();
+        }}
+        onTimeUpdate={(e) => {
+          if (!isScrubbingRef.current) {
+            syncTimelineFromVideo(e.currentTarget.currentTime);
+          }
+        }}
         onError={() => {
           setPlaybackError("Playback failed. This file may need transcoding.");
         }}
         onDragStart={(e) => e.preventDefault()}
         style={mediaStyle}
       />
+      {duration > 0 && (
+        <div
+          className={`video-timeline ${isScrubbing ? "is-scrubbing" : ""}`}
+          onPointerDown={stopCanvasGesture}
+          onPointerMove={stopCanvasGesture}
+          onPointerUp={stopCanvasGesture}
+          onClick={stopCanvasGesture}
+        >
+          <button
+            type="button"
+            className="video-playback-btn"
+            aria-label={isPaused ? "Play video" : "Pause video"}
+            aria-pressed={isPaused}
+            onPointerDown={stopCanvasGesture}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              togglePlayback();
+            }}
+          >
+            {isPaused ? "Play" : "Pause"}
+          </button>
+          <div
+            ref={timelineRef}
+            className="video-timeline-track"
+            role="slider"
+            aria-label="Video timeline"
+            aria-valuemin={0}
+            aria-valuemax={Math.round(duration)}
+            aria-valuenow={Math.round(currentTime)}
+            aria-valuetext={`${formatVideoTime(currentTime)} of ${formatVideoTime(duration)}`}
+            tabIndex={0}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setTimelineScrubbing(true);
+              stopTimelineAnimation();
+              e.currentTarget.setPointerCapture(e.pointerId);
+              seekFromPointer(e.clientX);
+            }}
+            onPointerMove={(e) => {
+              e.stopPropagation();
+              if (isScrubbingRef.current) {
+                seekFromPointer(e.clientX);
+              }
+            }}
+            onPointerUp={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setTimelineScrubbing(false);
+              seekFromPointer(e.clientX);
+              e.currentTarget.releasePointerCapture(e.pointerId);
+              startTimelineAnimation();
+            }}
+            onPointerCancel={(e) => {
+              e.stopPropagation();
+              setTimelineScrubbing(false);
+              startTimelineAnimation();
+            }}
+            onKeyDown={(e) => {
+              const step = e.shiftKey ? 10 : 5;
+              if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
+                e.preventDefault();
+                seekToRatio((currentTime - step) / duration);
+              } else if (e.key === "ArrowRight" || e.key === "ArrowUp") {
+                e.preventDefault();
+                seekToRatio((currentTime + step) / duration);
+              } else if (e.key === "Home") {
+                e.preventDefault();
+                seekToRatio(0);
+              } else if (e.key === "End") {
+                e.preventDefault();
+                seekToRatio(1);
+              }
+            }}
+          >
+            <div className="video-timeline-buffer" />
+            {loop.a !== null && (
+              <div
+                className="video-loop-marker video-loop-marker-a"
+                aria-hidden="true"
+              >
+                A
+              </div>
+            )}
+            {loop.b !== null && (
+              <div
+                className="video-loop-marker video-loop-marker-b"
+                aria-hidden="true"
+              >
+                B
+              </div>
+            )}
+            {getLoopRange(loop) !== null && (
+              <div
+                className={`video-loop-range ${loop.enabled ? "is-enabled" : ""}`}
+                aria-hidden="true"
+              />
+            )}
+            <div className="video-timeline-progress" />
+            <div className="video-timeline-thumb" />
+          </div>
+          <div className="video-timeline-time">
+            {formatVideoTime(currentTime)} / {formatVideoTime(duration)}
+          </div>
+          <div className="video-loop-controls" aria-label="Loop controls">
+            <button
+              type="button"
+              className="video-loop-btn"
+              aria-label="Set loop A point"
+              onPointerDown={stopCanvasGesture}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setLoopPoint("a");
+              }}
+            >
+              A
+            </button>
+            <button
+              type="button"
+              className="video-loop-btn"
+              aria-label="Set loop B point"
+              onPointerDown={stopCanvasGesture}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setLoopPoint("b");
+              }}
+            >
+              B
+            </button>
+            <button
+              type="button"
+              className="video-loop-btn video-loop-toggle"
+              aria-label="Toggle A/B loop"
+              aria-pressed={loop.enabled}
+              disabled={getLoopRange(loop) === null}
+              onPointerDown={stopCanvasGesture}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleLoop();
+              }}
+            >
+              Loop
+            </button>
+            {(loop.a !== null || loop.b !== null) && (
+              <button
+                type="button"
+                className="video-loop-btn"
+                aria-label="Clear A/B loop"
+                onPointerDown={stopCanvasGesture}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  clearLoop();
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       {playbackError && (
         <div className="video-playback-error" role="status">
           {playbackError}

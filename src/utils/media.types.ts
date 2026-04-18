@@ -31,3 +31,7 @@ export interface MediaItem {
 }
 
 export type CropHandle = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
+
+export type VideoLodAssets = Pick<MediaItem, "thumbnailPath" | "thumbnailUrl">;
+
+export type SetItems = React.Dispatch<React.SetStateAction<MediaItem[]>>;

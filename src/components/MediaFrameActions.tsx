@@ -1,6 +1,49 @@
+import { CROP_HANDLES, EMPTY_CROP } from "../utils/media";
 import { MediaItem } from "../utils/media.types";
 
-function MediaFrameActions({
+export function CropOverlay({
+  id,
+  handleItemPointerDown,
+}: {
+  id: string;
+  handleItemPointerDown: (id: string, e: React.PointerEvent) => void;
+}) {
+  return (
+    <div className="crop-overlay" aria-hidden="true">
+      {CROP_HANDLES.map((handle) => (
+        <div
+          key={handle}
+          className={`crop-handle crop-handle-${handle}`}
+          data-crop-handle={handle}
+          onPointerDown={(e) => handleItemPointerDown(id, e)}
+        />
+      ))}
+    </div>
+  );
+}
+
+export const resetFrameSize = ({
+  id,
+  prev,
+  intrinsicWidth,
+  intrinsicHeight,
+}: {
+  id: string;
+  prev: MediaItem[];
+  intrinsicWidth: number;
+  intrinsicHeight: number;
+}) => {
+  const w = intrinsicWidth || 400;
+  const h = intrinsicHeight || 300;
+
+  return prev.map((i) =>
+    i.id === id
+      ? { ...i, width: 1280, height: (h / w) * 1280, crop: { ...EMPTY_CROP } }
+      : i,
+  );
+};
+
+export function MediaFrameActions({
   item,
   revealItem,
   resetSize,
@@ -49,5 +92,3 @@ function MediaFrameActions({
     </>
   );
 }
-
-export { MediaFrameActions };

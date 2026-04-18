@@ -8,6 +8,7 @@ export type WheelInputType = "trackpad-pan" | "zoom";
 
 const DEFAULT_MEDIA_WIDTH = 1280;
 const DEFAULT_VIDEO_HEIGHT = 720;
+// 100 MB
 const LARGE_VIDEO_LOAD_THRESHOLD_BYTES = 100 * 1024 * 1024;
 
 type MediaFileInfo = {
@@ -19,6 +20,7 @@ type MediaFileInfo = {
 
 const probeMedia = async (path: string): Promise<MediaFileInfo> => {
   try {
+    // Probe the media natively through Rust instead of metadata.
     const info = await invoke<MediaFileInfo | null>("probe_media", {
       path,
     });
@@ -129,9 +131,7 @@ export const onDropMedia = ({
         x: centerX + index * 1350,
         y: centerY,
         width: DEFAULT_MEDIA_WIDTH,
-        height: w
-          ? (h / w) * DEFAULT_MEDIA_WIDTH
-          : DEFAULT_VIDEO_HEIGHT,
+        height: w ? (h / w) * DEFAULT_MEDIA_WIDTH : DEFAULT_VIDEO_HEIGHT,
         ...extra,
       });
 

@@ -1,0 +1,133 @@
+.media-item {
+    position: absolute;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow:
+        0 10px 30px -5px rgba(0, 0, 0, 0.5),
+        0 0 0 1px rgba(255, 255, 255, 0.1);
+    background: #1e293b;
+    cursor: grab;
+    transition:
+        box-shadow 0.2s ease,
+        transform 0.2s ease;
+    will-change: transform;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-user-drag: none;
+}
+
+.media-item.crop-editing {
+    cursor: default;
+}
+
+.media-item:active {
+    cursor: grabbing;
+    box-shadow:
+        0 20px 40px -10px rgba(0, 0, 0, 0.7),
+        0 0 0 2px rgba(139, 92, 246, 0.5);
+    transform: scale(1.02);
+}
+
+.media-item.crop-editing:active {
+    cursor: default;
+    transform: none;
+}
+
+.media-content {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-user-drag: none;
+}
+
+.media-item img.media-content,
+.media-item video.media-content {
+    inset: auto;
+}
+
+.media-item.selected {
+    box-shadow:
+        0 0 0 3px rgba(139, 92, 246, 0.8),
+        0 10px 30px -5px rgba(0, 0, 0, 0.5);
+}
+
+/* Action Buttons */
+.reset-btn,
+.delete-btn,
+.reveal-btn,
+.crop-btn {
+    position: absolute;
+    top: 16px;
+    box-sizing: border-box;
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    min-height: 48px;
+    padding: 0;
+    border-radius: 50%;
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0;
+    transition:
+        opacity 0.2s ease,
+        background 0.2s ease,
+        transform 0.2s ease;
+    z-index: 2;
+}
+
+.delete-btn {
+    right: 16px;
+    font-size: 24px;
+}
+.reset-btn {
+    right: 76px;
+    font-size: 24px;
+}
+.reveal-btn {
+    right: 136px;
+    font-size: 26px;
+}
+.crop-btn {
+    right: 196px;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.media-item:hover .delete-btn,
+.media-item:hover .reset-btn,
+.media-item:hover .reveal-btn,
+.media-item:hover .crop-btn,
+.media-item.crop-editing .crop-btn {
+    opacity: 1;
+}
+
+.delete-btn:hover {
+    background: rgba(220, 38, 38, 0.8);
+    transform: scale(1.1);
+}
+.reset-btn:hover {
+    background: rgba(59, 130, 246, 0.8);
+    transform: scale(1.1);
+}
+.reveal-btn:hover {
+    background: rgba(234, 179, 8, 0.85);
+    transform: scale(1.1);
+}
+.crop-btn:hover,
+.crop-btn[aria-pressed="true"] {
+    background: rgba(20, 184, 166, 0.8);
+    transform: scale(1.1);
+}
