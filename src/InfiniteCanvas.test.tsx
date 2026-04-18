@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { invoke } from '@tauri-apps/api/core';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import packageJson from '../package.json';
 import InfiniteCanvas from './InfiniteCanvas';
 
@@ -63,6 +66,27 @@ describe('InfiniteCanvas Application', () => {
     Object.defineProperty(globalThis.Image.prototype, 'height', { get: () => 480 });
     Object.defineProperty(globalThis.Image.prototype, 'naturalWidth', { get: () => 640 });
     Object.defineProperty(globalThis.Image.prototype, 'naturalHeight', { get: () => 480 });
+
+    Object.defineProperty(globalThis.HTMLVideoElement.prototype, 'videoWidth', { get: () => 1920 });
+    Object.defineProperty(globalThis.HTMLVideoElement.prototype, 'videoHeight', { get: () => 1080 });
+    Object.defineProperty(globalThis.HTMLMediaElement.prototype, 'play', {
+      configurable: true,
+      value: vi.fn(() => Promise.resolve())
+    });
+    Object.defineProperty(globalThis.HTMLMediaElement.prototype, 'pause', {
+      configurable: true,
+      value: vi.fn()
+    });
+    Object.defineProperty(globalThis.HTMLMediaElement.prototype, 'src', {
+      configurable: true,
+      set(src) {
+        if (src) {
+          setTimeout(() => {
+            if (this.onloadedmetadata) this.onloadedmetadata(new Event('loadedmetadata'));
+          }, 0);
+        }
+      }
+    });
   });
 
   beforeEach(() => {
@@ -95,6 +119,52 @@ describe('InfiniteCanvas Application', () => {
     expect(screen.getByText('FPS')).toBeInTheDocument();
     expect(screen.getByText('Frame time (ms)')).toBeInTheDocument();
     expect(screen.getByText('Video count')).toBeInTheDocument();
+  });
+
+  it('drops multiple videos as playable video elements without eager thumbnail work', async () => {
+    const originalInnerWidth = window.innerWidth;
+    const videoPath = resolve('fixtures/generated-lod-test-1080p.mp4');
+    const droppedVideos = [videoPath, videoPath];
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 3000
+    });
+
+    render(<InfiniteCanvas />);
+
+    await act(async () => {
+      if (dropCallback) {
+        dropCallback({
+          payload: {
+            type: 'drop',
+            paths: droppedVideos
+          }
+        });
+      }
+    });
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('.media-item')).toHaveLength(2);
+      expect(document.querySelectorAll('video.media-content')).toHaveLength(2);
+    });
+
+    expect(existsSync(videoPath)).toBe(true);
+    document.querySelectorAll('video.media-content').forEach((video) => {
+      expect(video).toHaveAttribute('src', `asset://${videoPath}`);
+    });
+    expect(document.querySelector('.video-lod-thumbnail')).not.toBeInTheDocument();
+    expect(document.querySelector('.video-lod-proxy')).not.toBeInTheDocument();
+    expect(invoke).not.toHaveBeenCalledWith(
+      'generate_video_thumbnail',
+      expect.anything()
+    );
+
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: originalInnerWidth
+    });
   });
 
   // 1. Panning with middle click
