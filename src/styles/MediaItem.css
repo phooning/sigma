@@ -1,15 +1,15 @@
 .media-item {
     position: absolute;
-    border-radius: 12px;
+    border-radius: var(--radius-md-app);
     overflow: hidden;
     box-shadow:
-        0 10px 30px -5px rgba(0, 0, 0, 0.5),
-        0 0 0 1px rgba(255, 255, 255, 0.1);
-    background: #1e293b;
+        var(--shadow-media),
+        0 0 0 var(--border-width) var(--border);
+    background: var(--surface-control);
     cursor: grab;
     transition:
-        box-shadow 0.2s ease,
-        transform 0.2s ease;
+        box-shadow var(--duration-medium) ease,
+        transform var(--duration-medium) ease;
     will-change: transform;
     user-select: none;
     -webkit-user-select: none;
@@ -23,8 +23,8 @@
 .media-item:active {
     cursor: grabbing;
     box-shadow:
-        0 20px 40px -10px rgba(0, 0, 0, 0.7),
-        0 0 0 2px rgba(139, 92, 246, 0.5);
+        var(--shadow-media-active),
+        0 0 0 var(--border-width-strong) rgba(139, 92, 246, 0.5);
     transform: scale(1.02);
 }
 
@@ -52,62 +52,61 @@
 
 .media-item.selected {
     box-shadow:
-        0 0 0 3px rgba(139, 92, 246, 0.8),
-        0 10px 30px -5px rgba(0, 0, 0, 0.5);
+        0 0 0 var(--focus-ring-width) var(--accent-selection),
+        var(--shadow-media);
 }
 
-/* Action Buttons */
 .reset-btn,
 .delete-btn,
 .reveal-btn,
 .screenshot-btn,
 .crop-btn {
     position: absolute;
-    top: 16px;
+    top: var(--media-action-offset);
     box-sizing: border-box;
-    width: 48px;
-    height: 48px;
-    min-width: 48px;
-    min-height: 48px;
+    width: var(--media-action-size);
+    height: var(--media-action-size);
+    min-width: var(--media-action-size);
+    min-height: var(--media-action-size);
     padding: 0;
-    border-radius: 50%;
-    background: rgba(15, 23, 42, 0.6);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    color: #fff;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: var(--radius-round);
+    color: var(--text-strong);
+    background: var(--surface-action);
+    border: var(--border-width) solid var(--input);
+    backdrop-filter: blur(var(--blur-md));
+    -webkit-backdrop-filter: blur(var(--blur-md));
     display: flex;
     align-items: center;
     justify-content: center;
-    line-height: 1;
+    line-height: var(--leading-none);
     cursor: pointer;
     opacity: 0;
     transition:
-        opacity 0.2s ease,
-        background 0.2s ease,
-        transform 0.2s ease;
-    z-index: 2;
+        opacity var(--duration-medium) ease,
+        background var(--duration-medium) ease,
+        transform var(--duration-medium) ease;
+    z-index: var(--z-media-action);
 }
 
 .delete-btn {
-    right: 16px;
-    font-size: 24px;
+    right: var(--media-action-offset);
+    font-size: var(--text-3xl);
 }
 .reset-btn {
-    right: 76px;
-    font-size: 24px;
+    right: calc(var(--media-action-offset) + var(--media-action-step));
+    font-size: var(--text-3xl);
 }
 .reveal-btn {
-    right: 136px;
-    font-size: 26px;
+    right: calc(var(--media-action-offset) + var(--media-action-step) * 2);
+    font-size: var(--text-4xl);
 }
 .screenshot-btn {
-    right: 196px;
-    font-size: 22px;
+    right: calc(var(--media-action-offset) + var(--media-action-step) * 3);
+    font-size: var(--text-icon);
 }
 .crop-btn {
-    right: 256px;
-    font-size: 18px;
+    right: calc(var(--media-action-offset) + var(--media-action-step) * 4);
+    font-size: var(--text-2xl);
     font-weight: 700;
 }
 
@@ -121,19 +120,19 @@
 }
 
 .delete-btn:hover {
-    background: rgba(220, 38, 38, 0.8);
+    background: var(--accent-danger);
     transform: scale(1.1);
 }
 .reset-btn:hover {
-    background: rgba(59, 130, 246, 0.8);
+    background: var(--accent-info);
     transform: scale(1.1);
 }
 .reveal-btn:hover {
-    background: rgba(234, 179, 8, 0.85);
+    background: var(--accent-warning);
     transform: scale(1.1);
 }
 .screenshot-btn:hover {
-    background: rgba(16, 185, 129, 0.85);
+    background: var(--accent-success);
     transform: scale(1.1);
 }
 .crop-btn:hover,

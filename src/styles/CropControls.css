@@ -2,16 +2,16 @@
     position: absolute;
     bottom: 0;
     right: 0;
-    width: 20px;
-    height: 20px;
+    width: var(--resize-handle-size);
+    height: var(--resize-handle-size);
     cursor: se-resize;
     background: linear-gradient(
         135deg,
         transparent 50%,
         rgba(255, 255, 255, 0.4) 50%
     );
-    z-index: 5;
-    border-bottom-right-radius: 12px;
+    border-bottom-right-radius: var(--radius-md-app);
+    z-index: var(--z-resize);
 }
 
 .resize-handle:hover {
@@ -24,53 +24,53 @@
 
 .selection-box {
     position: absolute;
-    border: 1px solid rgba(139, 92, 246, 0.8);
-    background-color: rgba(139, 92, 246, 0.2);
+    border: var(--border-width) solid var(--accent-selection);
+    background-color: var(--accent-selection-soft);
     pointer-events: none;
-    z-index: 1000;
+    z-index: var(--z-selection);
 }
 
 .crop-overlay {
     position: absolute;
     inset: 0;
-    border: 2px solid rgba(20, 184, 166, 0.9);
+    border: var(--border-width-strong) solid rgba(20, 184, 166, 0.9);
     background-image:
         linear-gradient(
             to right,
             transparent 33.333%,
             rgba(255, 255, 255, 0.35) 33.333%,
-            rgba(255, 255, 255, 0.35) calc(33.333% + 1px),
-            transparent calc(33.333% + 1px),
+            rgba(255, 255, 255, 0.35) calc(33.333% + var(--border-width)),
+            transparent calc(33.333% + var(--border-width)),
             transparent 66.666%,
             rgba(255, 255, 255, 0.35) 66.666%,
-            rgba(255, 255, 255, 0.35) calc(66.666% + 1px),
-            transparent calc(66.666% + 1px)
+            rgba(255, 255, 255, 0.35) calc(66.666% + var(--border-width)),
+            transparent calc(66.666% + var(--border-width))
         ),
         linear-gradient(
             to bottom,
             transparent 33.333%,
             rgba(255, 255, 255, 0.35) 33.333%,
-            rgba(255, 255, 255, 0.35) calc(33.333% + 1px),
-            transparent calc(33.333% + 1px),
+            rgba(255, 255, 255, 0.35) calc(33.333% + var(--border-width)),
+            transparent calc(33.333% + var(--border-width)),
             transparent 66.666%,
             rgba(255, 255, 255, 0.35) 66.666%,
-            rgba(255, 255, 255, 0.35) calc(66.666% + 1px),
-            transparent calc(66.666% + 1px)
+            rgba(255, 255, 255, 0.35) calc(66.666% + var(--border-width)),
+            transparent calc(66.666% + var(--border-width))
         );
     pointer-events: none;
-    z-index: 6;
+    z-index: var(--z-crop-overlay);
 }
 
 .crop-handle {
     position: absolute;
-    width: 18px;
-    height: 18px;
-    margin: -9px;
-    border: 2px solid #f8fafc;
-    border-radius: 4px;
-    background: #14b8a6;
+    width: var(--crop-handle-size);
+    height: var(--crop-handle-size);
+    margin: calc(var(--crop-handle-size) / -2);
+    border: var(--border-width-strong) solid var(--text-strong);
+    border-radius: var(--radius-xs);
+    background: var(--accent-crop);
     pointer-events: auto;
-    z-index: 7;
+    z-index: var(--z-crop-handle);
 }
 
 .crop-handle-n,
