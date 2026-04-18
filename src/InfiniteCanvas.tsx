@@ -5,7 +5,7 @@ import {
   type CSSProperties,
 } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { message } from "@tauri-apps/plugin-dialog";
+import { message, open } from "@tauri-apps/plugin-dialog";
 import { ISelectionBox, SelectionBox } from "./components/SelectionBox";
 import { Hud } from "./components/Hud";
 import { DevelopmentOverlay } from "./components/DevelopmentOverlay";
@@ -14,7 +14,7 @@ import {
   MediaFrameActions,
   resetFrameSize,
 } from "./components/MediaFrameActions";
-import { getCrop, useThumbnailQueue } from "./utils/media";
+import { getCrop, saveMediaScreenshot, useThumbnailQueue } from "./utils/media";
 import {
   CropHandle,
   CropInsets,
@@ -43,6 +43,16 @@ import { useTauriDrop } from "./utils/drag";
 import { useCanvasHotkeys } from "./utils/keyboard";
 import { VideoMedia } from "./components/Video";
 
+const SCREENSHOT_DIRECTORY_STORAGE_KEY = "sigma:screenshot-directory";
+
+const getStoredScreenshotDirectory = () => {
+  try {
+    return localStorage.getItem(SCREENSHOT_DIRECTORY_STORAGE_KEY) ?? "";
+  } catch {
+    return "";
+  }
+};
+
 export default function InfiniteCanvas() {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, zoom: 1 });
@@ -54,6 +64,9 @@ export default function InfiniteCanvas() {
   const [selectionBox, setSelectionBox] = useState<ISelectionBox | null>(null);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [screenshotDirectory, setScreenshotDirectoryState] = useState(
+    getStoredScreenshotDirectory,
+  );
 
   const viewportRef = useRef(viewport);
   viewportRef.current = viewport;
@@ -74,6 +87,30 @@ export default function InfiniteCanvas() {
   const thumbnailRequestedRef = useRef<Set<string>>(new Set());
 
   const { requestThumbnail } = useThumbnailQueue(setItems);
+
+  const setScreenshotDirectory = (directory: string) => {
+    setScreenshotDirectoryState(directory);
+    try {
+      if (directory) {
+        localStorage.setItem(SCREENSHOT_DIRECTORY_STORAGE_KEY, directory);
+      } else {
+        localStorage.removeItem(SCREENSHOT_DIRECTORY_STORAGE_KEY);
+      }
+    } catch {}
+  };
+
+  const chooseScreenshotDirectory = async () => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: "Choose screenshot directory",
+      defaultPath: screenshotDirectory || undefined,
+    });
+
+    if (typeof selected === "string") {
+      setScreenshotDirectory(selected);
+    }
+  };
 
   const startPanning = (
     pointerId: number,
@@ -189,7 +226,7 @@ export default function InfiniteCanvas() {
   const handleItemPointerDown = (id: string, e: React.PointerEvent) => {
     if (
       (e.target as HTMLElement).closest(
-        ".reset-btn, .delete-btn, .crop-btn, .reveal-btn",
+        ".reset-btn, .delete-btn, .crop-btn, .reveal-btn, .screenshot-btn",
       )
     ) {
       return;
@@ -356,6 +393,45 @@ export default function InfiniteCanvas() {
     setItems((prev) => resetFrameSize({ id, prev, ...result }));
   };
 
+  const screenshotItem = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const item = itemsRef.current.find((i) => i.id === id);
+    if (!item) return;
+    const mediaElement = (e.currentTarget as HTMLElement).parentElement
+      ?.querySelector("video") as HTMLVideoElement | null;
+
+    let outputDirectory = screenshotDirectory;
+    if (!outputDirectory) {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: "Choose screenshot directory",
+      });
+
+      if (typeof selected !== "string") return;
+      outputDirectory = selected;
+      setScreenshotDirectory(selected);
+    }
+
+    try {
+      const screenshotPath = await saveMediaScreenshot({
+        item,
+        outputDirectory,
+        currentTime: mediaElement?.currentTime ?? 0,
+      });
+
+      await message(`Screenshot saved:\n\n${screenshotPath}`, {
+        title: "Screenshot saved",
+        kind: "info",
+      });
+    } catch (error) {
+      await message(`Failed to save screenshot:\n\n${String(error)}`, {
+        title: "Screenshot failed",
+        kind: "error",
+      });
+    }
+  };
+
   const screenWidth = window.innerWidth / viewport.zoom;
   const screenHeight = window.innerHeight / viewport.zoom;
   const viewLeft = -viewport.x;
@@ -507,6 +583,7 @@ export default function InfiniteCanvas() {
                 revealItem={(id, e) => {
                   revealItem({ e, id, items });
                 }}
+                screenshotItem={screenshotItem}
                 resetSize={resetSize}
                 deleteItem={deleteItem}
                 startCropEdit={startCropEdit}
@@ -559,6 +636,9 @@ export default function InfiniteCanvas() {
         loadConfig={loadConfig}
         settingsMenuItems={SETTINGS_MENU_ITEMS}
         settingsVersion={appVersion}
+        screenshotDirectory={screenshotDirectory}
+        chooseScreenshotDirectory={chooseScreenshotDirectory}
+        clearScreenshotDirectory={() => setScreenshotDirectory("")}
         isSettingsOpen={isSettingsOpen}
         openSettings={() => setIsSettingsOpen(true)}
         closeSettings={() => setIsSettingsOpen(false)}

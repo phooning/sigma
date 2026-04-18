@@ -13,6 +13,21 @@ export const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp"];
 
 export const getCrop = (item: MediaItem): CropInsets => item.crop ?? EMPTY_CROP;
 
+export const getCropRatios = (item: MediaItem) => {
+  const crop = getCrop(item);
+  const fullWidth = item.width + crop.left + crop.right;
+  const fullHeight = item.height + crop.top + crop.bottom;
+
+  return {
+    x: fullWidth > 0 ? crop.left / fullWidth : 0,
+    y: fullHeight > 0 ? crop.top / fullHeight : 0,
+    width: fullWidth > 0 ? item.width / fullWidth : 1,
+    height: fullHeight > 0 ? item.height / fullHeight : 1,
+    boxWidth: fullWidth,
+    boxHeight: fullHeight,
+  };
+};
+
 export const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
 
@@ -49,6 +64,23 @@ export const generateVideoThumbnail = async (
     return {};
   }
 };
+
+export const saveMediaScreenshot = ({
+  item,
+  outputDirectory,
+  currentTime,
+}: {
+  item: MediaItem;
+  outputDirectory?: string;
+  currentTime?: number;
+}) =>
+  invoke<string>("save_media_screenshot", {
+    path: item.filePath,
+    mediaType: item.type,
+    outputDirectory,
+    currentTime: currentTime ?? 0,
+    crop: getCropRatios(item),
+  });
 
 export function useThumbnailQueue(setItems: SetItems) {
   const queueRef = useRef<MediaItem[]>([]);

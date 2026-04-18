@@ -165,6 +165,69 @@
     cursor: pointer;
 }
 
+.settings-field-row {
+    margin-top: 24px;
+    min-height: 72px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    color: rgba(248, 250, 252, 0.88);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+}
+
+.settings-field-copy {
+    min-width: 0;
+    display: grid;
+    gap: 7px;
+}
+
+.settings-field-copy span {
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.settings-field-copy small {
+    max-width: 460px;
+    overflow: hidden;
+    color: rgba(248, 250, 252, 0.62);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.settings-field-actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 8px;
+}
+
+.settings-action-btn {
+    height: 34px;
+    padding: 0 12px;
+    color: #ecfeff;
+    background: rgba(20, 184, 166, 0.18);
+    border: 1px solid rgba(20, 184, 166, 0.34);
+    border-radius: 6px;
+    box-shadow: none;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.settings-action-btn:hover {
+    background: rgba(20, 184, 166, 0.28);
+    border-color: rgba(20, 184, 166, 0.5);
+}
+
 .settings-toggle-row input {
     width: 18px;
     height: 18px;
@@ -194,5 +257,16 @@
     }
     .settings-panel {
         padding: 22px;
+    }
+    .settings-field-row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+    .settings-field-copy small {
+        max-width: none;
+        white-space: normal;
+    }
+    .settings-field-actions {
+        justify-content: flex-start;
     }
 }
