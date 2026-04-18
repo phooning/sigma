@@ -11,6 +11,21 @@
     "dialog:allow-save",
     "fs:allow-write-text-file",
     "os:default",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "gpu-info",
+          "cmd": "system_profiler",
+          "args": ["SPDisplaysDataType", "-json"]
+        },
+        {
+          "name": "gpu-usage",
+          "cmd": "ioreg",
+          "args": ["-l", "-w", "0", "-c", "AGXStatistics"]
+        }
+      ]
+    },
     "core:window:default",
     "core:event:default"
   ]

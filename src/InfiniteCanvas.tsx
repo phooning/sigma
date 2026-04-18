@@ -4,15 +4,12 @@ import {
   useEffect,
   WheelEvent as ReactWheelEvent,
 } from "react";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
-import type { DragDropEvent } from "@tauri-apps/api/webview";
-import { Event } from "@tauri-apps/api/event";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { message } from "@tauri-apps/plugin-dialog";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import "./InfiniteCanvas.css";
 import { ISelectionBox, SelectionBox } from "./components/SelectionBox";
 import { Hud } from "./components/Hud";
+import { DevelopmentOverlay } from "./components/DevelopmentOverlay";
 import { MediaFrameActions } from "./components/MediaFrameActions";
 import { CROP_HANDLES, EMPTY_CROP, getCrop } from "./utils/media";
 import {
@@ -28,77 +25,19 @@ import {
   resetImageSize,
   TCropStart,
 } from "./components/ImageActions";
-import { loadFromStorage } from "./utils/fs";
-import { saveConfig } from "./components/HudActions";
+import { loadFromStorage, revealItem } from "./utils/fs";
+import {
+  appVersion,
+  saveConfig,
+  SETTINGS_MENU_ITEMS,
+} from "./components/HudActions";
 import {
   getWheelInputType,
   handlePanAction,
   handleZoomAction,
-  isMacOS,
-  onDropMedia,
 } from "./components/CanvasActions";
-
-type CanvasHotkeyConfig = {
-  itemsRef: React.RefObject<MediaItem[]>;
-  selectedItemsRef: React.RefObject<Set<string>>;
-  setItems: React.Dispatch<React.SetStateAction<MediaItem[]>>;
-  setSelectedItems: React.Dispatch<React.SetStateAction<Set<string>>>;
-  setEditingCropItem: React.Dispatch<React.SetStateAction<string | null>>;
-};
-
-const isEditableTarget = (target: EventTarget | null) => {
-  if (!(target instanceof HTMLElement)) return false;
-
-  return Boolean(
-    target.closest("input, textarea, select, [contenteditable='true']"),
-  );
-};
-
-const loadCanvasHotkeys = ({
-  itemsRef,
-  selectedItemsRef,
-  setItems,
-  setSelectedItems,
-  setEditingCropItem,
-}: CanvasHotkeyConfig) => {
-  const handleKeyDown = (event: KeyboardEvent) => {
-    if (isEditableTarget(event.target)) return;
-
-    if (event.key === "Escape") {
-      event.preventDefault();
-      setSelectedItems(new Set());
-      setEditingCropItem(null);
-      return;
-    }
-
-    if ((event.key === "Delete" || event.key === "Backspace")) {
-      const selected = selectedItemsRef.current;
-      if (selected.size === 0) return;
-
-      event.preventDefault();
-      setItems((prev) => prev.filter((item) => !selected.has(item.id)));
-      setSelectedItems(new Set());
-      setEditingCropItem(null);
-      return;
-    }
-
-    const isSelectAll =
-      event.key.toLowerCase() === "a" &&
-      (isMacOS() ? event.metaKey : event.ctrlKey);
-
-    if (isSelectAll) {
-      event.preventDefault();
-      setSelectedItems(new Set(itemsRef.current.map((item) => item.id)));
-      setEditingCropItem(null);
-    }
-  };
-
-  window.addEventListener("keydown", handleKeyDown);
-
-  return () => {
-    window.removeEventListener("keydown", handleKeyDown);
-  };
-};
+import { useTauriDrop } from "./utils/drag";
+import { useCanvasHotkeys } from "./utils/keyboard";
 
 export default function InfiniteCanvas() {
   const [items, setItems] = useState<MediaItem[]>([]);
@@ -110,6 +49,7 @@ export default function InfiniteCanvas() {
   const [croppingItem, setCroppingItem] = useState<string | null>(null);
   const [selectionBox, setSelectionBox] = useState<ISelectionBox | null>(null);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const viewportRef = useRef(viewport);
   viewportRef.current = viewport;
@@ -137,55 +77,14 @@ export default function InfiniteCanvas() {
     containerRef.current?.setPointerCapture(pointerId);
   };
 
-  useEffect(() => {
-    return loadCanvasHotkeys({
-      itemsRef,
-      selectedItemsRef,
-      setItems,
-      setSelectedItems,
-      setEditingCropItem,
-    });
-  }, []);
-
-  useEffect(() => {
-    const preventDragDefaults = (e: DragEvent) => {
-      e.preventDefault();
-      if (e.dataTransfer) {
-        e.dataTransfer.dropEffect = "copy";
-      }
-    };
-
-    window.addEventListener("dragenter", preventDragDefaults);
-    window.addEventListener("dragover", preventDragDefaults);
-    window.addEventListener("drop", preventDragDefaults);
-
-    const unlistenPromise = getCurrentWebview().onDragDropEvent(
-      (event: Event<DragDropEvent>) => {
-        if (event.payload.type === "drop") {
-          const promises = onDropMedia({
-            paths: event.payload.paths,
-            viewportRef,
-          });
-
-          Promise.all(promises).then((results) => {
-            const validItems = results.filter(
-              (item): item is MediaItem => item !== null,
-            );
-            if (validItems.length > 0) {
-              setItems((prev) => [...prev, ...validItems]);
-            }
-          });
-        }
-      },
-    );
-
-    return () => {
-      window.removeEventListener("dragenter", preventDragDefaults);
-      window.removeEventListener("dragover", preventDragDefaults);
-      window.removeEventListener("drop", preventDragDefaults);
-      unlistenPromise.then((unlisten: () => void) => unlisten());
-    };
-  }, []);
+  useTauriDrop({ viewportRef, setItems });
+  useCanvasHotkeys({
+    itemsRef,
+    selectedItemsRef,
+    setItems,
+    setSelectedItems,
+    setEditingCropItem,
+  });
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (
@@ -439,21 +338,6 @@ export default function InfiniteCanvas() {
     setSelectedItems(new Set([id]));
   };
 
-  const revealItem = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const item = items.find((i) => i.id === id);
-    if (!item) return;
-
-    try {
-      await revealItemInDir(item.filePath);
-    } catch (error) {
-      await message(`Failed to show media in folder:\n\n${String(error)}`, {
-        title: "Show in folder failed",
-        kind: "error",
-      });
-    }
-  };
-
   const resetSize = (id: string, e: React.MouseEvent) => {
     const result = resetImageSize(e);
     if (result) {
@@ -483,6 +367,10 @@ export default function InfiniteCanvas() {
   const viewRight = viewLeft + screenWidth;
   const viewBottom = viewTop + screenHeight;
   const cullMargin = 500;
+  const totalVideoCount = items.reduce(
+    (count, item) => count + (item.type === "video" ? 1 : 0),
+    0,
+  );
 
   const loadConfig = async () => {
     const result = await loadFromStorage();
@@ -580,7 +468,9 @@ export default function InfiniteCanvas() {
             >
               <MediaFrameActions
                 item={item}
-                revealItem={revealItem}
+                revealItem={(id, e) => {
+                  revealItem({ e, id, items });
+                }}
                 resetSize={resetSize}
                 deleteItem={deleteItem}
                 startCropEdit={startCropEdit}
@@ -637,10 +527,19 @@ export default function InfiniteCanvas() {
       </div>
 
       {selectionBox && <SelectionBox selectionBox={selectionBox} />}
+      <DevelopmentOverlay
+        canvasRef={containerRef}
+        totalVideoCount={totalVideoCount}
+      />
       <Hud
         items={items}
         saveConfig={() => saveConfig({ items, viewport })}
         loadConfig={loadConfig}
+        settingsMenuItems={SETTINGS_MENU_ITEMS}
+        settingsVersion={appVersion}
+        isSettingsOpen={isSettingsOpen}
+        openSettings={() => setIsSettingsOpen(true)}
+        closeSettings={() => setIsSettingsOpen(false)}
       />
     </div>
   );
