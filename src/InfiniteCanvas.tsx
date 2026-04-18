@@ -11,7 +11,13 @@ import { ISelectionBox, SelectionBox } from "./components/SelectionBox";
 import { Hud } from "./components/Hud";
 import { DevelopmentOverlay } from "./components/DevelopmentOverlay";
 import { MediaFrameActions } from "./components/MediaFrameActions";
-import { CROP_HANDLES, EMPTY_CROP, getCrop } from "./utils/media";
+import {
+  CROP_HANDLES,
+  EMPTY_CROP,
+  generateVideoThumbnail,
+  getCrop,
+  useThumbnailQueue,
+} from "./utils/media";
 import {
   CropHandle,
   CropInsets,
@@ -39,7 +45,6 @@ import {
 import { useTauriDrop } from "./utils/drag";
 import { useCanvasHotkeys } from "./utils/keyboard";
 import { VideoMedia } from "./components/Video";
-import { generateVideoThumbnail } from "./utils/videoThumbnails";
 
 export default function InfiniteCanvas() {
   const [items, setItems] = useState<MediaItem[]>([]);
@@ -70,48 +75,8 @@ export default function InfiniteCanvas() {
   const cropStartRef = useRef<TCropStart>(null);
   const thumbnailQueueRef = useRef<MediaItem[]>([]);
   const thumbnailRequestedRef = useRef<Set<string>>(new Set());
-  const isGeneratingThumbnailRef = useRef(false);
 
-  const processThumbnailQueue = useCallback(async () => {
-    if (isGeneratingThumbnailRef.current) return;
-
-    const queuedItem = thumbnailQueueRef.current.shift();
-    if (!queuedItem) return;
-
-    isGeneratingThumbnailRef.current = true;
-    try {
-      const lodAssets = await generateVideoThumbnail(queuedItem.filePath);
-      if (lodAssets.thumbnailUrl) {
-        setItems((prev) =>
-          prev.map((item) =>
-            item.id === queuedItem.id && !item.thumbnailUrl
-              ? { ...item, ...lodAssets }
-              : item,
-          ),
-        );
-      }
-    } finally {
-      isGeneratingThumbnailRef.current = false;
-      void processThumbnailQueue();
-    }
-  }, []);
-
-  const requestVideoThumbnail = useCallback(
-    (item: MediaItem) => {
-      if (
-        item.type !== "video" ||
-        item.thumbnailUrl ||
-        thumbnailRequestedRef.current.has(item.id)
-      ) {
-        return;
-      }
-
-      thumbnailRequestedRef.current.add(item.id);
-      thumbnailQueueRef.current.push(item);
-      void processThumbnailQueue();
-    },
-    [processThumbnailQueue],
-  );
+  const { requestThumbnail } = useThumbnailQueue(setItems);
 
   const startPanning = (
     pointerId: number,
@@ -552,7 +517,7 @@ export default function InfiniteCanvas() {
                     item={item}
                     isInViewport={isInViewport}
                     zoom={viewport.zoom}
-                    onThumbnailNeeded={requestVideoThumbnail}
+                    onThumbnailNeeded={requestThumbnail}
                   />
                   {editingCropItem === id && (
                     <div className="crop-overlay" aria-hidden="true">
