@@ -1,6 +1,8 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { MediaItem, Viewport } from "./media.types";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { message } from "@tauri-apps/plugin-dialog";
 
 type TErrorReason = "cancelled" | "invalid" | "error";
 
@@ -155,9 +157,7 @@ export const toProjectRelativePath = (
     commonSegments += 1;
   }
 
-  const parentSegments = root.segments
-    .slice(commonSegments)
-    .map(() => "..");
+  const parentSegments = root.segments.slice(commonSegments).map(() => "..");
   const childSegments = target.segments.slice(commonSegments);
 
   return [...parentSegments, ...childSegments].join("/") || ".";
@@ -277,5 +277,31 @@ export const loadFromStorage = async (): Promise<TLoadResult> => {
   } catch (err) {
     console.error("Failed to load:", err);
     return { ok: false, reason: "error", error: err };
+  }
+};
+
+/**
+ * Open the system file explorer and reveal the item source.
+ */
+export const revealItem = async ({
+  e,
+  id,
+  items,
+}: {
+  e: React.MouseEvent;
+  id: string;
+  items: MediaItem[];
+}) => {
+  e.stopPropagation();
+  const item = items.find((i) => i.id === id);
+  if (!item) return;
+
+  try {
+    await revealItemInDir(item.filePath);
+  } catch (error) {
+    await message(`Failed to show media in folder:\n\n${String(error)}`, {
+      title: "Show in folder failed",
+      kind: "error",
+    });
   }
 };

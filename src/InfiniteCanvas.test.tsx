@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
+import packageJson from '../package.json';
 import InfiniteCanvas from './InfiniteCanvas';
 
 // Mock Tauri APIs
@@ -36,6 +37,14 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
   readTextFile: vi.fn()
 }));
 
+vi.mock('@tauri-apps/plugin-shell', () => ({
+  Command: {
+    create: vi.fn(() => ({
+      execute: vi.fn(() => Promise.resolve({ stdout: '' }))
+    }))
+  }
+}));
+
 describe('InfiniteCanvas Application', () => {
   beforeAll(() => {
     // Mock HTMLImageElement properties and onload for tests
@@ -58,6 +67,33 @@ describe('InfiniteCanvas Application', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     dropCallback = null;
+  });
+
+  it('opens the settings modal from the toolbar cog', () => {
+    render(<InfiniteCanvas />);
+
+    fireEvent.click(screen.getByRole('button', { name: /open settings/i }));
+
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'General' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Appearance' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hotkeys' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Debug' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'About' })).toBeInTheDocument();
+    expect(screen.getByText(`Version ${packageJson.version}`)).toBeInTheDocument();
+  });
+
+  it('toggles development stats from the debug settings section', () => {
+    render(<InfiniteCanvas />);
+
+    fireEvent.click(screen.getByRole('button', { name: /open settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Debug' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /development mode/i }));
+
+    expect(screen.getByLabelText('Development stats')).toBeInTheDocument();
+    expect(screen.getByText('FPS')).toBeInTheDocument();
+    expect(screen.getByText('Frame time (ms)')).toBeInTheDocument();
+    expect(screen.getByText('Video count')).toBeInTheDocument();
   });
 
   // 1. Panning with middle click
