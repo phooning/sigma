@@ -12,11 +12,12 @@
 
 .canvas-background {
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-image: radial-gradient(#334155 1px, transparent 1px);
+    background-image: radial-gradient(
+        circle,
+        #334155 var(--grid-dot-size),
+        transparent calc(var(--grid-dot-size) + 0.5px)
+    );
+    background-size: var(--grid-size) var(--grid-size);
     z-index: 0;
 }
 

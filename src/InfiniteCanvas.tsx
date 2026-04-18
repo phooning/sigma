@@ -1,4 +1,9 @@
-import { useState, useRef, WheelEvent as ReactWheelEvent } from "react";
+import {
+  useState,
+  useRef,
+  WheelEvent as ReactWheelEvent,
+  type CSSProperties,
+} from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { message } from "@tauri-apps/plugin-dialog";
 import { ISelectionBox, SelectionBox } from "./components/SelectionBox";
@@ -358,6 +363,40 @@ export default function InfiniteCanvas() {
   const viewRight = viewLeft + screenWidth;
   const viewBottom = viewTop + screenHeight;
   const cullMargin = 500;
+  const baseGridSize = 50;
+  const minGridScreenSize = 28;
+  const maxGridScreenSize = 96;
+  let gridSize = baseGridSize;
+  while (gridSize * viewport.zoom < minGridScreenSize) {
+    gridSize *= 2;
+  }
+  while (
+    gridSize > baseGridSize &&
+    gridSize * viewport.zoom > maxGridScreenSize
+  ) {
+    gridSize /= 2;
+  }
+  const gridDotScreenSize = 1.35;
+  const gridDotSize = Math.min(
+    gridSize * 0.1,
+    Math.max(0.25, gridDotScreenSize / viewport.zoom),
+  );
+  const gridMargin = 500;
+  const gridLeft = Math.floor((viewLeft - gridMargin) / gridSize) * gridSize;
+  const gridTop = Math.floor((viewTop - gridMargin) / gridSize) * gridSize;
+  const gridWidth = screenWidth + gridMargin * 2 + gridSize;
+  const gridHeight = screenHeight + gridMargin * 2 + gridSize;
+  const gridStyle: CSSProperties & {
+    "--grid-size": string;
+    "--grid-dot-size": string;
+  } = {
+    left: gridLeft,
+    top: gridTop,
+    width: gridWidth,
+    height: gridHeight,
+    "--grid-size": `${gridSize}px`,
+    "--grid-dot-size": `${gridDotSize}px`,
+  };
   const totalVideoCount = items.reduce(
     (count, item) => count + (item.type === "video" ? 1 : 0),
     0,
@@ -405,18 +444,15 @@ export default function InfiniteCanvas() {
       onContextMenu={(e) => e.preventDefault()}
     >
       <div
-        className="canvas-background"
-        style={{
-          backgroundPosition: `${viewport.x * viewport.zoom}px ${viewport.y * viewport.zoom}px`,
-          backgroundSize: `${50 * viewport.zoom}px ${50 * viewport.zoom}px`,
-        }}
-      />
-      <div
         className="canvas-world"
         style={{
           transform: `scale(${viewport.zoom}) translate(${viewport.x}px, ${viewport.y}px)`,
         }}
       >
+        <div
+          className="canvas-background"
+          style={gridStyle}
+        />
         {items.map((item) => {
           const { id, url } = item;
           const crop = getCrop(item);

@@ -17,11 +17,6 @@ struct MediaMetadata {
 }
 
 #[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
-#[tauri::command]
 async fn probe_media(path: String) -> Result<MediaMetadata, String> {
     tauri::async_runtime::spawn_blocking(move || probe_media_blocking(path))
         .await
@@ -62,10 +57,11 @@ fn probe_media_blocking(path: String) -> Result<MediaMetadata, String> {
         Err(_) => return Ok(fallback),
     };
 
-    let Some(stream) = json["streams"]
-        .as_array()
-        .and_then(|streams| streams.iter().find(|stream| stream["codec_type"] == "video"))
-    else {
+    let Some(stream) = json["streams"].as_array().and_then(|streams| {
+        streams
+            .iter()
+            .find(|stream| stream["codec_type"] == "video")
+    }) else {
         return Ok(fallback);
     };
 
@@ -178,7 +174,6 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            greet,
             probe_media,
             generate_video_thumbnail
         ])
