@@ -45,6 +45,11 @@ const formatVideoTime = (time: number) => {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 };
 
+const getFiniteDuration = (duration: number | undefined) =>
+  typeof duration === "number" && Number.isFinite(duration) && duration > 0
+    ? duration
+    : 0;
+
 export const getVideoLod = (
   zoom: number,
   hasThumbnail: boolean,
@@ -99,7 +104,9 @@ export function VideoMedia({
 }: VideoMediaProps) {
   const [isLoadRequested, setIsLoadRequested] = useState(false);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
-  const [duration, setDuration] = useState(0);
+  const [duration, setDuration] = useState(() =>
+    getFiniteDuration(item.duration),
+  );
   const [currentTime, setCurrentTime] = useState(0);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [loop, setLoop] = useState<LoopState>({
@@ -110,7 +117,7 @@ export function VideoMedia({
   const videoRef = useRef<HTMLVideoElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
-  const durationRef = useRef(0);
+  const durationRef = useRef(getFiniteDuration(item.duration));
   const isScrubbingRef = useRef(false);
   const loopRef = useRef<LoopState>({
     enabled: false,
@@ -276,7 +283,8 @@ export function VideoMedia({
     const video = videoRef.current;
     if (!video) return;
 
-    const nextDuration = Number.isFinite(video.duration) ? video.duration : 0;
+    const nextDuration =
+      getFiniteDuration(video.duration) || durationRef.current;
     durationRef.current = nextDuration;
     setDuration(nextDuration);
     syncTimelineFromVideo(video.currentTime, nextDuration);
@@ -344,7 +352,9 @@ export function VideoMedia({
         [point]: nextPoint,
         enabled:
           previous.enabled &&
-          (point === "a" ? previous.b !== null && previous.b !== nextPoint : previous.a !== null && previous.a !== nextPoint),
+          (point === "a"
+            ? previous.b !== null && previous.b !== nextPoint
+            : previous.a !== null && previous.a !== nextPoint),
       }));
     },
     [updateLoop],
@@ -399,14 +409,15 @@ export function VideoMedia({
 
   useEffect(() => {
     stopTimelineAnimation();
-    durationRef.current = 0;
+    const nextDuration = getFiniteDuration(item.duration);
+    durationRef.current = nextDuration;
     isScrubbingRef.current = false;
     loopRef.current = { enabled: false, a: null, b: null };
-    setDuration(0);
+    setDuration(nextDuration);
     setCurrentTime(0);
     setIsScrubbing(false);
     setLoop({ enabled: false, a: null, b: null });
-  }, [stopTimelineAnimation, url]);
+  }, [item.duration, stopTimelineAnimation, url]);
 
   useEffect(() => {
     writePlayheadPosition(currentTime);

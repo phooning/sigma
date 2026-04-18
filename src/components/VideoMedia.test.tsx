@@ -148,4 +148,36 @@ describe("VideoMedia timeline", () => {
     expect(timeline).toHaveStyle("--video-loop-end-position: 75%");
     expect(timeline).toHaveStyle("--video-playhead-position: 75%");
   });
+
+  it("keeps the timeline when media duration briefly becomes unavailable", async () => {
+    let duration = Number.NaN;
+
+    render(
+      <VideoMedia
+        url="asset:///tmp/video.mp4"
+        crop={crop}
+        item={{ ...videoItem, duration: 20 }}
+        isInViewport
+        zoom={1}
+      />,
+    );
+
+    const video = document.querySelector("video");
+    expect(video).toBeInTheDocument();
+
+    Object.defineProperty(video, "duration", {
+      configurable: true,
+      get: () => duration,
+    });
+
+    expect(
+      await screen.findByRole("slider", { name: /video timeline/i }),
+    ).toHaveAttribute("aria-valuemax", "20");
+
+    fireEvent.durationChange(video!);
+
+    expect(
+      screen.getByRole("slider", { name: /video timeline/i }),
+    ).toHaveAttribute("aria-valuemax", "20");
+  });
 });
