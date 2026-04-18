@@ -1,7 +1,7 @@
 import {
   useState,
   useRef,
-  useEffect,
+  useCallback,
   WheelEvent as ReactWheelEvent,
 } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -38,6 +38,8 @@ import {
 } from "./components/CanvasActions";
 import { useTauriDrop } from "./utils/drag";
 import { useCanvasHotkeys } from "./utils/keyboard";
+import { VideoMedia } from "./components/Video";
+import { generateVideoThumbnail } from "./utils/videoThumbnails";
 
 export default function InfiniteCanvas() {
   const [items, setItems] = useState<MediaItem[]>([]);
@@ -66,6 +68,50 @@ export default function InfiniteCanvas() {
   > | null>(null);
   const cropHandleRef = useRef<CropHandle | null>(null);
   const cropStartRef = useRef<TCropStart>(null);
+  const thumbnailQueueRef = useRef<MediaItem[]>([]);
+  const thumbnailRequestedRef = useRef<Set<string>>(new Set());
+  const isGeneratingThumbnailRef = useRef(false);
+
+  const processThumbnailQueue = useCallback(async () => {
+    if (isGeneratingThumbnailRef.current) return;
+
+    const queuedItem = thumbnailQueueRef.current.shift();
+    if (!queuedItem) return;
+
+    isGeneratingThumbnailRef.current = true;
+    try {
+      const lodAssets = await generateVideoThumbnail(queuedItem.filePath);
+      if (lodAssets.thumbnailUrl) {
+        setItems((prev) =>
+          prev.map((item) =>
+            item.id === queuedItem.id && !item.thumbnailUrl
+              ? { ...item, ...lodAssets }
+              : item,
+          ),
+        );
+      }
+    } finally {
+      isGeneratingThumbnailRef.current = false;
+      void processThumbnailQueue();
+    }
+  }, []);
+
+  const requestVideoThumbnail = useCallback(
+    (item: MediaItem) => {
+      if (
+        item.type !== "video" ||
+        item.thumbnailUrl ||
+        thumbnailRequestedRef.current.has(item.id)
+      ) {
+        return;
+      }
+
+      thumbnailRequestedRef.current.add(item.id);
+      thumbnailQueueRef.current.push(item);
+      void processThumbnailQueue();
+    },
+    [processThumbnailQueue],
+  );
 
   const startPanning = (
     pointerId: number,
@@ -323,6 +369,10 @@ export default function InfiniteCanvas() {
 
   const deleteItem = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    thumbnailQueueRef.current = thumbnailQueueRef.current.filter(
+      (item) => item.id !== id,
+    );
+    thumbnailRequestedRef.current.delete(id);
     setItems((prev) => prev.filter((i) => i.id !== id));
     setSelectedItems((prev) => {
       const newSet = new Set(prev);
@@ -391,6 +441,9 @@ export default function InfiniteCanvas() {
       const loadedItems = data.items.map((i) => ({
         ...i,
         url: convertFileSrc(i.filePath),
+        thumbnailUrl: i.thumbnailPath
+          ? convertFileSrc(i.thumbnailPath)
+          : undefined,
       }));
       setItems(loadedItems);
     }
@@ -440,6 +493,12 @@ export default function InfiniteCanvas() {
             return null;
           }
 
+          const isInViewport =
+            itemRight >= viewLeft &&
+            itemLeft <= viewRight &&
+            itemBottom >= viewTop &&
+            itemTop <= viewBottom;
+
           const zIndex =
             draggingItem === id ||
             resizingItem === id ||
@@ -487,21 +546,13 @@ export default function InfiniteCanvas() {
                 />
               ) : (
                 <>
-                  <video
-                    className="media-content"
-                    src={url}
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                    draggable={false}
-                    onDragStart={(e) => e.preventDefault()}
-                    style={{
-                      left: -crop.left,
-                      top: -crop.top,
-                      width: item.width + crop.left + crop.right,
-                      height: item.height + crop.top + crop.bottom,
-                    }}
+                  <VideoMedia
+                    url={url}
+                    crop={crop}
+                    item={item}
+                    isInViewport={isInViewport}
+                    zoom={viewport.zoom}
+                    onThumbnailNeeded={requestVideoThumbnail}
                   />
                   {editingCropItem === id && (
                     <div className="crop-overlay" aria-hidden="true">
