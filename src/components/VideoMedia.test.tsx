@@ -180,4 +180,69 @@ describe("VideoMedia timeline", () => {
       screen.getByRole("slider", { name: /video timeline/i }),
     ).toHaveAttribute("aria-valuemax", "20");
   });
+
+  it("pauses and resumes playback from the timeline controls", async () => {
+    let paused = false;
+    const parentPointerDown = vi.fn();
+
+    render(
+      <div onPointerDown={parentPointerDown}>
+        <VideoMedia
+          url="asset:///tmp/video.mp4"
+          crop={crop}
+          item={{ ...videoItem, duration: 20 }}
+          isInViewport
+          zoom={1}
+        />
+      </div>,
+    );
+
+    const video = document.querySelector("video");
+    expect(video).toBeInTheDocument();
+
+    Object.defineProperty(video, "duration", {
+      configurable: true,
+      get: () => 20,
+    });
+    Object.defineProperty(video, "paused", {
+      configurable: true,
+      get: () => paused,
+    });
+    Object.defineProperty(video, "pause", {
+      configurable: true,
+      value: vi.fn(() => {
+        paused = true;
+        fireEvent.pause(video!);
+      }),
+    });
+    Object.defineProperty(video, "play", {
+      configurable: true,
+      value: vi.fn(() => {
+        paused = false;
+        fireEvent.play(video!);
+        return Promise.resolve();
+      }),
+    });
+
+    fireEvent.loadedMetadata(video!);
+
+    const pauseButton = await screen.findByRole("button", {
+      name: /pause video/i,
+    });
+    fireEvent.pointerDown(pauseButton, { pointerId: 1 });
+    fireEvent.click(pauseButton);
+
+    expect(parentPointerDown).not.toHaveBeenCalled();
+    expect(video!.pause).toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: /play video/i }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /play video/i }));
+
+    expect(video!.play).toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: /pause video/i }),
+    ).toBeInTheDocument();
+  });
 });

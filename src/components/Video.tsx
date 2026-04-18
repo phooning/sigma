@@ -109,6 +109,7 @@ export function VideoMedia({
   );
   const [currentTime, setCurrentTime] = useState(0);
   const [isScrubbing, setIsScrubbing] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [loop, setLoop] = useState<LoopState>({
     enabled: false,
     a: null,
@@ -119,6 +120,7 @@ export function VideoMedia({
   const rafRef = useRef<number | null>(null);
   const durationRef = useRef(getFiniteDuration(item.duration));
   const isScrubbingRef = useRef(false);
+  const isPausedByUserRef = useRef(false);
   const loopRef = useRef<LoopState>({
     enabled: false,
     a: null,
@@ -145,7 +147,13 @@ export function VideoMedia({
 
   const playVideo = useCallback(() => {
     const video = videoRef.current;
-    if (!video || lod !== "video" || !isInViewport || shouldDeferVideoLoad) {
+    if (
+      !video ||
+      lod !== "video" ||
+      !isInViewport ||
+      shouldDeferVideoLoad ||
+      isPausedByUserRef.current
+    ) {
       return;
     }
 
@@ -389,6 +397,23 @@ export function VideoMedia({
     }));
   }, [updateLoop]);
 
+  const togglePlayback = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (video.paused) {
+      isPausedByUserRef.current = false;
+      setIsPaused(false);
+      playVideo();
+      startTimelineAnimation();
+    } else {
+      isPausedByUserRef.current = true;
+      setIsPaused(true);
+      video.pause();
+      stopTimelineAnimation();
+    }
+  }, [playVideo, startTimelineAnimation, stopTimelineAnimation]);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -412,10 +437,12 @@ export function VideoMedia({
     const nextDuration = getFiniteDuration(item.duration);
     durationRef.current = nextDuration;
     isScrubbingRef.current = false;
+    isPausedByUserRef.current = false;
     loopRef.current = { enabled: false, a: null, b: null };
     setDuration(nextDuration);
     setCurrentTime(0);
     setIsScrubbing(false);
+    setIsPaused(false);
     setLoop({ enabled: false, a: null, b: null });
   }, [item.duration, stopTimelineAnimation, url]);
 
@@ -501,8 +528,14 @@ export function VideoMedia({
           startTimelineAnimation();
         }}
         onDurationChange={updateVideoMetadata}
-        onPlay={startTimelineAnimation}
-        onPause={stopTimelineAnimation}
+        onPlay={() => {
+          setIsPaused(false);
+          startTimelineAnimation();
+        }}
+        onPause={() => {
+          setIsPaused(true);
+          stopTimelineAnimation();
+        }}
         onRateChange={(e) => {
           timelineStateRef.current = {
             anchorTime: clampVideoTime(
@@ -536,6 +569,20 @@ export function VideoMedia({
           onPointerUp={stopCanvasGesture}
           onClick={stopCanvasGesture}
         >
+          <button
+            type="button"
+            className="video-playback-btn"
+            aria-label={isPaused ? "Play video" : "Pause video"}
+            aria-pressed={isPaused}
+            onPointerDown={stopCanvasGesture}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              togglePlayback();
+            }}
+          >
+            {isPaused ? "Play" : "Pause"}
+          </button>
           <div
             ref={timelineRef}
             className="video-timeline-track"

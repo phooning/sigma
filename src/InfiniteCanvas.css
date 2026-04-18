@@ -143,7 +143,7 @@ body {
     right: 12px;
     bottom: 12px;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
     gap: 10px;
     align-items: center;
     padding: 8px 10px;
@@ -294,6 +294,7 @@ body {
     gap: 4px;
 }
 
+.video-playback-btn,
 .video-loop-btn {
     min-width: 24px;
     height: 22px;
@@ -307,6 +308,17 @@ body {
     font-weight: 800;
     line-height: 1;
     cursor: pointer;
+}
+
+.video-playback-btn {
+    min-width: 46px;
+}
+
+.video-playback-btn:hover,
+.video-playback-btn[aria-pressed="true"] {
+    border-color: rgba(45, 212, 191, 0.72);
+    background: rgba(45, 212, 191, 0.18);
+    color: #ccfbf1;
 }
 
 .video-loop-btn:hover:not(:disabled),
