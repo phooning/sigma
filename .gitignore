@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 *.local
+fixtures/heavy_video.mkv
 
 # Editor directories and files
 .vscode/*

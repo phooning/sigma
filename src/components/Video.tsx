@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CropInsets, MediaItem } from "../utils/media.types";
 
 const THUMBNAIL_MAX_SCREEN_WIDTH = 144;
@@ -57,29 +57,47 @@ export function VideoMedia({
   zoom,
   onThumbnailNeeded,
 }: VideoMediaProps) {
+  const [isLoadRequested, setIsLoadRequested] = useState(false);
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const lod = getVideoLod(zoom, !!item.thumbnailUrl, item);
+  const lod = isLoadRequested
+    ? "video"
+    : getVideoLod(zoom, !!item.thumbnailUrl, item);
+  const shouldDeferVideoLoad = !!item.deferVideoLoad && !isLoadRequested;
 
   useEffect(() => {
-    if (!item.thumbnailUrl && shouldRequestVideoThumbnail(zoom, item)) {
+    if (
+      !item.thumbnailUrl &&
+      (item.deferVideoLoad || shouldRequestVideoThumbnail(zoom, item))
+    ) {
       onThumbnailNeeded?.(item);
     }
   }, [item, onThumbnailNeeded, zoom]);
+
+  const playVideo = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || lod !== "video" || !isInViewport || shouldDeferVideoLoad) {
+      return;
+    }
+
+    const playPromise = video.play();
+    playPromise
+      ?.then(() => setPlaybackError(null))
+      .catch(() => {
+        setPlaybackError("Playback failed. This file may need transcoding.");
+      });
+  }, [isInViewport, lod, shouldDeferVideoLoad]);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    if (lod === "video" && isInViewport) {
-      const playPromise = video.play();
-      playPromise?.catch(() => {
-        // Playback can still be blocked by the browser/runtime; the next
-        // visibility change will retry.
-      });
+    if (lod === "video" && isInViewport && !shouldDeferVideoLoad) {
+      playVideo();
     } else {
       video.pause();
     }
-  }, [isInViewport, lod]);
+  }, [isInViewport, lod, playVideo, shouldDeferVideoLoad]);
 
   const mediaStyle = {
     left: -crop.left,
@@ -87,6 +105,35 @@ export function VideoMedia({
     width: item.width + crop.left + crop.right,
     height: item.height + crop.top + crop.bottom,
   };
+
+  if (shouldDeferVideoLoad) {
+    return (
+      <button
+        className="video-lod-proxy video-load-proxy"
+        aria-label="Load video"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setPlaybackError(null);
+          setIsLoadRequested(true);
+        }}
+      >
+        {item.thumbnailUrl && (
+          <img
+            className="media-content video-lod-thumbnail video-load-thumbnail"
+            src={item.thumbnailUrl}
+            alt=""
+            draggable={false}
+            onDragStart={(e) => e.preventDefault()}
+            style={mediaStyle}
+          />
+        )}
+        <span className="video-lod-icon" aria-hidden="true" />
+        <span className="video-load-label">Load video</span>
+      </button>
+    );
+  }
 
   if (lod === "thumbnail" && item.thumbnailUrl) {
     return (
@@ -110,18 +157,31 @@ export function VideoMedia({
   }
 
   return (
-    <video
-      ref={videoRef}
-      className="media-content"
-      src={url}
-      autoPlay={isInViewport}
-      preload={isInViewport ? "auto" : "metadata"}
-      loop
-      muted
-      playsInline
-      draggable={false}
-      onDragStart={(e) => e.preventDefault()}
-      style={mediaStyle}
-    />
+    <>
+      <video
+        ref={videoRef}
+        className={`media-content ${isLoadRequested ? "video-load-requested" : ""}`}
+        src={url}
+        autoPlay={isInViewport}
+        preload={isLoadRequested && isInViewport ? "auto" : "metadata"}
+        controls={isLoadRequested}
+        loop
+        muted
+        playsInline
+        draggable={false}
+        onLoadedMetadata={playVideo}
+        onCanPlay={playVideo}
+        onError={() => {
+          setPlaybackError("Playback failed. This file may need transcoding.");
+        }}
+        onDragStart={(e) => e.preventDefault()}
+        style={mediaStyle}
+      />
+      {playbackError && (
+        <div className="video-playback-error" role="status">
+          {playbackError}
+        </div>
+      )}
+    </>
   );
 }

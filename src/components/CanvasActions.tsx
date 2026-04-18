@@ -2,9 +2,32 @@ import { RefObject, WheelEvent } from "react";
 import { MediaItem, Viewport } from "../utils/media.types";
 import { v4 as uuidv4 } from "uuid";
 import { IMAGE_EXTENSIONS, VIDEO_EXTENSIONS } from "../utils/media";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 
 export type WheelInputType = "trackpad-pan" | "zoom";
+
+const DEFAULT_MEDIA_WIDTH = 1280;
+const DEFAULT_VIDEO_HEIGHT = 720;
+const LARGE_VIDEO_LOAD_THRESHOLD_BYTES = 100 * 1024 * 1024;
+
+type MediaFileInfo = {
+  width?: number;
+  height?: number;
+  duration?: number;
+  size?: number;
+};
+
+const probeMedia = async (path: string): Promise<MediaFileInfo> => {
+  try {
+    const info = await invoke<MediaFileInfo | null>("probe_media", {
+      path,
+    });
+
+    return info ?? {};
+  } catch {
+    return {};
+  }
+};
 
 export const isMacOS = () =>
   /mac/i.test(navigator.platform) || navigator.userAgent.includes("Macintosh");
@@ -94,15 +117,22 @@ export const onDropMedia = ({
       if (!isVideo && !isImage) return resolve(null);
 
       const url = convertFileSrc(filePath);
-      const createItem = (w: number, h: number): MediaItem => ({
+      const createItem = (
+        w: number,
+        h: number,
+        extra: Partial<MediaItem> = {},
+      ): MediaItem => ({
         id: uuidv4(),
         type: isVideo ? "video" : "image",
         filePath,
         url,
         x: centerX + index * 1350,
         y: centerY,
-        width: 1280,
-        height: w ? (h / w) * 1280 : 720,
+        width: DEFAULT_MEDIA_WIDTH,
+        height: w
+          ? (h / w) * DEFAULT_MEDIA_WIDTH
+          : DEFAULT_VIDEO_HEIGHT,
+        ...extra,
       });
 
       if (isImage) {
@@ -117,18 +147,20 @@ export const onDropMedia = ({
         };
         img.src = url;
       } else {
-        const video = document.createElement("video");
-        video.preload = "metadata";
-        video.onloadedmetadata = () => {
-          const item = createItem(video.videoWidth, video.videoHeight);
-          resolve(item);
-          video.src = "";
-        };
-        video.onerror = () => {
-          resolve(createItem(1280, 720));
-          video.src = "";
-        };
-        video.src = url;
+        probeMedia(filePath).then(({ width, height, duration, size }) => {
+          const mediaWidth = width || DEFAULT_MEDIA_WIDTH;
+          const mediaHeight = height || DEFAULT_VIDEO_HEIGHT;
+
+          resolve(
+            createItem(mediaWidth, mediaHeight, {
+              fileSize: size,
+              duration,
+              deferVideoLoad:
+                typeof size === "number" &&
+                size >= LARGE_VIDEO_LOAD_THRESHOLD_BYTES,
+            }),
+          );
+        });
       }
     });
   });

@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
 import packageJson from '../package.json';
 import InfiniteCanvas from './InfiniteCanvas';
 
@@ -23,7 +21,24 @@ vi.mock('@tauri-apps/api/webview', () => ({
 
 vi.mock('@tauri-apps/api/core', () => ({
   convertFileSrc: (path: string) => `asset://${path}`,
-  invoke: vi.fn(() => Promise.resolve(null))
+  invoke: vi.fn((command: string, args?: { path?: string }) => {
+    if (command === 'probe_media') {
+      return Promise.resolve({
+        width: args?.path?.includes('heavy_video.mkv') ? 3840 : 1920,
+        height: args?.path?.includes('heavy_video.mkv') ? 2160 : 1080,
+        duration: args?.path?.includes('heavy_video.mkv') ? 2400 : 8,
+        size: args?.path?.includes('heavy_video.mkv')
+          ? 373 * 1024 * 1024
+          : 838 * 1024
+      });
+    }
+
+    if (command === 'generate_video_thumbnail') {
+      return Promise.resolve(`/tmp/${args?.path?.includes('heavy_video.mkv') ? 'heavy' : 'video'}-thumb.jpg`);
+    }
+
+    return Promise.resolve(null);
+  })
 }));
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({
@@ -123,7 +138,10 @@ describe('InfiniteCanvas Application', () => {
 
   it('drops multiple videos as playable video elements without eager thumbnail work', async () => {
     const originalInnerWidth = window.innerWidth;
-    const videoPath = resolve('fixtures/generated-lod-test-1080p.mp4');
+    const videoPath = new URL(
+      '../fixtures/generated-lod-test-1080p.mp4',
+      import.meta.url
+    ).pathname;
     const droppedVideos = [videoPath, videoPath];
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,
@@ -149,7 +167,6 @@ describe('InfiniteCanvas Application', () => {
       expect(document.querySelectorAll('video.media-content')).toHaveLength(2);
     });
 
-    expect(existsSync(videoPath)).toBe(true);
     document.querySelectorAll('video.media-content').forEach((video) => {
       expect(video).toHaveAttribute('src', `asset://${videoPath}`);
     });
@@ -159,6 +176,72 @@ describe('InfiniteCanvas Application', () => {
       'generate_video_thumbnail',
       expect.anything()
     );
+
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: originalInnerWidth
+    });
+  });
+
+  it('drops large videos as deferred load proxies until playback is requested', async () => {
+    const originalInnerWidth = window.innerWidth;
+    const heavyVideoPath = new URL(
+      '../fixtures/heavy_video.mkv',
+      import.meta.url
+    ).pathname;
+
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 3000
+    });
+
+    render(<InfiniteCanvas />);
+
+    await act(async () => {
+      if (dropCallback) {
+        dropCallback({
+          payload: {
+            type: 'drop',
+            paths: [heavyVideoPath]
+          }
+        });
+      }
+    });
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('.media-item')).toHaveLength(1);
+      expect(screen.getByRole('button', { name: /load video/i })).toBeInTheDocument();
+    });
+
+    expect(document.querySelector('video.media-content')).not.toBeInTheDocument();
+    expect(invoke).toHaveBeenCalledWith('probe_media', {
+      path: heavyVideoPath
+    });
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('generate_video_thumbnail', {
+        path: heavyVideoPath
+      });
+      expect(document.querySelector('.video-load-thumbnail')).toHaveAttribute(
+        'src',
+        'asset:///tmp/heavy-thumb.jpg'
+      );
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /load video/i }));
+    });
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('video.media-content')).toHaveLength(1);
+    });
+    expect(document.querySelector('video.media-content')).toHaveAttribute(
+      'src',
+      `asset://${heavyVideoPath}`
+    );
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalled();
 
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,
