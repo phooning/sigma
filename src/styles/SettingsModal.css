@@ -1,62 +1,65 @@
 .settings-modal-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 40;
+    z-index: var(--z-modal);
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 48px;
+    padding: var(--space-12);
     background: rgba(3, 7, 18, 0.58);
-    backdrop-filter: blur(5px);
-    -webkit-backdrop-filter: blur(5px);
+    backdrop-filter: blur(var(--blur-sm));
+    -webkit-backdrop-filter: blur(var(--blur-sm));
 }
 
 .settings-modal {
-    width: min(920px, calc(100vw - 64px));
-    height: min(620px, calc(100vh - 96px));
-    min-height: 420px;
+    width: min(var(--settings-modal-width), calc(100dvw - var(--space-16)));
+    height: min(
+        var(--settings-modal-height),
+        calc(100dvh - calc(var(--space-12) * 2))
+    );
+    min-height: var(--settings-modal-min-height);
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    color: #f8fafc;
-    background: rgba(16, 18, 22, 0.96);
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    border-radius: 8px;
-    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.52);
+    color: var(--text-strong);
+    background: var(--surface-modal);
+    border: var(--border-width) solid var(--input);
+    border-radius: var(--radius-md-app);
+    box-shadow: var(--shadow-panel);
     outline: none;
 }
 
 .settings-modal-header {
-    height: 58px;
-    padding: 0 18px 0 24px;
+    height: var(--space-14-5);
+    padding: 0 var(--space-4-5) 0 var(--space-6);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: var(--border-width) solid var(--border);
 }
 
 .settings-modal-header h2 {
     margin: 0;
-    font-size: 15px;
-    line-height: 1;
+    font-size: var(--text-lg);
+    line-height: var(--leading-none);
     font-weight: 700;
     letter-spacing: 0;
     text-transform: uppercase;
 }
 
 .settings-close-btn {
-    width: 32px;
-    height: 32px;
+    width: var(--space-8);
+    height: var(--space-8);
     padding: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: #d1d5db;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
+    color: var(--text-control);
+    background: var(--surface-muted);
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius-sm-app);
     box-shadow: none;
-    line-height: 1;
+    line-height: var(--leading-none);
     cursor: pointer;
 }
 
@@ -65,9 +68,9 @@
 }
 
 .settings-close-btn:hover {
-    color: #ffffff;
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.2);
+    color: var(--text-strong);
+    background: var(--surface-muted-hover);
+    border-color: var(--input);
 }
 
 .settings-modal-body {
@@ -77,127 +80,127 @@
 }
 
 .settings-sidebar {
-    width: 220px;
-    padding: 18px 12px;
+    width: var(--settings-sidebar-width);
+    padding: var(--space-4-5) var(--space-3);
     display: flex;
     flex-direction: column;
-    background: rgba(0, 0, 0, 0.16);
-    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--surface-modal-muted);
+    border-right: var(--border-width) solid var(--border);
 }
 
 .settings-nav {
     display: grid;
-    gap: 6px;
+    gap: var(--space-1-5);
 }
 
 .settings-nav-item {
     width: 100%;
-    height: 38px;
-    padding: 0 12px;
+    height: var(--space-9-5);
+    padding: 0 var(--space-3);
     display: flex;
     align-items: center;
     color: rgba(243, 244, 246, 0.72);
     background: transparent;
-    border: 1px solid transparent;
-    border-radius: 6px;
+    border: var(--border-width) solid transparent;
+    border-radius: var(--radius-sm-app);
     box-shadow: none;
     font-family: inherit;
-    font-size: 13px;
+    font-size: var(--text-md);
     font-weight: 600;
-    line-height: 1;
+    line-height: var(--leading-none);
     text-align: left;
     cursor: pointer;
 }
 
 .settings-nav-item:hover {
-    color: #ffffff;
+    color: var(--text-strong);
     background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.08);
+    border-color: var(--border);
 }
 
 .settings-nav-item.active,
 .settings-nav-item[aria-pressed="true"] {
-    color: #ffffff;
-    background: rgba(20, 184, 166, 0.18);
-    border-color: rgba(20, 184, 166, 0.36);
+    color: var(--text-strong);
+    background: var(--accent-crop-soft);
+    border-color: var(--accent-crop-border);
 }
 
 .settings-version {
     margin-top: auto;
-    padding: 14px 12px 0;
-    color: rgba(243, 244, 246, 0.54);
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    font-size: 11px;
+    padding: var(--space-3-5) var(--space-3) 0;
+    color: var(--text-subtle);
+    border-top: var(--border-width) solid var(--border);
+    font-size: var(--text-xs);
     font-weight: 600;
     letter-spacing: 0;
-    line-height: 1.2;
+    line-height: var(--leading-tight);
     text-transform: uppercase;
 }
 
 .settings-panel {
     flex: 1;
     min-width: 0;
-    padding: 26px 30px;
+    padding: var(--space-6-5) var(--space-7-5);
 }
 
 .settings-panel h3 {
     margin: 0;
     color: rgba(248, 250, 252, 0.88);
-    font-size: 18px;
+    font-size: var(--text-2xl);
     font-weight: 700;
-    line-height: 1.2;
+    line-height: var(--leading-tight);
 }
 
 .settings-toggle-row {
-    margin-top: 24px;
-    min-height: 48px;
-    padding: 0 16px;
+    margin-top: var(--space-6);
+    min-height: var(--space-12);
+    padding: 0 var(--space-4);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--space-4);
     color: rgba(248, 250, 252, 0.88);
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    font-size: 13px;
+    background: var(--surface-muted);
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius-md-app);
+    font-size: var(--text-md);
     font-weight: 600;
     cursor: pointer;
 }
 
 .settings-field-row {
-    margin-top: 24px;
-    min-height: 72px;
-    padding: 14px 16px;
+    margin-top: var(--space-6);
+    min-height: calc(var(--space-9) * 2);
+    padding: var(--space-3-5) var(--space-4);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--space-4);
     color: rgba(248, 250, 252, 0.88);
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
+    background: var(--surface-muted);
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius-md-app);
 }
 
 .settings-field-copy {
     min-width: 0;
     display: grid;
-    gap: 7px;
+    gap: var(--space-2);
 }
 
 .settings-field-copy span {
-    font-size: 13px;
+    font-size: var(--text-md);
     font-weight: 700;
-    line-height: 1.2;
+    line-height: var(--leading-tight);
 }
 
 .settings-field-copy small {
-    max-width: 460px;
+    max-width: var(--settings-copy-max-width);
     overflow: hidden;
     color: rgba(248, 250, 252, 0.62);
-    font-size: 12px;
+    font-size: var(--text-sm);
     font-weight: 500;
-    line-height: 1.35;
+    line-height: var(--leading-relaxed);
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -205,21 +208,21 @@
 .settings-field-actions {
     display: flex;
     flex: 0 0 auto;
-    gap: 8px;
+    gap: var(--space-2);
 }
 
 .settings-action-btn {
-    height: 34px;
-    padding: 0 12px;
+    height: var(--space-8-5);
+    padding: 0 var(--space-3);
     color: #ecfeff;
-    background: rgba(20, 184, 166, 0.18);
-    border: 1px solid rgba(20, 184, 166, 0.34);
-    border-radius: 6px;
+    background: var(--accent-crop-soft);
+    border: var(--border-width) solid var(--accent-crop-border);
+    border-radius: var(--radius-sm-app);
     box-shadow: none;
     font-family: inherit;
-    font-size: 12px;
+    font-size: var(--text-sm);
     font-weight: 700;
-    line-height: 1;
+    line-height: var(--leading-none);
     cursor: pointer;
 }
 
@@ -229,21 +232,21 @@
 }
 
 .settings-toggle-row input {
-    width: 18px;
-    height: 18px;
+    width: var(--space-4-5);
+    height: var(--space-4-5);
     margin: 0;
-    accent-color: #14b8a6;
+    accent-color: var(--accent-crop);
     box-shadow: none;
     cursor: pointer;
 }
 
-@media (max-width: 700px) {
+@media (max-width: 43.75rem) {
     .settings-modal-backdrop {
-        padding: 24px;
+        padding: var(--space-6);
     }
     .settings-modal {
-        width: calc(100vw - 32px);
-        height: calc(100vh - 48px);
+        width: calc(100dvw - var(--space-8));
+        height: calc(100dvh - var(--space-12));
         min-height: 0;
     }
     .settings-modal-body {
@@ -251,12 +254,12 @@
     }
     .settings-sidebar {
         width: auto;
-        min-height: 180px;
+        min-height: var(--settings-sidebar-min-height);
         border-right: none;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        border-bottom: var(--border-width) solid var(--border);
     }
     .settings-panel {
-        padding: 22px;
+        padding: var(--space-5-5);
     }
     .settings-field-row {
         align-items: stretch;

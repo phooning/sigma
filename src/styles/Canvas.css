@@ -1,9 +1,9 @@
 .canvas-container {
-    width: 100vw;
-    height: 100vh;
     position: relative;
+    width: 100dvw;
+    height: 100dvh;
     overflow: hidden;
-    background-color: #0f172a;
+    background-color: var(--canvas-background);
     user-select: none;
     -webkit-user-select: none;
     -webkit-tap-highlight-color: transparent;
@@ -14,11 +14,11 @@
     position: absolute;
     background-image: radial-gradient(
         circle,
-        #334155 var(--grid-dot-size),
-        transparent calc(var(--grid-dot-size) + 0.5px)
+        var(--canvas-grid) var(--grid-dot-size),
+        transparent calc(var(--grid-dot-size) + var(--grid-feather))
     );
     background-size: var(--grid-size) var(--grid-size);
-    z-index: 0;
+    z-index: var(--z-canvas-base);
 }
 
 .canvas-world {
@@ -26,7 +26,7 @@
     top: 0;
     left: 0;
     transform-origin: 0 0;
-    z-index: 1;
+    z-index: var(--z-canvas-world);
     user-select: none;
     -webkit-user-select: none;
 }
