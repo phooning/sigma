@@ -1,7 +1,34 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import type { MediaItem } from "../utils/media.types";
 import type { SettingsMenuItem } from "./HudActions";
 import { useDevStore } from "../stores/useDevStore";
+import { Button } from "./ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "./ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldTitle,
+} from "./ui/field";
+import { ScrollArea } from "./ui/scroll-area";
+import { Separator } from "./ui/separator";
+import { Switch } from "./ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 
 export interface ISelectionBox {
   startX: number;
@@ -9,6 +36,14 @@ export interface ISelectionBox {
   endX: number;
   endY: number;
 }
+
+const SETTINGS_PANEL_DESCRIPTIONS: Record<SettingsMenuItem, string> = {
+  General: "Core workspace preferences and file locations.",
+  Appearance: "Theme, canvas background, density, and visual preferences.",
+  Hotkeys: "Keyboard and pointer shortcuts for canvas interaction.",
+  Debug: "Diagnostics and development-only controls.",
+  About: "Version and application details.",
+};
 
 const Hud = ({
   items,
@@ -37,14 +72,7 @@ const Hud = ({
 }) => {
   const [activeSettingsMenuItem, setActiveSettingsMenuItem] =
     useState<SettingsMenuItem>(settingsMenuItems[0]);
-  const settingsDialogRef = useRef<HTMLDivElement>(null);
   const { devMode, toggleDevMode } = useDevStore();
-
-  useEffect(() => {
-    if (isSettingsOpen) {
-      settingsDialogRef.current?.focus();
-    }
-  }, [isSettingsOpen]);
 
   return (
     <>
@@ -110,125 +138,159 @@ const Hud = ({
         </div>
       </div>
 
-      {isSettingsOpen ? (
-        <div
-          className="settings-modal-backdrop"
-          onPointerDown={(event) => {
-            event.stopPropagation();
-            if (event.target === event.currentTarget) {
-              closeSettings();
-            }
-          }}
+      <Dialog
+        open={isSettingsOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            openSettings();
+            return;
+          }
+
+          closeSettings();
+        }}
+      >
+        <DialogContent
+          className="flex h-[min(38.75rem,calc(100dvh-3rem))] min-h-0 w-[min(57.5rem,calc(100dvw-2rem))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
+          onPointerDown={(event) => event.stopPropagation()}
           onWheel={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.stopPropagation()}
         >
-          <div
-            className="settings-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="settings-title"
-            ref={settingsDialogRef}
-            tabIndex={-1}
-            onPointerDown={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.stopPropagation();
-                closeSettings();
-              }
-            }}
-          >
-            <div className="settings-modal-header">
-              <h2 id="settings-title">Settings</h2>
-              <button
-                className="settings-close-btn"
-                onClick={closeSettings}
-                aria-label="Close settings"
-              >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.25"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M18 6 6 18" />
-                  <path d="m6 6 12 12" />
-                </svg>
-              </button>
-            </div>
+          <DialogHeader className="border-b px-6 py-4">
+            <DialogTitle>Settings</DialogTitle>
+            <DialogDescription>
+              Tune the canvas, media, interaction, and development controls.
+            </DialogDescription>
+          </DialogHeader>
 
-            <div className="settings-modal-body">
-              <aside className="settings-sidebar" aria-label="Settings menu">
-                <nav className="settings-nav">
+          <Tabs
+            value={activeSettingsMenuItem}
+            onValueChange={(value) =>
+              setActiveSettingsMenuItem(value as SettingsMenuItem)
+            }
+            orientation="vertical"
+            className="min-h-0 flex-1 gap-0 md:flex-row"
+          >
+            <aside className="flex border-b bg-muted/30 p-3 md:w-[var(--settings-sidebar-width)] md:flex-col md:border-r md:border-b-0">
+              <ScrollArea className="min-w-0 flex-1">
+                <TabsList className="h-auto w-full flex-row justify-start gap-1 bg-transparent p-0 md:flex-col">
                   {settingsMenuItems.map((menuItem) => (
-                    <button
+                    <TabsTrigger
                       key={menuItem}
-                      className={`settings-nav-item ${
-                        activeSettingsMenuItem === menuItem ? "active" : ""
-                      }`}
+                      value={menuItem}
                       onClick={() => setActiveSettingsMenuItem(menuItem)}
-                      aria-pressed={activeSettingsMenuItem === menuItem}
+                      className="min-h-8 justify-start px-3"
                     >
                       {menuItem}
-                    </button>
+                    </TabsTrigger>
                   ))}
-                </nav>
-                <div className="settings-version">Version {settingsVersion}</div>
-              </aside>
+                </TabsList>
+              </ScrollArea>
+              <Separator className="my-3 hidden md:block" />
+              <p className="hidden px-3 text-xs font-medium text-muted-foreground md:block">
+                Version {settingsVersion}
+              </p>
+            </aside>
 
-              <section
-                className="settings-panel"
-                aria-labelledby="settings-panel-title"
-              >
-                <h3 id="settings-panel-title">{activeSettingsMenuItem}</h3>
-                {activeSettingsMenuItem === "General" ? (
-                  <div className="settings-field-row">
-                    <div className="settings-field-copy">
-                      <span>Screenshot Directory</span>
-                      <small>
-                        {screenshotDirectory ||
-                          "Choose a folder before the first screenshot."}
-                      </small>
-                    </div>
-                    <div className="settings-field-actions">
-                      <button
-                        type="button"
-                        className="settings-action-btn"
-                        onClick={chooseScreenshotDirectory}
-                      >
-                        Choose
-                      </button>
-                      {screenshotDirectory ? (
-                        <button
-                          type="button"
-                          className="settings-action-btn"
-                          onClick={clearScreenshotDirectory}
-                        >
-                          Clear
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-                {activeSettingsMenuItem === "Debug" ? (
-                  <label className="settings-toggle-row">
-                    <span>Development Mode</span>
-                    <input
-                      type="checkbox"
-                      checked={devMode}
-                      onChange={toggleDevMode}
-                    />
-                  </label>
-                ) : null}
-              </section>
-            </div>
-          </div>
-        </div>
-      ) : null}
+            <ScrollArea className="min-h-0 flex-1">
+              <div className="p-5 md:p-7">
+                {settingsMenuItems.map((menuItem) => (
+                  <TabsContent key={menuItem} value={menuItem} className="m-0">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>{menuItem}</CardTitle>
+                        <CardDescription>
+                          {SETTINGS_PANEL_DESCRIPTIONS[menuItem]}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        {menuItem === "General" ? (
+                          <FieldGroup>
+                            <Field orientation="responsive">
+                              <FieldContent>
+                                <FieldLabel>Screenshot Directory</FieldLabel>
+                                <FieldDescription className="truncate">
+                                  {screenshotDirectory ||
+                                    "Choose a folder before the first screenshot."}
+                                </FieldDescription>
+                              </FieldContent>
+                              <div className="flex shrink-0 gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={chooseScreenshotDirectory}
+                                >
+                                  Choose
+                                </Button>
+                                {screenshotDirectory ? (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={clearScreenshotDirectory}
+                                  >
+                                    Clear
+                                  </Button>
+                                ) : null}
+                              </div>
+                            </Field>
+                          </FieldGroup>
+                        ) : null}
+
+                        {menuItem === "Debug" ? (
+                          <FieldGroup>
+                            <Field orientation="horizontal">
+                              <FieldContent>
+                                <FieldLabel htmlFor="development-mode">
+                                  Development Mode
+                                </FieldLabel>
+                                <FieldDescription>
+                                  Show development diagnostics while working on
+                                  the canvas.
+                                </FieldDescription>
+                              </FieldContent>
+                              <Switch
+                                id="development-mode"
+                                checked={devMode}
+                                onCheckedChange={toggleDevMode}
+                              />
+                            </Field>
+                          </FieldGroup>
+                        ) : null}
+
+                        {menuItem === "About" ? (
+                          <FieldGroup>
+                            <Field>
+                              <FieldTitle>
+                                Developed with daily use and passion for
+                                usability and performance.
+                              </FieldTitle>
+                              <FieldDescription>
+                                <a
+                                  href="https://github.com/phooning/sigma"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="font-medium text-primary underline underline-offset-4"
+                                >
+                                  GitHub source code
+                                </a>
+                              </FieldDescription>
+                            </Field>
+
+                            <p className="mt-4 text-sm text-muted-foreground">
+                              SIGMA Media Canvas: Community Version
+                            </p>
+                          </FieldGroup>
+                        ) : null}
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+                ))}
+              </div>
+            </ScrollArea>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };

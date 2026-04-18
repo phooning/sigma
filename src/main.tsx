@@ -7,7 +7,6 @@ import "./styles/CropControls.css";
 import "./styles/DevStats.css";
 import "./styles/HUD.css";
 import "./styles/MediaItem.css";
-import "./styles/SettingsModal.css";
 import "./styles/VideoPlayer.css";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(

@@ -138,11 +138,11 @@ describe('InfiniteCanvas Application', () => {
     fireEvent.click(screen.getByRole('button', { name: /open settings/i }));
 
     expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'General' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Appearance' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Hotkeys' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Debug' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'About' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'General' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Appearance' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Hotkeys' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Debug' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'About' })).toBeInTheDocument();
     expect(screen.getByText(`Version ${packageJson.version}`)).toBeInTheDocument();
   });
 
@@ -150,8 +150,8 @@ describe('InfiniteCanvas Application', () => {
     render(<InfiniteCanvas />);
 
     fireEvent.click(screen.getByRole('button', { name: /open settings/i }));
-    fireEvent.click(screen.getByRole('button', { name: 'Debug' }));
-    fireEvent.click(screen.getByRole('checkbox', { name: /development mode/i }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Debug' }));
+    fireEvent.click(screen.getByRole('switch', { name: /development mode/i }));
 
     expect(screen.getByLabelText('Development stats')).toBeInTheDocument();
     expect(screen.getByText('FPS')).toBeInTheDocument();
