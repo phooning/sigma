@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { CropInsets, MediaItem } from "../utils/media.types";
 
-const THUMBNAIL_MAX_SCREEN_WIDTH = 360;
+const THUMBNAIL_MAX_SCREEN_WIDTH = 144;
 const PROXY_MAX_SCREEN_WIDTH = 96;
 const PROXY_MAX_SCREEN_HEIGHT = 72;
 

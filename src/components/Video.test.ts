@@ -13,13 +13,15 @@ const videoItem: MediaItem = {
   height: 720,
 };
 
+const thumbnailBandZoom = 0.11;
+
 describe("video level of detail", () => {
   it("keeps full video for visible media while it still has useful screen detail", () => {
     expect(getVideoLod(0.5, true, videoItem)).toBe("video");
   });
 
   it("uses thumbnails only once the rendered video is near thumbnail size", () => {
-    expect(getVideoLod(0.25, true, videoItem)).toBe("thumbnail");
+    expect(getVideoLod(thumbnailBandZoom, true, videoItem)).toBe("thumbnail");
   });
 
   it("uses the proxy only when the rendered video is extremely small", () => {
@@ -27,11 +29,11 @@ describe("video level of detail", () => {
   });
 
   it("uses the proxy while a thumbnail is needed but not generated yet", () => {
-    expect(getVideoLod(0.25, false, videoItem)).toBe("proxy");
+    expect(getVideoLod(thumbnailBandZoom, false, videoItem)).toBe("proxy");
   });
 
   it("requests thumbnails only in the thumbnail-size band", () => {
-    expect(shouldRequestVideoThumbnail(0.25, videoItem)).toBe(true);
+    expect(shouldRequestVideoThumbnail(thumbnailBandZoom, videoItem)).toBe(true);
     expect(shouldRequestVideoThumbnail(0.5, videoItem)).toBe(false);
     expect(shouldRequestVideoThumbnail(0.05, videoItem)).toBe(false);
   });
