@@ -19,7 +19,8 @@ vi.mock('@tauri-apps/api/webview', () => ({
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({
-  convertFileSrc: (path: string) => `asset://${path}`
+  convertFileSrc: (path: string) => `asset://${path}`,
+  invoke: vi.fn(() => Promise.resolve(null))
 }));
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({

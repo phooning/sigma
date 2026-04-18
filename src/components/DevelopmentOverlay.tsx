@@ -57,7 +57,13 @@ const parseGpuUsage = (stdout: string) => {
 const pollGpuStats = async () => {
   const [gpuInfoOutput, gpuUsageOutput] = await Promise.allSettled([
     Command.create("gpu-info", ["SPDisplaysDataType", "-json"]).execute(),
-    Command.create("gpu-usage", ["-l", "-w", "0", "-c", "AGXStatistics"]).execute(),
+    Command.create("gpu-usage", [
+      "-l",
+      "-w",
+      "0",
+      "-c",
+      "AGXStatistics",
+    ]).execute(),
   ]);
 
   const nextStats = {
@@ -165,7 +171,7 @@ const DevelopmentOverlay = ({
       <div>
         <span>Video count</span>
         <strong>
-          {totalVideoCount}/{activeVideoCount}
+          {activeVideoCount}/{totalVideoCount}
         </strong>
       </div>
       <div>

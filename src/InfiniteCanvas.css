@@ -92,6 +92,45 @@ body {
     inset: auto;
 }
 
+.video-lod-thumbnail {
+    filter: saturate(0.9) contrast(0.95);
+}
+
+.video-lod-proxy {
+    position: absolute;
+    inset: 0;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid rgba(94, 234, 212, 0.7);
+    background:
+        linear-gradient(135deg, rgba(20, 184, 166, 0.18), rgba(15, 23, 42, 0.72)),
+        rgba(15, 23, 42, 0.8);
+    pointer-events: none;
+}
+
+.video-lod-icon {
+    width: min(42%, 180px);
+    aspect-ratio: 1.35;
+    border-radius: 8px;
+    border: 6px solid rgba(226, 232, 240, 0.75);
+    opacity: 0.85;
+    position: relative;
+}
+
+.video-lod-icon::after {
+    content: "";
+    position: absolute;
+    left: 42%;
+    top: 26%;
+    width: 0;
+    height: 0;
+    border-top: 18px solid transparent;
+    border-bottom: 18px solid transparent;
+    border-left: 28px solid rgba(226, 232, 240, 0.8);
+}
+
 .reset-btn,
 .delete-btn,
 .reveal-btn,

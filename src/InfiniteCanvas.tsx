@@ -1,7 +1,6 @@
 import {
   useState,
   useRef,
-  useEffect,
   WheelEvent as ReactWheelEvent,
 } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -38,6 +37,7 @@ import {
 } from "./components/CanvasActions";
 import { useTauriDrop } from "./utils/drag";
 import { useCanvasHotkeys } from "./utils/keyboard";
+import { VideoMedia } from "./components/Video";
 
 export default function InfiniteCanvas() {
   const [items, setItems] = useState<MediaItem[]>([]);
@@ -391,6 +391,9 @@ export default function InfiniteCanvas() {
       const loadedItems = data.items.map((i) => ({
         ...i,
         url: convertFileSrc(i.filePath),
+        thumbnailUrl: i.thumbnailPath
+          ? convertFileSrc(i.thumbnailPath)
+          : undefined,
       }));
       setItems(loadedItems);
     }
@@ -440,6 +443,12 @@ export default function InfiniteCanvas() {
             return null;
           }
 
+          const isInViewport =
+            itemRight >= viewLeft &&
+            itemLeft <= viewRight &&
+            itemBottom >= viewTop &&
+            itemTop <= viewBottom;
+
           const zIndex =
             draggingItem === id ||
             resizingItem === id ||
@@ -487,21 +496,12 @@ export default function InfiniteCanvas() {
                 />
               ) : (
                 <>
-                  <video
-                    className="media-content"
-                    src={url}
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                    draggable={false}
-                    onDragStart={(e) => e.preventDefault()}
-                    style={{
-                      left: -crop.left,
-                      top: -crop.top,
-                      width: item.width + crop.left + crop.right,
-                      height: item.height + crop.top + crop.bottom,
-                    }}
+                  <VideoMedia
+                    url={url}
+                    crop={crop}
+                    item={item}
+                    isInViewport={isInViewport}
+                    zoom={viewport.zoom}
                   />
                   {editingCropItem === id && (
                     <div className="crop-overlay" aria-hidden="true">

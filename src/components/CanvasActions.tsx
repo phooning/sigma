@@ -2,13 +2,13 @@ import { RefObject, WheelEvent } from "react";
 import { MediaItem, Viewport } from "../utils/media.types";
 import { v4 as uuidv4 } from "uuid";
 import { IMAGE_EXTENSIONS, VIDEO_EXTENSIONS } from "../utils/media";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 
 export type WheelInputType = "trackpad-pan" | "zoom";
+type VideoLodAssets = Pick<MediaItem, "thumbnailPath" | "thumbnailUrl">;
 
 export const isMacOS = () =>
-  /mac/i.test(navigator.platform) ||
-  navigator.userAgent.includes("Macintosh");
+  /mac/i.test(navigator.platform) || navigator.userAgent.includes("Macintosh");
 
 export const getWheelInputType = (e: WheelEvent): WheelInputType => {
   if (!isMacOS()) return "zoom";
@@ -73,12 +73,35 @@ export const handleZoomAction = ({
   }
 };
 
+const generateVideoThumbnail = async (
+  filePath: string,
+): Promise<VideoLodAssets> => {
+  try {
+    const thumbnailPath = await invoke<string | null>(
+      "generate_video_thumbnail",
+      { path: filePath },
+    );
+
+    if (!thumbnailPath) return {};
+
+    return {
+      thumbnailPath,
+      thumbnailUrl: convertFileSrc(thumbnailPath),
+    };
+  } catch (err) {
+    console.warn("Failed to generate video thumbnail:", err);
+    return {};
+  }
+};
+
 export const onDropMedia = ({
   paths,
   viewportRef,
+  onThumbnailGenerated,
 }: {
   paths: string[];
   viewportRef: RefObject<Viewport>;
+  onThumbnailGenerated?: (id: string, lodAssets: VideoLodAssets) => void;
 }) => {
   const centerX =
     -viewportRef.current.x + window.innerWidth / 2 / viewportRef.current.zoom;
@@ -95,11 +118,16 @@ export const onDropMedia = ({
       if (!isVideo && !isImage) return resolve(null);
 
       const url = convertFileSrc(filePath);
-      const createItem = (w: number, h: number): MediaItem => ({
+      const createItem = (
+        w: number,
+        h: number,
+        lodAssets: VideoLodAssets = {},
+      ): MediaItem => ({
         id: uuidv4(),
         type: isVideo ? "video" : "image",
         filePath,
         url,
+        ...lodAssets,
         x: centerX + index * 1350,
         y: centerY,
         width: 1280,
@@ -108,14 +136,33 @@ export const onDropMedia = ({
 
       if (isImage) {
         const img = new Image();
-        img.onload = () => resolve(createItem(img.width, img.height));
-        img.onerror = () => resolve(createItem(1280, 720));
+        img.onload = () => {
+          resolve(createItem(img.width, img.height));
+          img.src = "";
+        };
+        img.onerror = () => {
+          resolve(createItem(1280, 720));
+          img.src = "";
+        };
         img.src = url;
       } else {
         const video = document.createElement("video");
-        video.onloadedmetadata = () =>
-          resolve(createItem(video.videoWidth, video.videoHeight));
-        video.onerror = () => resolve(createItem(1280, 720));
+        video.preload = "metadata";
+        video.onloadedmetadata = () => {
+          const item = createItem(video.videoWidth, video.videoHeight);
+          resolve(item);
+          video.src = "";
+
+          void generateVideoThumbnail(filePath).then((lodAssets) => {
+            if (lodAssets.thumbnailUrl) {
+              onThumbnailGenerated?.(item.id, lodAssets);
+            }
+          });
+        };
+        video.onerror = () => {
+          resolve(createItem(1280, 720));
+          video.src = "";
+        };
         video.src = url;
       }
     });

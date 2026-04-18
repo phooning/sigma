@@ -18,6 +18,8 @@ export interface MediaItem {
   type: MediaItemType;
   filePath: string;
   url: string;
+  thumbnailPath?: string;
+  thumbnailUrl?: string;
   x: number;
   y: number;
   width: number;

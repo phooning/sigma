@@ -32,7 +32,17 @@ export function useTauriDrop({ viewportRef, setItems }: UseTauriDropOptions) {
     const unlistenPromise = getCurrentWebview().onDragDropEvent((event) => {
       if (event.payload.type === "drop") {
         Promise.all(
-          onDropMedia({ paths: event.payload.paths, viewportRef }),
+          onDropMedia({
+            paths: event.payload.paths,
+            viewportRef,
+            onThumbnailGenerated: (id, lodAssets) => {
+              setItems((prev) =>
+                prev.map((item) =>
+                  item.id === id ? { ...item, ...lodAssets } : item,
+                ),
+              );
+            },
+          }),
         ).then((results) => {
           const validItems = results.filter(
             (item): item is MediaItem => item !== null,

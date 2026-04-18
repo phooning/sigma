@@ -195,6 +195,7 @@ const serializeItemForStorage = (
   y: item.y,
   width: item.width,
   height: item.height,
+  ...(item.thumbnailPath ? { thumbnailPath: item.thumbnailPath } : {}),
   ...(item.crop ? { crop: item.crop } : {}),
 });
 
