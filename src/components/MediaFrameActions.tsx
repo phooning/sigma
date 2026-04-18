@@ -1,6 +1,5 @@
 import { CROP_HANDLES, EMPTY_CROP } from "../utils/media";
 import { MediaItem } from "../utils/media.types";
-import { resetImageSize } from "./ImageActions";
 
 export function CropOverlay({
   id,

@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { CropInsets, MediaItem } from "../utils/media.types";
 
 const THUMBNAIL_MAX_SCREEN_WIDTH = 144;
@@ -15,6 +22,22 @@ interface VideoMediaProps {
 }
 
 type VideoLod = "video" | "thumbnail" | "proxy";
+
+export const clampVideoTime = (time: number, duration: number) => {
+  if (!Number.isFinite(time) || !Number.isFinite(duration) || duration <= 0) {
+    return 0;
+  }
+
+  return Math.min(Math.max(time, 0), duration);
+};
+
+const formatVideoTime = (time: number) => {
+  const safeTime = Number.isFinite(time) ? Math.max(0, Math.floor(time)) : 0;
+  const minutes = Math.floor(safeTime / 60);
+  const seconds = safeTime % 60;
+
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+};
 
 export const getVideoLod = (
   zoom: number,
@@ -59,7 +82,19 @@ export function VideoMedia({
 }: VideoMediaProps) {
   const [isLoadRequested, setIsLoadRequested] = useState(false);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [isScrubbing, setIsScrubbing] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef<number | null>(null);
+  const durationRef = useRef(0);
+  const isScrubbingRef = useRef(false);
+  const timelineStateRef = useRef({
+    anchorTime: 0,
+    anchorTimestamp: 0,
+    playbackRate: 1,
+  });
   const lod = isLoadRequested
     ? "video"
     : getVideoLod(zoom, !!item.thumbnailUrl, item);
@@ -88,6 +123,137 @@ export function VideoMedia({
       });
   }, [isInViewport, lod, shouldDeferVideoLoad]);
 
+  const writePlayheadPosition = useCallback((time: number) => {
+    const duration = durationRef.current;
+    const timeline = timelineRef.current;
+    if (duration <= 0 || !timeline) return;
+
+    const ratio = clampVideoTime(time, duration) / duration;
+
+    timeline.style.setProperty(
+      "--video-playhead-position",
+      `${ratio * 100}%`,
+    );
+  }, []);
+
+  const stopTimelineAnimation = useCallback(() => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  }, []);
+
+  const tickTimeline = useCallback(
+    (timestamp: number) => {
+      const video = videoRef.current;
+      const duration = durationRef.current;
+
+      if (
+        !video ||
+        duration <= 0 ||
+        video.paused ||
+        video.ended ||
+        isScrubbingRef.current
+      ) {
+        rafRef.current = null;
+        return;
+      }
+
+      const state = timelineStateRef.current;
+      const elapsed = (timestamp - state.anchorTimestamp) / 1000;
+      const nextTime = clampVideoTime(
+        state.anchorTime + elapsed * state.playbackRate,
+        duration,
+      );
+
+      writePlayheadPosition(nextTime);
+      rafRef.current = requestAnimationFrame(tickTimeline);
+    },
+    [writePlayheadPosition],
+  );
+
+  const startTimelineAnimation = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || durationRef.current <= 0 || isScrubbingRef.current) return;
+
+    timelineStateRef.current = {
+      anchorTime: clampVideoTime(video.currentTime, durationRef.current),
+      anchorTimestamp: performance.now(),
+      playbackRate: video.playbackRate || 1,
+    };
+
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(tickTimeline);
+    }
+  }, [tickTimeline]);
+
+  const syncTimelineFromVideo = useCallback(
+    (time: number, nextDuration = durationRef.current) => {
+      const safeDuration = Number.isFinite(nextDuration) ? nextDuration : 0;
+      const nextTime = clampVideoTime(time, safeDuration);
+      const video = videoRef.current;
+
+      durationRef.current = safeDuration;
+      timelineStateRef.current = {
+        anchorTime: nextTime,
+        anchorTimestamp: performance.now(),
+        playbackRate: video?.playbackRate || 1,
+      };
+
+      setCurrentTime(nextTime);
+      writePlayheadPosition(nextTime);
+    },
+    [writePlayheadPosition],
+  );
+
+  const updateVideoMetadata = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const nextDuration = Number.isFinite(video.duration) ? video.duration : 0;
+    durationRef.current = nextDuration;
+    setDuration(nextDuration);
+    syncTimelineFromVideo(video.currentTime, nextDuration);
+    playVideo();
+  }, [playVideo, syncTimelineFromVideo]);
+
+  const seekToRatio = useCallback(
+    (ratio: number) => {
+      const video = videoRef.current;
+      const duration = durationRef.current;
+      if (!video || duration <= 0) return;
+
+      const nextTime = clampVideoTime(ratio * duration, duration);
+      video.currentTime = nextTime;
+      syncTimelineFromVideo(nextTime, duration);
+    },
+    [syncTimelineFromVideo],
+  );
+
+  const seekFromPointer = useCallback(
+    (clientX: number) => {
+      const timeline = timelineRef.current;
+      if (!timeline) return;
+
+      const rect = timeline.getBoundingClientRect();
+      const ratio =
+        rect.width > 0 ? (clientX - rect.left) / rect.width : 0;
+      seekToRatio(Math.min(Math.max(ratio, 0), 1));
+    },
+    [seekToRatio],
+  );
+
+  const stopCanvasGesture = (
+    e: ReactPointerEvent<HTMLElement> | ReactMouseEvent<HTMLElement>,
+  ) => {
+    e.stopPropagation();
+  };
+
+  const setTimelineScrubbing = useCallback((nextIsScrubbing: boolean) => {
+    isScrubbingRef.current = nextIsScrubbing;
+    setIsScrubbing(nextIsScrubbing);
+  }, []);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -96,8 +262,30 @@ export function VideoMedia({
       playVideo();
     } else {
       video.pause();
+      stopTimelineAnimation();
     }
-  }, [isInViewport, lod, playVideo, shouldDeferVideoLoad]);
+  }, [
+    isInViewport,
+    lod,
+    playVideo,
+    shouldDeferVideoLoad,
+    stopTimelineAnimation,
+  ]);
+
+  useEffect(() => {
+    stopTimelineAnimation();
+    durationRef.current = 0;
+    isScrubbingRef.current = false;
+    setDuration(0);
+    setCurrentTime(0);
+    setIsScrubbing(false);
+  }, [stopTimelineAnimation, url]);
+
+  useEffect(() => {
+    writePlayheadPosition(currentTime);
+  }, [currentTime, duration, writePlayheadPosition]);
+
+  useEffect(() => stopTimelineAnimation, [stopTimelineAnimation]);
 
   const mediaStyle = {
     left: -crop.left,
@@ -164,19 +352,114 @@ export function VideoMedia({
         src={url}
         autoPlay={isInViewport}
         preload={isLoadRequested && isInViewport ? "auto" : "metadata"}
-        controls={isLoadRequested}
         loop
         muted
         playsInline
         draggable={false}
-        onLoadedMetadata={playVideo}
-        onCanPlay={playVideo}
+        onLoadedMetadata={updateVideoMetadata}
+        onCanPlay={() => {
+          playVideo();
+          startTimelineAnimation();
+        }}
+        onDurationChange={updateVideoMetadata}
+        onPlay={startTimelineAnimation}
+        onPause={stopTimelineAnimation}
+        onRateChange={(e) => {
+          timelineStateRef.current = {
+            anchorTime: clampVideoTime(
+              e.currentTarget.currentTime,
+              durationRef.current,
+            ),
+            anchorTimestamp: performance.now(),
+            playbackRate: e.currentTarget.playbackRate || 1,
+          };
+        }}
+        onSeeked={(e) => {
+          syncTimelineFromVideo(e.currentTarget.currentTime);
+          startTimelineAnimation();
+        }}
+        onTimeUpdate={(e) => {
+          if (!isScrubbingRef.current) {
+            syncTimelineFromVideo(e.currentTarget.currentTime);
+          }
+        }}
         onError={() => {
           setPlaybackError("Playback failed. This file may need transcoding.");
         }}
         onDragStart={(e) => e.preventDefault()}
         style={mediaStyle}
       />
+      {duration > 0 && (
+        <div
+          className={`video-timeline ${isScrubbing ? "is-scrubbing" : ""}`}
+          onPointerDown={stopCanvasGesture}
+          onPointerMove={stopCanvasGesture}
+          onPointerUp={stopCanvasGesture}
+          onClick={stopCanvasGesture}
+        >
+          <div
+            ref={timelineRef}
+            className="video-timeline-track"
+            role="slider"
+            aria-label="Video timeline"
+            aria-valuemin={0}
+            aria-valuemax={Math.round(duration)}
+            aria-valuenow={Math.round(currentTime)}
+            aria-valuetext={`${formatVideoTime(currentTime)} of ${formatVideoTime(duration)}`}
+            tabIndex={0}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setTimelineScrubbing(true);
+              stopTimelineAnimation();
+              e.currentTarget.setPointerCapture(e.pointerId);
+              seekFromPointer(e.clientX);
+            }}
+            onPointerMove={(e) => {
+              e.stopPropagation();
+              if (isScrubbingRef.current) {
+                seekFromPointer(e.clientX);
+              }
+            }}
+            onPointerUp={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setTimelineScrubbing(false);
+              seekFromPointer(e.clientX);
+              e.currentTarget.releasePointerCapture(e.pointerId);
+              startTimelineAnimation();
+            }}
+            onPointerCancel={(e) => {
+              e.stopPropagation();
+              setTimelineScrubbing(false);
+              startTimelineAnimation();
+            }}
+            onKeyDown={(e) => {
+              const step = e.shiftKey ? 10 : 5;
+              if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
+                e.preventDefault();
+                seekToRatio((currentTime - step) / duration);
+              } else if (e.key === "ArrowRight" || e.key === "ArrowUp") {
+                e.preventDefault();
+                seekToRatio((currentTime + step) / duration);
+              } else if (e.key === "Home") {
+                e.preventDefault();
+                seekToRatio(0);
+              } else if (e.key === "End") {
+                e.preventDefault();
+                seekToRatio(1);
+              }
+            }}
+          >
+            <div className="video-timeline-buffer" />
+            <div className="video-timeline-progress" />
+            <div className="video-timeline-thumb" />
+          </div>
+          <div className="video-timeline-time">
+            {formatVideoTime(currentTime)} / {formatVideoTime(duration)}
+          </div>
+        </div>
+      )}
       {playbackError && (
         <div className="video-playback-error" role="status">
           {playbackError}

@@ -137,6 +137,110 @@ body {
     pointer-events: auto;
 }
 
+.video-timeline {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.72);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: rgba(248, 250, 252, 0.94);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(6px);
+    transition:
+        opacity 0.16s ease,
+        transform 0.16s ease;
+    z-index: 4;
+}
+
+.media-item:hover .video-timeline,
+.video-timeline:focus-within,
+.video-timeline.is-scrubbing {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
+.video-timeline-track {
+    --video-playhead-position: 0%;
+    position: relative;
+    height: 18px;
+    min-width: 64px;
+    cursor: ew-resize;
+    touch-action: none;
+    outline: none;
+}
+
+.video-timeline-track::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 7px;
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.55);
+}
+
+.video-timeline-track:focus-visible::before {
+    box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.42);
+}
+
+.video-timeline-buffer,
+.video-timeline-progress {
+    position: absolute;
+    left: 0;
+    top: 7px;
+    height: 4px;
+    border-radius: 999px;
+    pointer-events: none;
+}
+
+.video-timeline-buffer {
+    right: 0;
+    background: rgba(226, 232, 240, 0.14);
+}
+
+.video-timeline-progress {
+    width: var(--video-playhead-position);
+    background: #2dd4bf;
+    will-change: width;
+}
+
+.video-timeline-thumb {
+    position: absolute;
+    left: var(--video-playhead-position);
+    top: 50%;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #f8fafc;
+    box-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    will-change: left;
+}
+
+.video-timeline-time {
+    min-width: 80px;
+    color: rgba(226, 232, 240, 0.92);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    line-height: 1;
+    text-align: right;
+    white-space: nowrap;
+}
+
 .video-playback-error {
     position: absolute;
     left: 16px;

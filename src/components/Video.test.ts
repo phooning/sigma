@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MediaItem } from "../utils/media.types";
-import { getVideoLod, shouldRequestVideoThumbnail } from "./Video";
+import { clampVideoTime, getVideoLod, shouldRequestVideoThumbnail } from "./Video";
 
 const videoItem: MediaItem = {
   id: "video-1",
@@ -36,5 +36,18 @@ describe("video level of detail", () => {
     expect(shouldRequestVideoThumbnail(thumbnailBandZoom, videoItem)).toBe(true);
     expect(shouldRequestVideoThumbnail(0.5, videoItem)).toBe(false);
     expect(shouldRequestVideoThumbnail(0.05, videoItem)).toBe(false);
+  });
+});
+
+describe("video timeline helpers", () => {
+  it("clamps scrub times to the playable range", () => {
+    expect(clampVideoTime(-5, 20)).toBe(0);
+    expect(clampVideoTime(8, 20)).toBe(8);
+    expect(clampVideoTime(25, 20)).toBe(20);
+  });
+
+  it("treats invalid durations as the start of the video", () => {
+    expect(clampVideoTime(5, 0)).toBe(0);
+    expect(clampVideoTime(5, Number.NaN)).toBe(0);
   });
 });
