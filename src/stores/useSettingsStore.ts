@@ -74,3 +74,21 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   },
   resetSettings: () => set(getInitialSettings()),
 }));
+
+export const useGetSettingsStore = () => {
+  const screenshotDirectory = useSettingsStore(
+    (state) => state.screenshotDirectory,
+  );
+  const canvasBackgroundPattern = useSettingsStore(
+    (state) => state.canvasBackgroundPattern,
+  );
+  const setScreenshotDirectory = useSettingsStore(
+    (state) => state.setScreenshotDirectory,
+  );
+
+  return {
+    screenshotDirectory,
+    setScreenshotDirectory,
+    canvasBackgroundPattern,
+  };
+};

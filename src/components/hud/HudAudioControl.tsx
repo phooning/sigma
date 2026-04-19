@@ -8,7 +8,6 @@ type HudAudioControlProps = {
 };
 
 export function HudAudioControl({
-  activeAudioItem,
   activeAudioName,
   onSelectActiveAudioItem,
 }: HudAudioControlProps) {
@@ -16,20 +15,11 @@ export function HudAudioControl({
     useAudioPlayback();
   const audioPercent = Math.round(audioVolume * 100);
 
-  const renderAudioMarqueeItem = (isHidden = false) =>
-    activeAudioItem.thumbnailUrl ? (
-      <img
-        className="hud-audio-thumbnail"
-        src={activeAudioItem.thumbnailUrl}
-        alt={isHidden ? "" : activeAudioName}
-        aria-hidden={isHidden}
-        draggable={false}
-      />
-    ) : (
-      <span className="hud-audio-filename" aria-hidden={isHidden}>
-        {activeAudioName}
-      </span>
-    );
+  const renderAudioMarqueeItem = (isHidden = false) => (
+    <span className="hud-audio-filename" aria-hidden={isHidden}>
+      {activeAudioName}
+    </span>
+  );
 
   return (
     <div
@@ -96,4 +86,3 @@ export function HudAudioControl({
     </div>
   );
 }
-

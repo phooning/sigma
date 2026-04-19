@@ -7,6 +7,7 @@ import type {
 } from "./useViewportAnimation.types";
 
 export const useViewportAnimation = ({
+  onViewportChange,
   viewportRef,
   setViewport,
 }: UseViewportAnimationParams): UseViewportAnimationResult => {
@@ -21,14 +22,16 @@ export const useViewportAnimation = ({
 
   const applyViewportPanPosition = useCallback(
     (position: ViewportPanPosition) => {
-      viewportRef.current = {
+      const nextViewport = {
         ...viewportRef.current,
         x: position.x,
         y: position.y,
       };
+      viewportRef.current = nextViewport;
+      onViewportChange?.(nextViewport);
       setViewport((prev) => ({ ...prev, x: position.x, y: position.y }));
     },
-    [setViewport, viewportRef],
+    [onViewportChange, setViewport, viewportRef],
   );
 
   const panViewportTo = useCallback(

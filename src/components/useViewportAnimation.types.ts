@@ -10,6 +10,7 @@ export type ViewportPanPosition = Pick<Viewport, "x" | "y">;
 export type UseViewportAnimationParams = {
   viewportRef: MutableRefObject<Viewport>;
   setViewport: Dispatch<SetStateAction<Viewport>>;
+  onViewportChange?: (viewport: Viewport) => void;
 };
 
 export type UseViewportAnimationResult = {
