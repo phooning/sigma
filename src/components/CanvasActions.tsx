@@ -34,29 +34,8 @@ const probeMedia = async (path: string): Promise<MediaFileInfo> => {
 export const isMacOS = () =>
   /mac/i.test(navigator.platform) || navigator.userAgent.includes("Macintosh");
 
-export const getWheelInputType = (e: WheelEvent): WheelInputType => {
-  if (!isMacOS()) return "zoom";
-
-  const isPinchGesture = e.ctrlKey;
-  if (isPinchGesture) return "zoom";
-
-  const isPixelScroll = e.deltaMode === 0;
-  const hasHorizontalScroll = Math.abs(e.deltaX) > 0;
-  const hasFractionalDelta = !Number.isInteger(e.deltaY);
-  const hasSmallDelta = Math.abs(e.deltaY) < 50;
-  const isLargeIntegerWheelStep =
-    Number.isInteger(e.deltaY) && Math.abs(e.deltaY) >= 100;
-
-  if (
-    isPixelScroll &&
-    !isLargeIntegerWheelStep &&
-    (hasHorizontalScroll || hasFractionalDelta || hasSmallDelta)
-  ) {
-    return "trackpad-pan";
-  }
-
-  return "zoom";
-};
+export const getWheelInputType = (e: WheelEvent): WheelInputType =>
+  e.ctrlKey ? "zoom" : "trackpad-pan";
 
 export const handlePanAction = ({
   e,

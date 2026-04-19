@@ -60,6 +60,7 @@
 .delete-btn,
 .reveal-btn,
 .screenshot-btn,
+.audio-btn,
 .crop-btn {
     position: absolute;
     top: var(--media-action-offset);
@@ -109,11 +110,17 @@
     font-size: var(--text-2xl);
     font-weight: 700;
 }
+.audio-btn {
+    right: calc(var(--media-action-offset) + var(--media-action-step) * 5);
+    font-size: var(--text-icon);
+    font-weight: 700;
+}
 
 .media-item:hover .delete-btn,
 .media-item:hover .reset-btn,
 .media-item:hover .reveal-btn,
 .media-item:hover .screenshot-btn,
+.media-item:hover .audio-btn,
 .media-item:hover .crop-btn,
 .media-item.crop-editing .crop-btn {
     opacity: 1;
@@ -133,6 +140,11 @@
 }
 .screenshot-btn:hover {
     background: var(--accent-success);
+    transform: scale(1.1);
+}
+.audio-btn:hover,
+.media-item:hover .audio-btn[aria-pressed="true"] {
+    background: rgba(45, 212, 191, 0.85);
     transform: scale(1.1);
 }
 .crop-btn:hover,

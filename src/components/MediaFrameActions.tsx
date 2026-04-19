@@ -1,5 +1,29 @@
 import { CROP_HANDLES, EMPTY_CROP } from "../utils/media";
 import { MediaItem } from "../utils/media.types";
+import { useAudioPlaybackStore } from "../stores/useAudioPlaybackStore";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "./ui/tooltip";
+
+function ActionTooltip({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="top" sideOffset={6}>
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 export function CropOverlay({
   id,
@@ -50,6 +74,7 @@ export function MediaFrameActions({
   resetSize,
   deleteItem,
   startCropEdit,
+  toggleAudioPlayback,
   isCropEditing,
 }: {
   item: MediaItem;
@@ -58,46 +83,76 @@ export function MediaFrameActions({
   resetSize: (id: string, e: React.MouseEvent) => void;
   deleteItem: (id: string, e: React.MouseEvent) => void;
   startCropEdit: (id: string, e: React.MouseEvent) => void;
+  toggleAudioPlayback: (id: string, e: React.MouseEvent) => void;
   isCropEditing: boolean;
 }) {
+  const isAudioActive = useAudioPlaybackStore(
+    (state) => state.activeItemId === item.id,
+  );
+  const audioLabel = isAudioActive
+    ? "Disable audio playback"
+    : "Enable audio playback";
+
   return (
-    <>
-      <button
-        className="crop-btn"
-        onClick={(e) => startCropEdit(item.id, e)}
-        title="Crop"
-        aria-pressed={isCropEditing}
-      >
-        C
-      </button>
-      <button
-        className="reset-btn"
-        onClick={(e) => resetSize(item.id, e)}
-        title="Reset Size"
-      >
-        ⤡
-      </button>
-      <button
-        className="reveal-btn"
-        onClick={(e) => revealItem(item.id, e)}
-        title="Show in Folder"
-      >
-        ⌕
-      </button>
-      <button
-        className="screenshot-btn"
-        onClick={(e) => screenshotItem(item.id, e)}
-        title="Save Screenshot"
-      >
-        ⧉
-      </button>
-      <button
-        className="delete-btn"
-        onClick={(e) => deleteItem(item.id, e)}
-        title="Delete"
-      >
-        ✕
-      </button>
-    </>
+    <TooltipProvider delayDuration={0} skipDelayDuration={0}>
+      <ActionTooltip label="Crop">
+        <button
+          className="crop-btn"
+          onClick={(e) => startCropEdit(item.id, e)}
+          aria-label="Crop"
+          aria-pressed={isCropEditing}
+        >
+          C
+        </button>
+      </ActionTooltip>
+      <ActionTooltip label="Reset size">
+        <button
+          className="reset-btn"
+          onClick={(e) => resetSize(item.id, e)}
+          aria-label="Reset size"
+        >
+          ⤡
+        </button>
+      </ActionTooltip>
+      <ActionTooltip label="Show in folder">
+        <button
+          className="reveal-btn"
+          onClick={(e) => revealItem(item.id, e)}
+          aria-label="Show in folder"
+        >
+          ⌕
+        </button>
+      </ActionTooltip>
+      <ActionTooltip label="Save screenshot">
+        <button
+          className="screenshot-btn"
+          onClick={(e) => screenshotItem(item.id, e)}
+          aria-label="Save screenshot"
+        >
+          ⧉
+        </button>
+      </ActionTooltip>
+      {item.type === "video" && (
+        <ActionTooltip label={audioLabel}>
+          <button
+            className="audio-btn"
+            onClick={(e) => toggleAudioPlayback(item.id, e)}
+            aria-label={audioLabel}
+            aria-pressed={isAudioActive}
+          >
+            ♪
+          </button>
+        </ActionTooltip>
+      )}
+      <ActionTooltip label="Delete">
+        <button
+          className="delete-btn"
+          onClick={(e) => deleteItem(item.id, e)}
+          aria-label="Delete"
+        >
+          ✕
+        </button>
+      </ActionTooltip>
+    </TooltipProvider>
   );
 }

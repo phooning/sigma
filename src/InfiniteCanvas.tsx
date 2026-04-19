@@ -1,11 +1,15 @@
 import {
+  useCallback,
+  useEffect,
   useState,
   useRef,
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction,
   WheelEvent as ReactWheelEvent,
-  type CSSProperties,
 } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { message, open } from "@tauri-apps/plugin-dialog";
+import { message, open, save } from "@tauri-apps/plugin-dialog";
 import { ISelectionBox, SelectionBox } from "./components/SelectionBox";
 import { Hud } from "./components/Hud";
 import { DevelopmentOverlay } from "./components/DevelopmentOverlay";
@@ -14,7 +18,12 @@ import {
   MediaFrameActions,
   resetFrameSize,
 } from "./components/MediaFrameActions";
-import { getCrop, saveMediaScreenshot, useThumbnailQueue } from "./utils/media";
+import {
+  exportMediaVideo,
+  getCrop,
+  saveMediaScreenshot,
+  useThumbnailQueue,
+} from "./utils/media";
 import {
   CropHandle,
   CropInsets,
@@ -42,16 +51,151 @@ import {
 import { useTauriDrop } from "./utils/drag";
 import { useCanvasHotkeys } from "./utils/keyboard";
 import { VideoMedia } from "./components/Video";
+import { useSettingsStore } from "./stores/useSettingsStore";
+import { useAudioPlaybackStore } from "./stores/useAudioPlaybackStore";
+import { useBackgroundCanvas } from "./components/useBackgroundCanvas";
+import {
+  getStoredVideoLoop,
+  useVideoExportStore,
+} from "./stores/useVideoExportStore";
+import { getLoopRange } from "./utils/videoUtils";
+import { animateKineticPan } from "./utils/animations";
 
-const SCREENSHOT_DIRECTORY_STORAGE_KEY = "sigma:screenshot-directory";
+const VIEW_FIT_GAP = 50;
+const HUD_HEIGHT_FALLBACK = 48;
+const CULL_MARGIN = 500;
+const ACTION_SELECTORS =
+  ".reset-btn, .delete-btn, .crop-btn, .reveal-btn, .screenshot-btn, .audio-btn";
 
-const getStoredScreenshotDirectory = () => {
-  try {
-    return localStorage.getItem(SCREENSHOT_DIRECTORY_STORAGE_KEY) ?? "";
-  } catch {
-    return "";
-  }
+const getMediaFileStem = (filePath: string) => {
+  const fileName = filePath.split(/[\\/]/).filter(Boolean).pop() || "video";
+  const extensionIndex = fileName.lastIndexOf(".");
+
+  return extensionIndex > 0 ? fileName.slice(0, extensionIndex) : fileName;
 };
+
+const getExportDefaultPath = (filePath: string) => {
+  const safeStem = getMediaFileStem(filePath)
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, "_")
+    .trim();
+
+  return `${safeStem || "video"}.mp4`;
+};
+
+type ViewBounds = {
+  viewLeft: number;
+  viewTop: number;
+  viewRight: number;
+  viewBottom: number;
+  screenWidth: number;
+  screenHeight: number;
+};
+
+const getViewBounds = (
+  viewport: Viewport,
+  width: number,
+  height: number,
+): ViewBounds => {
+  const screenWidth = width / viewport.zoom;
+  const screenHeight = height / viewport.zoom;
+  const viewLeft = -viewport.x;
+  const viewTop = -viewport.y;
+
+  return {
+    viewLeft,
+    viewTop,
+    viewRight: viewLeft + screenWidth,
+    viewBottom: viewTop + screenHeight,
+    screenWidth,
+    screenHeight,
+  };
+};
+
+type UseActiveAudioSelectionParams = {
+  activeAudioItemId: string | null;
+  containerRef: MutableRefObject<HTMLDivElement | null>;
+  itemsRef: MutableRefObject<MediaItem[]>;
+  panViewportTo: (target: Pick<Viewport, "x" | "y">) => void;
+  setEditingCropItem: Dispatch<SetStateAction<string | null>>;
+  setSelectedItems: Dispatch<SetStateAction<Set<string>>>;
+  viewportRef: MutableRefObject<Viewport>;
+};
+
+const useActiveAudioSelection = ({
+  activeAudioItemId,
+  containerRef,
+  itemsRef,
+  panViewportTo,
+  setEditingCropItem,
+  setSelectedItems,
+  viewportRef,
+}: UseActiveAudioSelectionParams) =>
+  useCallback(() => {
+    if (!activeAudioItemId) return;
+
+    const item = itemsRef.current.find((i) => i.id === activeAudioItemId);
+    if (!item) return;
+
+    const zoom = viewportRef.current.zoom;
+    const hudHeight = containerRef.current
+      ?.querySelector(".ui-overlay")
+      ?.getBoundingClientRect().height;
+    const headerHeight = (hudHeight || HUD_HEIGHT_FALLBACK) / zoom;
+    const {
+      screenWidth,
+      screenHeight,
+      viewLeft,
+      viewTop,
+      viewRight,
+      viewBottom,
+    } = getViewBounds(
+      viewportRef.current,
+      window.innerWidth,
+      window.innerHeight,
+    );
+    const usableViewTop = viewTop + headerHeight;
+    const itemLeft = item.x;
+    const itemTop = item.y;
+    const itemRight = item.x + item.width;
+    const itemBottom = item.y + item.height;
+    let nextViewLeft = viewLeft;
+    let nextViewTop = viewTop;
+
+    if (item.width + VIEW_FIT_GAP * 2 <= screenWidth) {
+      if (itemLeft < viewLeft + VIEW_FIT_GAP) {
+        nextViewLeft = itemLeft - VIEW_FIT_GAP;
+      } else if (itemRight > viewRight - VIEW_FIT_GAP) {
+        nextViewLeft = itemRight + VIEW_FIT_GAP - screenWidth;
+      }
+    } else if (itemLeft < viewLeft || itemRight > viewRight) {
+      nextViewLeft = itemLeft - VIEW_FIT_GAP;
+    }
+
+    if (item.height + VIEW_FIT_GAP * 2 + headerHeight <= screenHeight) {
+      if (itemTop < usableViewTop + VIEW_FIT_GAP) {
+        nextViewTop = itemTop - VIEW_FIT_GAP - headerHeight;
+      } else if (itemBottom > viewBottom - VIEW_FIT_GAP) {
+        nextViewTop = itemBottom + VIEW_FIT_GAP - screenHeight;
+      }
+    } else if (itemTop < usableViewTop || itemBottom > viewBottom) {
+      nextViewTop = itemTop - VIEW_FIT_GAP - headerHeight;
+    }
+
+    panViewportTo({
+      x: -nextViewLeft,
+      y: -nextViewTop,
+    });
+    setSelectedItems(new Set([item.id]));
+    setEditingCropItem(null);
+  }, [
+    activeAudioItemId,
+    containerRef,
+    itemsRef,
+    panViewportTo,
+    setEditingCropItem,
+    setSelectedItems,
+    viewportRef,
+  ]);
 
 export default function InfiniteCanvas() {
   const [items, setItems] = useState<MediaItem[]>([]);
@@ -63,11 +207,36 @@ export default function InfiniteCanvas() {
   const [croppingItem, setCroppingItem] = useState<string | null>(null);
   const [selectionBox, setSelectionBox] = useState<ISelectionBox | null>(null);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [screenshotDirectory, setScreenshotDirectoryState] = useState(
-    getStoredScreenshotDirectory,
+  const [canvasSize, setCanvasSize] = useState(() => ({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  }));
+  const screenshotDirectory = useSettingsStore(
+    (state) => state.screenshotDirectory,
+  );
+  const canvasBackgroundPattern = useSettingsStore(
+    (state) => state.canvasBackgroundPattern,
+  );
+  const setScreenshotDirectory = useSettingsStore(
+    (state) => state.setScreenshotDirectory,
+  );
+  const activeAudioItemId = useAudioPlaybackStore(
+    (state) => state.activeItemId,
+  );
+  const toggleAudioItem = useAudioPlaybackStore((state) => state.toggleItem);
+  const clearAudioItem = useAudioPlaybackStore((state) => state.clearItem);
+  const exportingItemId = useVideoExportStore((state) => state.exportingItemId);
+  const setExportingItemId = useVideoExportStore(
+    (state) => state.setExportingItemId,
+  );
+  const clearVideoExportItemState = useVideoExportStore(
+    (state) => state.clearItemState,
+  );
+  const clearAllVideoExportState = useVideoExportStore(
+    (state) => state.clearAllItemState,
   );
 
+  // Refs mirrored for async callbacks and global pointer gestures.
   const viewportRef = useRef(viewport);
   viewportRef.current = viewport;
   const itemsRef = useRef(items);
@@ -76,6 +245,7 @@ export default function InfiniteCanvas() {
   selectedItemsRef.current = selectedItems;
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const backgroundCanvasRef = useRef<HTMLCanvasElement>(null);
   const startDragRef = useRef<{ x: number; y: number } | null>(null);
   const resizeStartRef = useRef<Map<
     string,
@@ -85,38 +255,92 @@ export default function InfiniteCanvas() {
   const cropStartRef = useRef<TCropStart>(null);
   const thumbnailQueueRef = useRef<MediaItem[]>([]);
   const thumbnailRequestedRef = useRef<Set<string>>(new Set());
+  const viewportAnimationRef = useRef<(() => void) | null>(null);
 
+  // Canvas integrations.
   const { requestThumbnail } = useThumbnailQueue(setItems);
+  useBackgroundCanvas(
+    backgroundCanvasRef,
+    canvasSize,
+    canvasBackgroundPattern,
+    viewport,
+  );
 
-  const setScreenshotDirectory = (directory: string) => {
-    setScreenshotDirectoryState(directory);
-    try {
-      if (directory) {
-        localStorage.setItem(SCREENSHOT_DIRECTORY_STORAGE_KEY, directory);
-      } else {
-        localStorage.removeItem(SCREENSHOT_DIRECTORY_STORAGE_KEY);
-      }
-    } catch {}
-  };
-
-  const chooseScreenshotDirectory = async () => {
-    const selected = await open({
-      directory: true,
-      multiple: false,
-      title: "Choose screenshot directory",
-      defaultPath: screenshotDirectory || undefined,
-    });
-
-    if (typeof selected === "string") {
-      setScreenshotDirectory(selected);
+  // Effects that keep external state in sync with the canvas.
+  useEffect(() => {
+    if (
+      activeAudioItemId &&
+      !items.some(
+        (item) => item.id === activeAudioItemId && item.type === "video",
+      )
+    ) {
+      clearAudioItem(activeAudioItemId);
     }
-  };
+  }, [activeAudioItemId, clearAudioItem, items]);
+
+  const cancelViewportAnimation = useCallback(() => {
+    if (viewportAnimationRef.current === null) return;
+
+    viewportAnimationRef.current();
+    viewportAnimationRef.current = null;
+  }, []);
+
+  const applyViewportPanPosition = useCallback(
+    (position: Pick<Viewport, "x" | "y">) => {
+      viewportRef.current = {
+        ...viewportRef.current,
+        x: position.x,
+        y: position.y,
+      };
+      setViewport((prev) => ({ ...prev, x: position.x, y: position.y }));
+    },
+    [],
+  );
+
+  const panViewportTo = useCallback(
+    (target: Pick<Viewport, "x" | "y">) => {
+      cancelViewportAnimation();
+
+      let didComplete = false;
+      let cancelPanAnimation: (() => void) | null = null;
+
+      cancelPanAnimation = animateKineticPan({
+        start: viewportRef.current,
+        target,
+        onUpdate: applyViewportPanPosition,
+        onComplete: () => {
+          didComplete = true;
+
+          if (viewportAnimationRef.current === cancelPanAnimation) {
+            viewportAnimationRef.current = null;
+          }
+        },
+      });
+      viewportAnimationRef.current = didComplete ? null : cancelPanAnimation;
+    },
+    [applyViewportPanPosition, cancelViewportAnimation],
+  );
+
+  useEffect(() => cancelViewportAnimation, [cancelViewportAnimation]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setCanvasSize({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   const startPanning = (
     pointerId: number,
     clientX: number,
     clientY: number,
   ) => {
+    cancelViewportAnimation();
     setIsPanning(true);
     startDragRef.current = { x: clientX, y: clientY };
     containerRef.current?.setPointerCapture(pointerId);
@@ -124,18 +348,71 @@ export default function InfiniteCanvas() {
 
   useTauriDrop({ viewportRef, setItems });
   useCanvasHotkeys({
+    containerRef,
     itemsRef,
+    onSave: () =>
+      saveConfig({
+        items: itemsRef.current,
+        viewport: viewportRef.current,
+      }),
     selectedItemsRef,
     setItems,
     setSelectedItems,
     setEditingCropItem,
   });
 
+  const loadConfig = async () => {
+    const result = await loadFromStorage();
+    if (!result.ok) {
+      if (result.reason !== "cancelled") {
+        await message(`Failed to load config:\n\n${result.reason}`, {
+          title: "Load failed",
+          kind: "error",
+        });
+      }
+
+      return;
+    }
+    const { data } = result;
+
+    if (data.items) {
+      // Re-generate URLs locally in case the app restarted or paths changed.
+      const loadedItems = data.items.map((i) => ({
+        ...i,
+        url: convertFileSrc(i.filePath),
+        thumbnailUrl: i.thumbnailPath
+          ? convertFileSrc(i.thumbnailPath)
+          : undefined,
+      }));
+      setItems(loadedItems);
+    }
+    if (data.viewport) {
+      cancelViewportAnimation();
+      setViewport(data.viewport);
+    }
+    setSelectedItems(new Set());
+    clearAudioItem();
+    clearAllVideoExportState();
+  };
+
+  const selectActiveAudioItem = useActiveAudioSelection({
+    activeAudioItemId,
+    containerRef,
+    itemsRef,
+    panViewportTo,
+    setEditingCropItem,
+    setSelectedItems,
+    viewportRef,
+  });
+
+  // Canvas pointer handlers.
   const handlePointerDown = (e: React.PointerEvent) => {
     if (
       e.target === containerRef.current ||
       (e.target as HTMLElement).classList.contains("canvas-background")
     ) {
+      cancelViewportAnimation();
+
       if (e.button === 0) {
         // Selection Box logic - correct offset by using getBoundingClientRect
         const rect = containerRef.current!.getBoundingClientRect();
@@ -158,6 +435,13 @@ export default function InfiniteCanvas() {
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
+    const activeItemId = draggingItem || resizingItem || croppingItem;
+
+    if (activeItemId) {
+      handleItemPointerMove(activeItemId, e);
+      return;
+    }
+
     if (isPanning && startDragRef.current) {
       const dx = (e.clientX - startDragRef.current.x) / viewport.zoom;
       const dy = (e.clientY - startDragRef.current.y) / viewport.zoom;
@@ -168,37 +452,46 @@ export default function InfiniteCanvas() {
       const rect = containerRef.current.getBoundingClientRect();
       const clientX = e.clientX - rect.left;
       const clientY = e.clientY - rect.top;
+      const toWorld = (cx: number, cy: number) => ({
+        x: cx / viewport.zoom - viewport.x,
+        y: cy / viewport.zoom - viewport.y,
+      });
 
       setSelectionBox((prev) =>
         prev ? { ...prev, endX: clientX, endY: clientY } : null,
       );
 
-      const startWorldX = selectionBox.startX / viewport.zoom - viewport.x;
-      const startWorldY = selectionBox.startY / viewport.zoom - viewport.y;
-      const endWorldX = clientX / viewport.zoom - viewport.x;
-      const endWorldY = clientY / viewport.zoom - viewport.y;
+      const startWorld = toWorld(selectionBox.startX, selectionBox.startY);
+      const endWorld = toWorld(clientX, clientY);
 
-      const boxLeft = Math.min(startWorldX, endWorldX);
-      const boxRight = Math.max(startWorldX, endWorldX);
-      const boxTop = Math.min(startWorldY, endWorldY);
-      const boxBottom = Math.max(startWorldY, endWorldY);
+      const boxLeft = Math.min(startWorld.x, endWorld.x);
+      const boxRight = Math.max(startWorld.x, endWorld.x);
+      const boxTop = Math.min(startWorld.y, endWorld.y);
+      const boxBottom = Math.max(startWorld.y, endWorld.y);
 
-      const newSelected = new Set<string>();
-      items.forEach((item) => {
-        if (
-          item.x < boxRight &&
-          item.x + item.width > boxLeft &&
-          item.y < boxBottom &&
-          item.y + item.height > boxTop
-        ) {
-          newSelected.add(item.id);
-        }
-      });
+      const newSelected = new Set(
+        items
+          .filter(
+            (item) =>
+              item.x < boxRight &&
+              item.x + item.width > boxLeft &&
+              item.y < boxBottom &&
+              item.y + item.height > boxTop,
+          )
+          .map((item) => item.id),
+      );
       setSelectedItems(newSelected);
     }
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
+    const activeItemId = draggingItem || resizingItem || croppingItem;
+
+    if (activeItemId) {
+      handleItemPointerUp(activeItemId, e);
+      return;
+    }
+
     if (isPanning) {
       setIsPanning(false);
       startDragRef.current = null;
@@ -208,11 +501,14 @@ export default function InfiniteCanvas() {
     }
     try {
       e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch (ex) {}
+    } catch {
+      // Pointer capture may already be gone if the browser cancelled the gesture.
+    }
   };
 
   const handleWheel = (e: ReactWheelEvent) => {
     e.preventDefault();
+    cancelViewportAnimation();
     const data =
       getWheelInputType(e) === "trackpad-pan"
         ? handlePanAction({ e, viewport })
@@ -223,16 +519,14 @@ export default function InfiniteCanvas() {
     }
   };
 
+  // Media item pointer handlers.
   const handleItemPointerDown = (id: string, e: React.PointerEvent) => {
-    if (
-      (e.target as HTMLElement).closest(
-        ".reset-btn, .delete-btn, .crop-btn, .reveal-btn, .screenshot-btn",
-      )
-    ) {
+    if ((e.target as HTMLElement).closest(ACTION_SELECTORS)) {
       return;
     }
 
     e.stopPropagation();
+    cancelViewportAnimation();
 
     if (e.button === 1 || e.button === 2) {
       e.preventDefault();
@@ -296,9 +590,6 @@ export default function InfiniteCanvas() {
     // leaves the item or container bounds on mid-drag.
     containerRef.current?.setPointerCapture(e.pointerId);
 
-    const target = e.currentTarget as HTMLElement;
-    target.setPointerCapture(e.pointerId);
-
     setItems((prev) => {
       const itemIndex = prev.findIndex((i) => i.id === id);
       if (itemIndex > -1) {
@@ -312,10 +603,13 @@ export default function InfiniteCanvas() {
   };
 
   const handleItemPointerMove = (id: string, e: React.PointerEvent) => {
-    if (draggingItem === id && startDragRef.current) {
-      const dx = (e.clientX - startDragRef.current.x) / viewport.zoom;
-      const dy = (e.clientY - startDragRef.current.y) / viewport.zoom;
+    const dragStart = startDragRef.current;
+    if (!dragStart) return;
 
+    const dx = (e.clientX - dragStart.x) / viewport.zoom;
+    const dy = (e.clientY - dragStart.y) / viewport.zoom;
+
+    if (draggingItem === id) {
       setItems((prev) =>
         prev.map((item) =>
           selectedItems.has(item.id)
@@ -325,9 +619,7 @@ export default function InfiniteCanvas() {
       );
 
       startDragRef.current = { x: e.clientX, y: e.clientY };
-    } else if (resizingItem === id && startDragRef.current) {
-      const dx = (e.clientX - startDragRef.current.x) / viewport.zoom;
-      const dy = (e.clientY - startDragRef.current.y) / viewport.zoom;
+    } else if (resizingItem === id) {
       const resizeStart = resizeStartRef.current;
 
       setItems((prev) =>
@@ -339,13 +631,10 @@ export default function InfiniteCanvas() {
           isHoldingShift: !!e.shiftKey,
         }),
       );
-    } else if (croppingItem === id && startDragRef.current) {
+    } else if (croppingItem === id) {
       const cropStart = cropStartRef.current;
       const cropHandle = cropHandleRef.current;
       if (!cropStart || !cropHandle) return;
-
-      const dx = (e.clientX - startDragRef.current.x) / viewport.zoom;
-      const dy = (e.clientY - startDragRef.current.y) / viewport.zoom;
 
       setItems((prev) =>
         handleImageCrop({ id, dx, dy, prev, cropStart, cropHandle }),
@@ -362,7 +651,11 @@ export default function InfiniteCanvas() {
       resizeStartRef.current = null;
       cropHandleRef.current = null;
       cropStartRef.current = null;
-      e.currentTarget.releasePointerCapture(e.pointerId);
+      try {
+        containerRef.current?.releasePointerCapture(e.pointerId);
+      } catch {
+        // Pointer capture may already be gone if the browser cancelled the gesture.
+      }
     }
   };
 
@@ -379,6 +672,8 @@ export default function InfiniteCanvas() {
       return newSet;
     });
     setEditingCropItem((prev) => (prev === id ? null : prev));
+    clearAudioItem(id);
+    clearVideoExportItemState(id);
   };
 
   const startCropEdit = (id: string, e: React.MouseEvent) => {
@@ -397,8 +692,9 @@ export default function InfiniteCanvas() {
     e.stopPropagation();
     const item = itemsRef.current.find((i) => i.id === id);
     if (!item) return;
-    const mediaElement = (e.currentTarget as HTMLElement).parentElement
-      ?.querySelector("video") as HTMLVideoElement | null;
+    const mediaElement = (
+      e.currentTarget as HTMLElement
+    ).parentElement?.querySelector("video") as HTMLVideoElement | null;
 
     let outputDirectory = screenshotDirectory;
     if (!outputDirectory) {
@@ -432,82 +728,84 @@ export default function InfiniteCanvas() {
     }
   };
 
-  const screenWidth = window.innerWidth / viewport.zoom;
-  const screenHeight = window.innerHeight / viewport.zoom;
-  const viewLeft = -viewport.x;
-  const viewTop = -viewport.y;
-  const viewRight = viewLeft + screenWidth;
-  const viewBottom = viewTop + screenHeight;
-  const cullMargin = 500;
-  const baseGridSize = 50;
-  const minGridScreenSize = 28;
-  const maxGridScreenSize = 96;
-  let gridSize = baseGridSize;
-  while (gridSize * viewport.zoom < minGridScreenSize) {
-    gridSize *= 2;
-  }
-  while (
-    gridSize > baseGridSize &&
-    gridSize * viewport.zoom > maxGridScreenSize
-  ) {
-    gridSize /= 2;
-  }
-  const gridDotScreenSize = 1.35;
-  const gridDotSize = Math.min(
-    gridSize * 0.1,
-    Math.max(0.25, gridDotScreenSize / viewport.zoom),
-  );
-  const gridMargin = 500;
-  const gridLeft = Math.floor((viewLeft - gridMargin) / gridSize) * gridSize;
-  const gridTop = Math.floor((viewTop - gridMargin) / gridSize) * gridSize;
-  const gridWidth = screenWidth + gridMargin * 2 + gridSize;
-  const gridHeight = screenHeight + gridMargin * 2 + gridSize;
-  const gridStyle: CSSProperties & {
-    "--grid-size": string;
-    "--grid-dot-size": string;
-  } = {
-    left: gridLeft,
-    top: gridTop,
-    width: gridWidth,
-    height: gridHeight,
-    "--grid-size": `${gridSize}px`,
-    "--grid-dot-size": `${gridDotSize}px`,
+  const toggleAudioPlayback = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedItems(new Set([id]));
+    toggleAudioItem(id);
   };
-  const totalVideoCount = items.reduce(
-    (count, item) => count + (item.type === "video" ? 1 : 0),
-    0,
-  );
 
-  const loadConfig = async () => {
-    const result = await loadFromStorage();
-    if (!result.ok) {
-      if (result.reason !== "cancelled") {
-        await message(`Failed to save config:\n\n${result.reason}`, {
-          title: "Save failed",
-          kind: "error",
-        });
-      }
+  const exportSelectedVideo = useCallback(async () => {
+    const selectedVideoItems = itemsRef.current.filter(
+      (item) => item.type === "video" && selectedItemsRef.current.has(item.id),
+    );
 
+    if (selectedVideoItems.length !== 1) {
+      await message("Select one video to export.", {
+        title: "Export unavailable",
+        kind: "warning",
+      });
       return;
     }
-    const { data } = result;
 
-    if (data.items) {
-      // Re-generate URLs using convertFileSrc locally in case app restarted or paths changed
-      const loadedItems = data.items.map((i) => ({
-        ...i,
-        url: convertFileSrc(i.filePath),
-        thumbnailUrl: i.thumbnailPath
-          ? convertFileSrc(i.thumbnailPath)
-          : undefined,
-      }));
-      setItems(loadedItems);
+    if (useVideoExportStore.getState().exportingItemId !== null) {
+      await message("Wait for the current export to finish.", {
+        title: "Export in progress",
+        kind: "info",
+      });
+      return;
     }
-    if (data.viewport) {
-      setViewport(data.viewport);
+
+    const item = selectedVideoItems[0];
+    const outputPath = await save({
+      title: "Export video",
+      defaultPath: getExportDefaultPath(item.filePath),
+      filters: [
+        {
+          name: "MP4 Video",
+          extensions: ["mp4"],
+        },
+      ],
+    });
+
+    if (!outputPath) return;
+
+    setExportingItemId(item.id);
+
+    try {
+      const mp4OutputPath = outputPath.toLowerCase().endsWith(".mp4")
+        ? outputPath
+        : `${outputPath}.mp4`;
+      const output = await exportMediaVideo({
+        item,
+        outputPath: mp4OutputPath,
+        loopRange: getLoopRange(getStoredVideoLoop(item.id)),
+      });
+
+      await message(`Video exported:\n\n${output}`, {
+        title: "Export complete",
+        kind: "info",
+      });
+    } catch (error) {
+      await message(`Failed to export video:\n\n${String(error)}`, {
+        title: "Export failed",
+        kind: "error",
+      });
+    } finally {
+      setExportingItemId(null);
     }
-    setSelectedItems(new Set());
-  };
+  }, [itemsRef, selectedItemsRef, setExportingItemId]);
+
+  const { viewLeft, viewTop, viewRight, viewBottom } = getViewBounds(
+    viewport,
+    canvasSize.width,
+    canvasSize.height,
+  );
+  const totalVideoCount = items.filter((item) => item.type === "video").length;
+  const selectedVideoItems = items.filter(
+    (item) => item.type === "video" && selectedItems.has(item.id),
+  );
+  const selectedVideoExportItem =
+    selectedVideoItems.length === 1 ? selectedVideoItems[0] : null;
 
   return (
     <div
@@ -519,54 +817,67 @@ export default function InfiniteCanvas() {
       onWheel={handleWheel}
       onContextMenu={(e) => e.preventDefault()}
     >
+      <canvas
+        ref={backgroundCanvasRef}
+        className={["canvas-background", canvasBackgroundPattern]
+          .filter(Boolean)
+          .join(" ")}
+        aria-hidden="true"
+      />
       <div
         className="canvas-world"
         style={{
           transform: `scale(${viewport.zoom}) translate(${viewport.x}px, ${viewport.y}px)`,
         }}
       >
-        <div
-          className="canvas-background"
-          style={gridStyle}
-        />
         {items.map((item) => {
           const { id, url } = item;
           const crop = getCrop(item);
+          const isCropEditing = editingCropItem === id;
+          const isSelected = selectedItems.has(id);
           const itemLeft = item.x;
           const itemTop = item.y;
           const itemRight = item.x + item.width;
           const itemBottom = item.y + item.height;
+          const isActiveAudioItem = activeAudioItemId === id;
 
-          if (
-            itemRight < viewLeft - cullMargin ||
-            itemLeft > viewRight + cullMargin ||
-            itemBottom < viewTop - cullMargin ||
-            itemTop > viewBottom + cullMargin
-          ) {
+          const isCulled =
+            itemRight < viewLeft - CULL_MARGIN ||
+            itemLeft > viewRight + CULL_MARGIN ||
+            itemBottom < viewTop - CULL_MARGIN ||
+            itemTop > viewBottom + CULL_MARGIN;
+
+          if (isCulled && !isActiveAudioItem) {
             return null;
           }
 
-          const isInViewport =
+          const isVisuallyInViewport =
             itemRight >= viewLeft &&
             itemLeft <= viewRight &&
             itemBottom >= viewTop &&
             itemTop <= viewBottom;
+          const isInViewport = isVisuallyInViewport || isActiveAudioItem;
 
           const zIndex =
             draggingItem === id ||
             resizingItem === id ||
             croppingItem === id ||
-            editingCropItem === id ||
-            selectedItems.has(id)
+            isCropEditing ||
+            isSelected
               ? 100
               : 1;
 
           return (
             <div
               key={id}
-              className={`media-item ${selectedItems.has(id) ? "selected" : ""} ${
-                editingCropItem === id ? "crop-editing" : ""
-              }`}
+              data-media-id={id}
+              className={[
+                "media-item",
+                isSelected && "selected",
+                isCropEditing && "crop-editing",
+              ]
+                .filter(Boolean)
+                .join(" ")}
               style={{
                 left: item.x,
                 top: item.y,
@@ -587,7 +898,8 @@ export default function InfiniteCanvas() {
                 resetSize={resetSize}
                 deleteItem={deleteItem}
                 startCropEdit={startCropEdit}
-                isCropEditing={editingCropItem === id}
+                toggleAudioPlayback={toggleAudioPlayback}
+                isCropEditing={isCropEditing}
               />
               {item.type === "image" ? (
                 <ImageActions
@@ -608,7 +920,7 @@ export default function InfiniteCanvas() {
                     zoom={viewport.zoom}
                     onThumbnailNeeded={requestThumbnail}
                   />
-                  {editingCropItem === id && (
+                  {isCropEditing && (
                     <CropOverlay
                       id={id}
                       handleItemPointerDown={handleItemPointerDown}
@@ -636,12 +948,11 @@ export default function InfiniteCanvas() {
         loadConfig={loadConfig}
         settingsMenuItems={SETTINGS_MENU_ITEMS}
         settingsVersion={appVersion}
-        screenshotDirectory={screenshotDirectory}
-        chooseScreenshotDirectory={chooseScreenshotDirectory}
-        clearScreenshotDirectory={() => setScreenshotDirectory("")}
-        isSettingsOpen={isSettingsOpen}
-        openSettings={() => setIsSettingsOpen(true)}
-        closeSettings={() => setIsSettingsOpen(false)}
+        selectedVideoExportItem={selectedVideoExportItem}
+        selectedVideoExportCount={selectedVideoItems.length}
+        isExportingSelectedVideo={exportingItemId !== null}
+        onSelectActiveAudioItem={selectActiveAudioItem}
+        onExportSelectedVideo={exportSelectedVideo}
       />
     </div>
   );

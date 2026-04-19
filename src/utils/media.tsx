@@ -82,6 +82,28 @@ export const saveMediaScreenshot = ({
     crop: getCropRatios(item),
   });
 
+type VideoExportRange = {
+  start: number;
+  end: number;
+} | null;
+
+export const exportMediaVideo = ({
+  item,
+  outputPath,
+  loopRange,
+}: {
+  item: MediaItem;
+  outputPath: string;
+  loopRange: VideoExportRange;
+}) =>
+  invoke<string>("export_video", {
+    path: item.filePath,
+    outputPath,
+    crop: getCropRatios(item),
+    startTime: loopRange?.start ?? null,
+    endTime: loopRange?.end ?? null,
+  });
+
 export function useThumbnailQueue(setItems: SetItems) {
   const queueRef = useRef<MediaItem[]>([]);
   const requestedRef = useRef<Set<string>>(new Set());

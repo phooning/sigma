@@ -1,9 +1,13 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
-import { open } from '@tauri-apps/plugin-dialog';
+import { message, open, save } from '@tauri-apps/plugin-dialog';
+import { writeTextFile } from '@tauri-apps/plugin-fs';
 import packageJson from '../package.json';
 import InfiniteCanvas from './InfiniteCanvas';
+import { useSettingsStore } from './stores/useSettingsStore';
+import { useAudioPlaybackStore } from './stores/useAudioPlaybackStore';
+import { useVideoExportStore } from './stores/useVideoExportStore';
 
 // Mock Tauri APIs
 let dropCallback: any = null;
@@ -40,6 +44,10 @@ vi.mock('@tauri-apps/api/core', () => ({
 
     if (command === 'save_media_screenshot') {
       return Promise.resolve('/shots/test-screenshot.png');
+    }
+
+    if (command === 'export_video') {
+      return Promise.resolve('/exports/test-video.mp4');
     }
 
     return Promise.resolve(null);
@@ -129,6 +137,9 @@ describe('InfiniteCanvas Application', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    useSettingsStore.getState().resetSettings();
+    useAudioPlaybackStore.getState().resetAudioPlayback();
+    useVideoExportStore.getState().resetVideoExportState();
     dropCallback = null;
   });
 
@@ -138,11 +149,11 @@ describe('InfiniteCanvas Application', () => {
     fireEvent.click(screen.getByRole('button', { name: /open settings/i }));
 
     expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'General' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Appearance' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Hotkeys' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Debug' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'About' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'General' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Appearance' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Hotkeys' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Debug' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'About' })).toBeInTheDocument();
     expect(screen.getByText(`Version ${packageJson.version}`)).toBeInTheDocument();
   });
 
@@ -150,13 +161,33 @@ describe('InfiniteCanvas Application', () => {
     render(<InfiniteCanvas />);
 
     fireEvent.click(screen.getByRole('button', { name: /open settings/i }));
-    fireEvent.click(screen.getByRole('button', { name: 'Debug' }));
-    fireEvent.click(screen.getByRole('checkbox', { name: /development mode/i }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Debug' }));
+    fireEvent.click(screen.getByRole('switch', { name: /development mode/i }));
 
     expect(screen.getByLabelText('Development stats')).toBeInTheDocument();
     expect(screen.getByText('FPS')).toBeInTheDocument();
     expect(screen.getByText('Frame time (ms)')).toBeInTheDocument();
     expect(screen.getByText('Video count')).toBeInTheDocument();
+  });
+
+  it('lists available hotkeys in settings', async () => {
+    render(<InfiniteCanvas />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /open settings/i }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('tab', { name: 'Hotkeys' }));
+    });
+
+    expect(screen.getByText('Ctrl/Cmd+S')).toBeInTheDocument();
+    expect(screen.getByText('Save the current canvas configuration.')).toBeInTheDocument();
+    expect(screen.getByText('Spacebar')).toBeInTheDocument();
+    expect(screen.getByText('Pause selected videos.')).toBeInTheDocument();
+    expect(screen.getByText('Ctrl/Cmd+A')).toBeInTheDocument();
+    expect(screen.getByText('Select every item on the canvas.')).toBeInTheDocument();
+    expect(screen.getByText('Delete/Backspace')).toBeInTheDocument();
+    expect(screen.getByText('Delete the selected items.')).toBeInTheDocument();
   });
 
   it('chooses a screenshot directory from general settings', async () => {
@@ -177,6 +208,50 @@ describe('InfiniteCanvas Application', () => {
     });
     expect(screen.getByText('/shots')).toBeInTheDocument();
     expect(localStorage.getItem('sigma:screenshot-directory')).toBe('/shots');
+  });
+
+  it('saves from the keyboard shortcut', async () => {
+    vi.mocked(save).mockResolvedValue('/tmp/canvas.json');
+
+    render(<InfiniteCanvas />);
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+    });
+
+    await waitFor(() => {
+      expect(writeTextFile).toHaveBeenCalledOnce();
+    });
+    expect(writeTextFile).toHaveBeenCalledWith(
+      '/tmp/canvas.json',
+      expect.stringContaining('"items"')
+    );
+    expect(message).toHaveBeenCalledWith('Config saved successfully.', {
+      title: 'Save completed',
+      kind: 'info'
+    });
+  });
+
+  it('switches the canvas background from dots to grid', async () => {
+    render(<InfiniteCanvas />);
+
+    expect(document.querySelector('.canvas-background.dots')).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /open settings/i }));
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('tab', { name: 'Appearance' }));
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('radio', { name: 'Grid background' }));
+    });
+
+    expect(document.querySelector('.canvas-background.grid')).toBeInTheDocument();
+    expect(document.querySelector('.canvas-grid-plus')).not.toBeInTheDocument();
+    expect(localStorage.getItem('sigma:canvas-background-pattern')).toBe('grid');
   });
 
   it('drops multiple videos as playable video elements without eager thumbnail work', async () => {
@@ -225,6 +300,51 @@ describe('InfiniteCanvas Application', () => {
       writable: true,
       value: originalInnerWidth
     });
+  });
+
+  it('pauses selected videos with the spacebar', async () => {
+    const videoPath = '/path/to/spacebar-video.mp4';
+
+    render(<InfiniteCanvas />);
+
+    await act(async () => {
+      if (dropCallback) {
+        dropCallback({
+          payload: {
+            type: 'drop',
+            paths: [videoPath]
+          }
+        });
+      }
+    });
+
+    const video = await waitFor(() => {
+      const found = document.querySelector('video.media-content') as HTMLVideoElement | null;
+      expect(found).toBeInTheDocument();
+      return found!;
+    });
+    const pause = vi.fn();
+    Object.defineProperty(video, 'paused', {
+      configurable: true,
+      get: () => false
+    });
+    Object.defineProperty(video, 'pause', {
+      configurable: true,
+      value: pause
+    });
+
+    const mediaItem = document.querySelector('.media-item') as HTMLElement;
+    await act(async () => {
+      fireEvent.pointerDown(mediaItem, { button: 0, clientX: 10, clientY: 10, pointerId: 21 });
+    });
+
+    expect(mediaItem).toHaveClass('selected');
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: ' ', code: 'Space' });
+    });
+
+    expect(pause).toHaveBeenCalledOnce();
   });
 
   it('drops large videos as deferred load proxies until playback is requested', async () => {
@@ -285,6 +405,464 @@ describe('InfiniteCanvas Application', () => {
       `asset://${heavyVideoPath}`
     );
     expect(HTMLMediaElement.prototype.play).toHaveBeenCalled();
+
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: originalInnerWidth
+    });
+  });
+
+  it('enables clip audio from the video frame action and controls volume from the HUD', async () => {
+    const originalInnerWidth = window.innerWidth;
+    const videoPath = new URL(
+      '../fixtures/generated-lod-test-1080p.mp4',
+      import.meta.url
+    ).pathname;
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 3000
+    });
+
+    render(<InfiniteCanvas />);
+
+    await act(async () => {
+      if (dropCallback) {
+        dropCallback({
+          payload: {
+            type: 'drop',
+            paths: [videoPath]
+          }
+        });
+      }
+    });
+
+    await waitFor(() => {
+      expect(document.querySelector('video.media-content')).toBeInTheDocument();
+    });
+
+    const video = document.querySelector('video.media-content') as HTMLVideoElement;
+    expect(video.muted).toBe(true);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enable audio playback/i }));
+    });
+
+    const slider = await screen.findByRole('slider', {
+      name: /volume for generated-lod-test-1080p\.mp4/i
+    }) as HTMLInputElement;
+
+    expect(screen.getAllByText('generated-lod-test-1080p.mp4').length).toBeGreaterThan(0);
+    await waitFor(() => {
+      expect(video.muted).toBe(false);
+      expect(video.volume).toBeCloseTo(0.8);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /mute audio/i }));
+    });
+
+    await waitFor(() => {
+      expect(video.muted).toBe(true);
+      expect(video.volume).toBeCloseTo(0.8);
+    });
+    expect(screen.getByRole('button', { name: /unmute audio/i })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /unmute audio/i }));
+    });
+
+    await waitFor(() => {
+      expect(video.muted).toBe(false);
+      expect(video.volume).toBeCloseTo(0.8);
+    });
+
+    await act(async () => {
+      fireEvent.change(slider, { target: { value: '0.25' } });
+    });
+
+    await waitFor(() => {
+      expect(video.muted).toBe(false);
+      expect(video.volume).toBeCloseTo(0.25);
+    });
+
+    await act(async () => {
+      fireEvent.change(slider, { target: { value: '0' } });
+    });
+
+    await waitFor(() => {
+      expect(video.muted).toBe(true);
+      expect(video.volume).toBe(0);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /disable audio playback/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole('slider', {
+        name: /volume for generated-lod-test-1080p\.mp4/i
+      })).not.toBeInTheDocument();
+      expect(video.muted).toBe(true);
+    });
+
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: originalInnerWidth
+    });
+  });
+
+  it('exports the selected video with the current A/B loop range', async () => {
+    const originalInnerWidth = window.innerWidth;
+    const videoPath = new URL(
+      '../fixtures/generated-lod-test-1080p.mp4',
+      import.meta.url
+    ).pathname;
+    let currentTime = 0;
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 3000
+    });
+    vi.mocked(save).mockResolvedValue('/exports/generated-lod-test-1080p');
+
+    render(<InfiniteCanvas />);
+
+    await act(async () => {
+      if (dropCallback) {
+        dropCallback({
+          payload: {
+            type: 'drop',
+            paths: [videoPath]
+          }
+        });
+      }
+    });
+
+    await waitFor(() => {
+      expect(document.querySelector('video.media-content')).toBeInTheDocument();
+    });
+
+    const video = document.querySelector('video.media-content') as HTMLVideoElement;
+    Object.defineProperty(video, 'duration', {
+      configurable: true,
+      get: () => 8
+    });
+    Object.defineProperty(video, 'currentTime', {
+      configurable: true,
+      get: () => currentTime,
+      set: (value) => {
+        currentTime = value;
+      }
+    });
+
+    fireEvent.loadedMetadata(video);
+    currentTime = 2;
+    fireEvent.timeUpdate(video);
+    fireEvent.click(screen.getByRole('button', { name: /set loop a point/i }));
+    currentTime = 5;
+    fireEvent.timeUpdate(video);
+    fireEvent.click(screen.getByRole('button', { name: /set loop b point/i }));
+
+    const mediaItem = document.querySelector('.media-item') as HTMLElement;
+    await act(async () => {
+      fireEvent.pointerDown(mediaItem, { button: 0, clientX: 0, clientY: 0, pointerId: 21 });
+      fireEvent.pointerUp(mediaItem, { pointerId: 21 });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /export selected video/i }));
+    });
+
+    expect(save).toHaveBeenCalledWith({
+      title: 'Export video',
+      defaultPath: 'generated-lod-test-1080p.mp4',
+      filters: [
+        {
+          name: 'MP4 Video',
+          extensions: ['mp4']
+        }
+      ]
+    });
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('export_video', {
+        path: videoPath,
+        outputPath: '/exports/generated-lod-test-1080p.mp4',
+        crop: {
+          x: 0,
+          y: 0,
+          width: 1,
+          height: 1,
+          boxWidth: 1280,
+          boxHeight: 720
+        },
+        startTime: 2,
+        endTime: 5
+      });
+    });
+
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: originalInnerWidth
+    });
+  });
+
+  it('selects the active audio video from the HUD filename without changing its casing', async () => {
+    const videoPath = '/path/to/My Clip.MP4';
+
+    render(<InfiniteCanvas />);
+
+    await act(async () => {
+      if (dropCallback) {
+        dropCallback({
+          payload: {
+            type: 'drop',
+            paths: [videoPath]
+          }
+        });
+      }
+    });
+
+    await waitFor(() => {
+      expect(document.querySelector('video.media-content')).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enable audio playback/i }));
+    });
+
+    expect(screen.getAllByText('My Clip.MP4').length).toBeGreaterThan(0);
+    expect(screen.queryByText('MY CLIP.MP4')).not.toBeInTheDocument();
+
+    const mediaItem = document.querySelector('.media-item') as HTMLElement;
+    expect(mediaItem).toHaveClass('selected');
+
+    const containerEl = document.querySelector('.canvas-container') as HTMLElement;
+    containerEl.getBoundingClientRect = () => ({
+      left: 0, top: 0, right: 1000, bottom: 1000, width: 1000, height: 1000, x: 0, y: 0, toJSON: () => {}
+    });
+
+    await act(async () => {
+      fireEvent.pointerDown(containerEl, { button: 0, clientX: 10, clientY: 10, pointerId: 13 });
+      fireEvent.pointerUp(containerEl, { pointerId: 13 });
+    });
+
+    expect(mediaItem).not.toHaveClass('selected');
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /audio clip: My Clip\.MP4/i }));
+    });
+
+    expect(mediaItem).toHaveClass('selected');
+  });
+
+  it('keeps active audio video mounted when it is outside the culling window', async () => {
+    const originalInnerWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 1000
+    });
+
+    render(<InfiniteCanvas />);
+
+    await act(async () => {
+      if (dropCallback) {
+        dropCallback({
+          payload: {
+            type: 'drop',
+            paths: ['/path/to/audio-video.mp4']
+          }
+        });
+      }
+    });
+
+    await waitFor(() => {
+      expect(document.querySelector('video.media-content')).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enable audio playback/i }));
+    });
+
+    const containerEl = document.querySelector('.canvas-container') as HTMLElement;
+    await act(async () => {
+      fireEvent.pointerDown(containerEl, { button: 1, clientX: 0, clientY: 0, pointerId: 14 });
+    });
+    await act(async () => {
+      fireEvent.pointerMove(containerEl, { clientX: 10000, clientY: 0, pointerId: 14 });
+    });
+    await act(async () => {
+      fireEvent.pointerUp(containerEl, { pointerId: 14 });
+    });
+
+    expect(document.querySelector('video.media-content')).toBeInTheDocument();
+    expect(screen.getByRole('slider', { name: /volume for audio-video\.mp4/i })).toBeInTheDocument();
+
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: originalInnerWidth
+    });
+  });
+
+  it('pans the canvas to fully show the active audio video when its HUD filename is clicked', async () => {
+    const originalInnerWidth = window.innerWidth;
+    const originalInnerHeight = window.innerHeight;
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 2000
+    });
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      writable: true,
+      value: 1200
+    });
+
+    render(<InfiniteCanvas />);
+
+    await act(async () => {
+      if (dropCallback) {
+        dropCallback({
+          payload: {
+            type: 'drop',
+            paths: ['/path/to/pan-target.mp4']
+          }
+        });
+      }
+    });
+
+    await waitFor(() => {
+      expect(document.querySelector('video.media-content')).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enable audio playback/i }));
+    });
+
+    const containerEl = document.querySelector('.canvas-container') as HTMLElement;
+    const world = document.querySelector('.canvas-world') as HTMLElement;
+    await act(async () => {
+      fireEvent.pointerDown(containerEl, { button: 1, clientX: 0, clientY: 0, pointerId: 15 });
+    });
+    await act(async () => {
+      fireEvent.pointerMove(containerEl, { clientX: -1500, clientY: -1000, pointerId: 15 });
+    });
+    await act(async () => {
+      fireEvent.pointerUp(containerEl, { pointerId: 15 });
+    });
+
+    expect(world.style.transform).toContain('translate(-1500px, -1000px)');
+
+    const animationFrames: FrameRequestCallback[] = [];
+    let animationFrameHandle = 0;
+    const requestAnimationFrameSpy = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation((callback) => {
+        if (callback.name === 'tick') {
+          animationFrames.push(callback);
+        }
+        animationFrameHandle += 1;
+        return animationFrameHandle;
+      });
+    const cancelAnimationFrameSpy = vi
+      .spyOn(window, 'cancelAnimationFrame')
+      .mockImplementation(() => {});
+    const performanceNowSpy = vi
+      .spyOn(performance, 'now')
+      .mockImplementation(() => 0);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /audio clip: pan-target\.mp4/i }));
+    });
+
+    expect(document.querySelector('.media-item')).toHaveClass('selected');
+    expect(world.style.transform).toContain('translate(-1500px, -1000px)');
+    expect(animationFrames).toHaveLength(1);
+
+    await act(async () => {
+      animationFrames.shift()?.(1);
+    });
+
+    expect(world.style.transform).not.toContain('translate(-1500px, -1000px)');
+    expect(world.style.transform).not.toContain('translate(-950px, -502px)');
+
+    await act(async () => {
+      animationFrames.shift()?.(1000);
+    });
+
+    expect(world.style.transform).toContain('translate(-950px, -502px)');
+
+    requestAnimationFrameSpy.mockRestore();
+    cancelAnimationFrameSpy.mockRestore();
+    performanceNowSpy.mockRestore();
+
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: originalInnerWidth
+    });
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      writable: true,
+      value: originalInnerHeight
+    });
+  });
+
+  it('uses a generated video thumbnail as the audio HUD clip tile', async () => {
+    const originalInnerWidth = window.innerWidth;
+    const heavyVideoPath = new URL(
+      '../fixtures/heavy_video.mkv',
+      import.meta.url
+    ).pathname;
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 3000
+    });
+
+    render(<InfiniteCanvas />);
+
+    await act(async () => {
+      if (dropCallback) {
+        dropCallback({
+          payload: {
+            type: 'drop',
+            paths: [heavyVideoPath]
+          }
+        });
+      }
+    });
+
+    await waitFor(() => {
+      expect(document.querySelector('.video-load-thumbnail')).toHaveAttribute(
+        'src',
+        'asset:///tmp/heavy-thumb.jpg'
+      );
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /enable audio playback/i }));
+    });
+
+    expect(
+      await screen.findByRole('slider', { name: /volume for heavy_video\.mkv/i })
+    ).toBeInTheDocument();
+    expect(document.querySelector('.hud-audio-thumbnail')).toHaveAttribute(
+      'src',
+      'asset:///tmp/heavy-thumb.jpg'
+    );
+    expect(document.querySelector('video.media-content')).toHaveAttribute(
+      'src',
+      `asset://${heavyVideoPath}`
+    );
 
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,

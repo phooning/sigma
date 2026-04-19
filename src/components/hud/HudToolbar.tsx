@@ -1,0 +1,66 @@
+import type { MediaItem } from "../../utils/media.types";
+import { useAudioPlayback } from "../../stores/useAudioPlaybackStore";
+import { HudAudioControl } from "./HudAudioControl";
+import { HudToolbarActions } from "./HudToolbarActions";
+import { getMediaFileName } from "./utils";
+
+type HudToolbarProps = {
+  items: MediaItem[];
+  saveConfig: () => void;
+  loadConfig: () => void;
+  selectedVideoExportItem: MediaItem | null;
+  selectedVideoExportCount: number;
+  isExportingSelectedVideo: boolean;
+  onSelectActiveAudioItem: () => void;
+  onExportSelectedVideo: () => void;
+};
+
+export function HudToolbar({
+  items,
+  saveConfig,
+  loadConfig,
+  selectedVideoExportItem,
+  selectedVideoExportCount,
+  isExportingSelectedVideo,
+  onSelectActiveAudioItem,
+  onExportSelectedVideo,
+}: HudToolbarProps) {
+  const { activeAudioItemId } = useAudioPlayback();
+
+  const activeAudioItem =
+    activeAudioItemId === null
+      ? null
+      : (items.find(
+          (item) => item.id === activeAudioItemId && item.type === "video",
+        ) ?? null);
+  const activeAudioName = activeAudioItem
+    ? getMediaFileName(activeAudioItem.filePath)
+    : "";
+
+  return (
+    <div className="ui-overlay">
+      <div className="hud-title">SIGMA Media Canvas</div>
+
+      <div className="toolbar">
+        <HudToolbarActions
+          saveConfig={saveConfig}
+          loadConfig={loadConfig}
+          selectedVideoExportItem={selectedVideoExportItem}
+          selectedVideoExportCount={selectedVideoExportCount}
+          isExportingSelectedVideo={isExportingSelectedVideo}
+          onExportSelectedVideo={onExportSelectedVideo}
+        />
+
+        {activeAudioItem && (
+          <HudAudioControl
+            activeAudioItem={activeAudioItem}
+            activeAudioName={activeAudioName}
+            onSelectActiveAudioItem={onSelectActiveAudioItem}
+          />
+        )}
+
+        <span className="item-count">{items.length} items</span>
+      </div>
+    </div>
+  );
+}
