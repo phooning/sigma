@@ -1,39 +1,25 @@
-import { RefObject, useEffect } from "react";
-import { Viewport } from "@/utils/media.types";
-import {
-  drawDotGrid,
-  drawLineGrid,
-  resizeBackgroundCanvas,
-} from "./CanvasBackground";
+import { type RefObject, useLayoutEffect } from "react";
+import type { CanvasBackgroundPattern } from "@/stores/useSettingsStore";
+import type { Viewport } from "@/utils/media.types";
+import { drawCanvasBackground } from "./CanvasBackground";
 
 export const useBackgroundCanvas = (
   backgroundCanvasRef: RefObject<HTMLCanvasElement | null>,
   canvasSize: { width: number; height: number },
-  canvasBackgroundPattern: string,
+  canvasBackgroundPattern: CanvasBackgroundPattern,
   viewport: Viewport,
 ) => {
-  useEffect(() => {
-    if (backgroundCanvasRef) {
-      const canvas = backgroundCanvasRef.current;
-      if (!canvas) return;
+  // Viewport motion redraws from input and animation handlers. This hook covers
+  // mount, resize, and background-pattern changes without a second paint after
+  // every React viewport commit.
+  useLayoutEffect(() => {
+    const canvas = backgroundCanvasRef.current;
+    if (!canvas) return;
 
-      const { pixelRatio, width, height } = resizeBackgroundCanvas(
-        canvas,
-        canvasSize.width,
-        canvasSize.height,
-      );
-
-      const context = canvas.getContext("2d", { alpha: true });
-      if (!context) return;
-
-      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-      context.clearRect(0, 0, width, height);
-
-      if (canvasBackgroundPattern === "dots") {
-        drawDotGrid(context, width, height, viewport);
-      } else {
-        drawLineGrid(context, width, height, viewport);
-      }
-    }
-  }, [canvasBackgroundPattern, canvasSize, viewport]);
+    drawCanvasBackground(canvas, {
+      canvasSize,
+      pattern: canvasBackgroundPattern,
+      viewport,
+    });
+  }, [backgroundCanvasRef, canvasBackgroundPattern, canvasSize]);
 };

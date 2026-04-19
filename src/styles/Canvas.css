@@ -13,10 +13,10 @@
 .canvas-background {
     position: fixed;
     inset: 0;
-    width: 100dvw;
-    height: 100dvh;
     z-index: var(--z-canvas-base);
     display: block;
+    width: 100dvw;
+    height: 100dvh;
     transform: translateZ(0);
     contain: strict;
     pointer-events: none;

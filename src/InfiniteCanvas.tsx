@@ -43,8 +43,9 @@ import {
 } from "./components/CanvasActions";
 import { useTauriDrop } from "./utils/drag";
 import { useCanvasHotkeys } from "./utils/keyboard";
-import { useSettingsStore } from "./stores/useSettingsStore";
-import { useAudioPlaybackStore } from "./stores/useAudioPlaybackStore";
+import { useGetSettingsStore } from "./stores/useSettingsStore";
+import { useAudioPlayback } from "./stores/useAudioPlaybackStore";
+import { drawCanvasBackground } from "./components/CanvasBackground";
 import { useBackgroundCanvas } from "./components/useBackgroundCanvas";
 import {
   getStoredVideoLoop,
@@ -56,9 +57,7 @@ import { getExportDefaultPath } from "./utils/exportPaths";
 import { getViewBounds } from "./utils/viewport";
 import { getLoopRange } from "./utils/videoUtils";
 import { notify } from "./utils/notifications";
-
-const ACTION_SELECTORS =
-  ".reset-btn, .delete-btn, .crop-btn, .reveal-btn, .screenshot-btn, .audio-btn";
+import { ACTION_SELECTORS } from "./utils/press";
 
 export default function InfiniteCanvas() {
   const [items, setItems] = useState<MediaItem[]>([]);
@@ -74,20 +73,15 @@ export default function InfiniteCanvas() {
     width: window.innerWidth,
     height: window.innerHeight,
   }));
-  const screenshotDirectory = useSettingsStore(
-    (state) => state.screenshotDirectory,
-  );
-  const canvasBackgroundPattern = useSettingsStore(
-    (state) => state.canvasBackgroundPattern,
-  );
-  const setScreenshotDirectory = useSettingsStore(
-    (state) => state.setScreenshotDirectory,
-  );
-  const activeAudioItemId = useAudioPlaybackStore(
-    (state) => state.activeItemId,
-  );
-  const toggleAudioItem = useAudioPlaybackStore((state) => state.toggleItem);
-  const clearAudioItem = useAudioPlaybackStore((state) => state.clearItem);
+
+  const {
+    screenshotDirectory,
+    setScreenshotDirectory,
+    canvasBackgroundPattern,
+  } = useGetSettingsStore();
+  const { toggleAudioItem, clearAudioItem, activeAudioItemId } =
+    useAudioPlayback();
+
   const exportingItemId = useVideoExportStore((state) => state.exportingItemId);
   const setExportingItemId = useVideoExportStore(
     (state) => state.setExportingItemId,
@@ -106,6 +100,10 @@ export default function InfiniteCanvas() {
   itemsRef.current = items;
   const selectedItemsRef = useRef(selectedItems);
   selectedItemsRef.current = selectedItems;
+  const canvasSizeRef = useRef(canvasSize);
+  canvasSizeRef.current = canvasSize;
+  const canvasBackgroundPatternRef = useRef(canvasBackgroundPattern);
+  canvasBackgroundPatternRef.current = canvasBackgroundPattern;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const backgroundCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -117,9 +115,21 @@ export default function InfiniteCanvas() {
   const cropHandleRef = useRef<CropHandle | null>(null);
   const cropStartRef = useRef<TCropStart>(null);
 
+  const redrawBackgroundCanvas = useCallback((nextViewport: Viewport) => {
+    const canvas = backgroundCanvasRef.current;
+    if (!canvas) return;
+
+    drawCanvasBackground(canvas, {
+      canvasSize: canvasSizeRef.current,
+      pattern: canvasBackgroundPatternRef.current,
+      viewport: nextViewport,
+    });
+  }, []);
+
   // Canvas integrations.
   const { requestThumbnail } = useThumbnailQueue(setItems);
   const { cancelViewportAnimation, panViewportTo } = useViewportAnimation({
+    onViewportChange: redrawBackgroundCanvas,
     viewportRef,
     setViewport,
   });
@@ -212,6 +222,8 @@ export default function InfiniteCanvas() {
     }
     if (data.viewport) {
       cancelViewportAnimation();
+      viewportRef.current = data.viewport;
+      redrawBackgroundCanvas(data.viewport);
       setViewport(data.viewport);
     }
     setSelectedItems(new Set());
@@ -267,18 +279,27 @@ export default function InfiniteCanvas() {
     }
 
     if (isPanning && startDragRef.current) {
-      const dx = (e.clientX - startDragRef.current.x) / viewport.zoom;
-      const dy = (e.clientY - startDragRef.current.y) / viewport.zoom;
+      const currentViewport = viewportRef.current;
+      const dx = (e.clientX - startDragRef.current.x) / currentViewport.zoom;
+      const dy = (e.clientY - startDragRef.current.y) / currentViewport.zoom;
+      const nextViewport = {
+        ...currentViewport,
+        x: currentViewport.x + dx,
+        y: currentViewport.y + dy,
+      };
 
-      setViewport((prev) => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
+      viewportRef.current = nextViewport;
+      redrawBackgroundCanvas(nextViewport);
+      setViewport(nextViewport);
       startDragRef.current = { x: e.clientX, y: e.clientY };
     } else if (selectionBox && containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
       const clientX = e.clientX - rect.left;
       const clientY = e.clientY - rect.top;
+      const currentViewport = viewportRef.current;
       const toWorld = (cx: number, cy: number) => ({
-        x: cx / viewport.zoom - viewport.x,
-        y: cy / viewport.zoom - viewport.y,
+        x: cx / currentViewport.zoom - currentViewport.x,
+        y: cy / currentViewport.zoom - currentViewport.y,
       });
 
       setSelectionBox((prev) =>
@@ -333,12 +354,15 @@ export default function InfiniteCanvas() {
   const handleWheel = (e: ReactWheelEvent) => {
     e.preventDefault();
     cancelViewportAnimation();
+    const currentViewport = viewportRef.current;
     const data =
       getWheelInputType(e) === "trackpad-pan"
-        ? handlePanAction({ e, viewport })
-        : handleZoomAction({ e, viewport, containerRef });
+        ? handlePanAction({ e, viewport: currentViewport })
+        : handleZoomAction({ e, viewport: currentViewport, containerRef });
 
     if (data) {
+      viewportRef.current = data;
+      redrawBackgroundCanvas(data);
       setViewport(data);
     }
   };
@@ -430,8 +454,9 @@ export default function InfiniteCanvas() {
     const dragStart = startDragRef.current;
     if (!dragStart) return;
 
-    const dx = (e.clientX - dragStart.x) / viewport.zoom;
-    const dy = (e.clientY - dragStart.y) / viewport.zoom;
+    const currentViewport = viewportRef.current;
+    const dx = (e.clientX - dragStart.x) / currentViewport.zoom;
+    const dy = (e.clientY - dragStart.y) / currentViewport.zoom;
 
     if (draggingItem === id) {
       setItems((prev) =>

@@ -45,4 +45,6 @@ export const useAudioPlayback = () => ({
   isAudioMuted: useAudioPlaybackStore((state) => state.muted),
   setAudioVolume: useAudioPlaybackStore((state) => state.setVolume),
   toggleAudioMuted: useAudioPlaybackStore((state) => state.toggleMuted),
+  toggleAudioItem: useAudioPlaybackStore((state) => state.toggleItem),
+  clearAudioItem: useAudioPlaybackStore((state) => state.clearItem),
 });
