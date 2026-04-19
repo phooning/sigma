@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
-import { message, open, save } from '@tauri-apps/plugin-dialog';
+import { open, save } from '@tauri-apps/plugin-dialog';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
+import { toast } from 'sonner';
 import packageJson from '../package.json';
 import InfiniteCanvas from './InfiniteCanvas';
 import { useSettingsStore } from './stores/useSettingsStore';
@@ -55,9 +56,17 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({
-  message: vi.fn(),
   save: vi.fn(),
   open: vi.fn()
+}));
+
+vi.mock('sonner', () => ({
+  toast: {
+    success: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+    error: vi.fn()
+  }
 }));
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
@@ -226,9 +235,8 @@ describe('InfiniteCanvas Application', () => {
       '/tmp/canvas.json',
       expect.stringContaining('"items"')
     );
-    expect(message).toHaveBeenCalledWith('Config saved successfully.', {
-      title: 'Save completed',
-      kind: 'info'
+    expect(toast.success).toHaveBeenCalledWith('Save completed', {
+      description: 'Config saved successfully.'
     });
   });
 

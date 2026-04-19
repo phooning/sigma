@@ -2,7 +2,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { MediaItem, Viewport } from "./media.types";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { message } from "@tauri-apps/plugin-dialog";
+import { notify } from "./notifications";
 
 type TErrorReason = "cancelled" | "invalid" | "error";
 
@@ -303,9 +303,8 @@ export const revealItem = async ({
   try {
     await revealItemInDir(item.filePath);
   } catch (error) {
-    await message(`Failed to show media in folder:\n\n${String(error)}`, {
-      title: "Show in folder failed",
-      kind: "error",
+    notify.error("Show in folder failed", {
+      description: error,
     });
   }
 };

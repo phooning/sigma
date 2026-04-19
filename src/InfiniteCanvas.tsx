@@ -9,7 +9,7 @@ import {
   WheelEvent as ReactWheelEvent,
 } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { message, open, save } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { ISelectionBox, SelectionBox } from "./components/SelectionBox";
 import { Hud } from "./components/Hud";
 import { DevelopmentOverlay } from "./components/DevelopmentOverlay";
@@ -60,6 +60,7 @@ import {
 } from "./stores/useVideoExportStore";
 import { getLoopRange } from "./utils/videoUtils";
 import { animateKineticPan } from "./utils/animations";
+import { notify } from "./utils/notifications";
 
 const VIEW_FIT_GAP = 50;
 const HUD_HEIGHT_FALLBACK = 48;
@@ -365,9 +366,14 @@ export default function InfiniteCanvas() {
     const result = await loadFromStorage();
     if (!result.ok) {
       if (result.reason !== "cancelled") {
-        await message(`Failed to load config:\n\n${result.reason}`, {
-          title: "Load failed",
-          kind: "error",
+        const description =
+          result.error ??
+          (result.reason === "invalid"
+            ? "Selected file is not a valid Sigma config."
+            : "Failed to load config.");
+
+        notify.error("Load failed", {
+          description,
         });
       }
 
@@ -716,14 +722,12 @@ export default function InfiniteCanvas() {
         currentTime: mediaElement?.currentTime ?? 0,
       });
 
-      await message(`Screenshot saved:\n\n${screenshotPath}`, {
-        title: "Screenshot saved",
-        kind: "info",
+      notify.success("Screenshot saved", {
+        description: screenshotPath,
       });
     } catch (error) {
-      await message(`Failed to save screenshot:\n\n${String(error)}`, {
-        title: "Screenshot failed",
-        kind: "error",
+      notify.error("Screenshot failed", {
+        description: error,
       });
     }
   };
@@ -740,17 +744,15 @@ export default function InfiniteCanvas() {
     );
 
     if (selectedVideoItems.length !== 1) {
-      await message("Select one video to export.", {
-        title: "Export unavailable",
-        kind: "warning",
+      notify.warning("Export unavailable", {
+        description: "Select one video to export.",
       });
       return;
     }
 
     if (useVideoExportStore.getState().exportingItemId !== null) {
-      await message("Wait for the current export to finish.", {
-        title: "Export in progress",
-        kind: "info",
+      notify.info("Export in progress", {
+        description: "Wait for the current export to finish.",
       });
       return;
     }
@@ -781,14 +783,12 @@ export default function InfiniteCanvas() {
         loopRange: getLoopRange(getStoredVideoLoop(item.id)),
       });
 
-      await message(`Video exported:\n\n${output}`, {
-        title: "Export complete",
-        kind: "info",
+      notify.success("Export complete", {
+        description: output,
       });
     } catch (error) {
-      await message(`Failed to export video:\n\n${String(error)}`, {
-        title: "Export failed",
-        kind: "error",
+      notify.error("Export failed", {
+        description: error,
       });
     } finally {
       setExportingItemId(null);
