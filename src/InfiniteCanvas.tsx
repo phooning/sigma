@@ -3,9 +3,6 @@ import {
   useEffect,
   useState,
   useRef,
-  type Dispatch,
-  type MutableRefObject,
-  type SetStateAction,
   WheelEvent as ReactWheelEvent,
 } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -13,11 +10,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { ISelectionBox, SelectionBox } from "./components/SelectionBox";
 import { Hud } from "./components/Hud";
 import { DevelopmentOverlay } from "./components/DevelopmentOverlay";
-import {
-  CropOverlay,
-  MediaFrameActions,
-  resetFrameSize,
-} from "./components/MediaFrameActions";
+import { resetFrameSize } from "./components/MediaFrameActions";
 import {
   exportMediaVideo,
   getCrop,
@@ -33,10 +26,10 @@ import {
 import {
   handleImageCrop,
   handleImageResize,
-  ImageActions,
   resetImageSize,
   TCropStart,
 } from "./components/ImageActions";
+import { CanvasMediaItem } from "./components/CanvasMediaItem";
 import { loadFromStorage, revealItem } from "./utils/fs";
 import {
   appVersion,
@@ -50,7 +43,6 @@ import {
 } from "./components/CanvasActions";
 import { useTauriDrop } from "./utils/drag";
 import { useCanvasHotkeys } from "./utils/keyboard";
-import { VideoMedia } from "./components/Video";
 import { useSettingsStore } from "./stores/useSettingsStore";
 import { useAudioPlaybackStore } from "./stores/useAudioPlaybackStore";
 import { useBackgroundCanvas } from "./components/useBackgroundCanvas";
@@ -58,145 +50,15 @@ import {
   getStoredVideoLoop,
   useVideoExportStore,
 } from "./stores/useVideoExportStore";
+import { useActiveAudioSelection } from "./components/useActiveAudioSelection";
+import { useViewportAnimation } from "./components/useViewportAnimation";
+import { getExportDefaultPath } from "./utils/exportPaths";
+import { getViewBounds } from "./utils/viewport";
 import { getLoopRange } from "./utils/videoUtils";
-import { animateKineticPan } from "./utils/animations";
 import { notify } from "./utils/notifications";
 
-const VIEW_FIT_GAP = 50;
-const HUD_HEIGHT_FALLBACK = 48;
-const CULL_MARGIN = 500;
 const ACTION_SELECTORS =
   ".reset-btn, .delete-btn, .crop-btn, .reveal-btn, .screenshot-btn, .audio-btn";
-
-const getMediaFileStem = (filePath: string) => {
-  const fileName = filePath.split(/[\\/]/).filter(Boolean).pop() || "video";
-  const extensionIndex = fileName.lastIndexOf(".");
-
-  return extensionIndex > 0 ? fileName.slice(0, extensionIndex) : fileName;
-};
-
-const getExportDefaultPath = (filePath: string) => {
-  const safeStem = getMediaFileStem(filePath)
-    .replace(/[<>:"/\\|?*\x00-\x1F]/g, "_")
-    .trim();
-
-  return `${safeStem || "video"}.mp4`;
-};
-
-type ViewBounds = {
-  viewLeft: number;
-  viewTop: number;
-  viewRight: number;
-  viewBottom: number;
-  screenWidth: number;
-  screenHeight: number;
-};
-
-const getViewBounds = (
-  viewport: Viewport,
-  width: number,
-  height: number,
-): ViewBounds => {
-  const screenWidth = width / viewport.zoom;
-  const screenHeight = height / viewport.zoom;
-  const viewLeft = -viewport.x;
-  const viewTop = -viewport.y;
-
-  return {
-    viewLeft,
-    viewTop,
-    viewRight: viewLeft + screenWidth,
-    viewBottom: viewTop + screenHeight,
-    screenWidth,
-    screenHeight,
-  };
-};
-
-type UseActiveAudioSelectionParams = {
-  activeAudioItemId: string | null;
-  containerRef: MutableRefObject<HTMLDivElement | null>;
-  itemsRef: MutableRefObject<MediaItem[]>;
-  panViewportTo: (target: Pick<Viewport, "x" | "y">) => void;
-  setEditingCropItem: Dispatch<SetStateAction<string | null>>;
-  setSelectedItems: Dispatch<SetStateAction<Set<string>>>;
-  viewportRef: MutableRefObject<Viewport>;
-};
-
-const useActiveAudioSelection = ({
-  activeAudioItemId,
-  containerRef,
-  itemsRef,
-  panViewportTo,
-  setEditingCropItem,
-  setSelectedItems,
-  viewportRef,
-}: UseActiveAudioSelectionParams) =>
-  useCallback(() => {
-    if (!activeAudioItemId) return;
-
-    const item = itemsRef.current.find((i) => i.id === activeAudioItemId);
-    if (!item) return;
-
-    const zoom = viewportRef.current.zoom;
-    const hudHeight = containerRef.current
-      ?.querySelector(".ui-overlay")
-      ?.getBoundingClientRect().height;
-    const headerHeight = (hudHeight || HUD_HEIGHT_FALLBACK) / zoom;
-    const {
-      screenWidth,
-      screenHeight,
-      viewLeft,
-      viewTop,
-      viewRight,
-      viewBottom,
-    } = getViewBounds(
-      viewportRef.current,
-      window.innerWidth,
-      window.innerHeight,
-    );
-    const usableViewTop = viewTop + headerHeight;
-    const itemLeft = item.x;
-    const itemTop = item.y;
-    const itemRight = item.x + item.width;
-    const itemBottom = item.y + item.height;
-    let nextViewLeft = viewLeft;
-    let nextViewTop = viewTop;
-
-    if (item.width + VIEW_FIT_GAP * 2 <= screenWidth) {
-      if (itemLeft < viewLeft + VIEW_FIT_GAP) {
-        nextViewLeft = itemLeft - VIEW_FIT_GAP;
-      } else if (itemRight > viewRight - VIEW_FIT_GAP) {
-        nextViewLeft = itemRight + VIEW_FIT_GAP - screenWidth;
-      }
-    } else if (itemLeft < viewLeft || itemRight > viewRight) {
-      nextViewLeft = itemLeft - VIEW_FIT_GAP;
-    }
-
-    if (item.height + VIEW_FIT_GAP * 2 + headerHeight <= screenHeight) {
-      if (itemTop < usableViewTop + VIEW_FIT_GAP) {
-        nextViewTop = itemTop - VIEW_FIT_GAP - headerHeight;
-      } else if (itemBottom > viewBottom - VIEW_FIT_GAP) {
-        nextViewTop = itemBottom + VIEW_FIT_GAP - screenHeight;
-      }
-    } else if (itemTop < usableViewTop || itemBottom > viewBottom) {
-      nextViewTop = itemTop - VIEW_FIT_GAP - headerHeight;
-    }
-
-    panViewportTo({
-      x: -nextViewLeft,
-      y: -nextViewTop,
-    });
-    setSelectedItems(new Set([item.id]));
-    setEditingCropItem(null);
-  }, [
-    activeAudioItemId,
-    containerRef,
-    itemsRef,
-    panViewportTo,
-    setEditingCropItem,
-    setSelectedItems,
-    viewportRef,
-  ]);
 
 export default function InfiniteCanvas() {
   const [items, setItems] = useState<MediaItem[]>([]);
@@ -254,12 +116,13 @@ export default function InfiniteCanvas() {
   > | null>(null);
   const cropHandleRef = useRef<CropHandle | null>(null);
   const cropStartRef = useRef<TCropStart>(null);
-  const thumbnailQueueRef = useRef<MediaItem[]>([]);
-  const thumbnailRequestedRef = useRef<Set<string>>(new Set());
-  const viewportAnimationRef = useRef<(() => void) | null>(null);
 
   // Canvas integrations.
   const { requestThumbnail } = useThumbnailQueue(setItems);
+  const { cancelViewportAnimation, panViewportTo } = useViewportAnimation({
+    viewportRef,
+    setViewport,
+  });
   useBackgroundCanvas(
     backgroundCanvasRef,
     canvasSize,
@@ -278,51 +141,6 @@ export default function InfiniteCanvas() {
       clearAudioItem(activeAudioItemId);
     }
   }, [activeAudioItemId, clearAudioItem, items]);
-
-  const cancelViewportAnimation = useCallback(() => {
-    if (viewportAnimationRef.current === null) return;
-
-    viewportAnimationRef.current();
-    viewportAnimationRef.current = null;
-  }, []);
-
-  const applyViewportPanPosition = useCallback(
-    (position: Pick<Viewport, "x" | "y">) => {
-      viewportRef.current = {
-        ...viewportRef.current,
-        x: position.x,
-        y: position.y,
-      };
-      setViewport((prev) => ({ ...prev, x: position.x, y: position.y }));
-    },
-    [],
-  );
-
-  const panViewportTo = useCallback(
-    (target: Pick<Viewport, "x" | "y">) => {
-      cancelViewportAnimation();
-
-      let didComplete = false;
-      let cancelPanAnimation: (() => void) | null = null;
-
-      cancelPanAnimation = animateKineticPan({
-        start: viewportRef.current,
-        target,
-        onUpdate: applyViewportPanPosition,
-        onComplete: () => {
-          didComplete = true;
-
-          if (viewportAnimationRef.current === cancelPanAnimation) {
-            viewportAnimationRef.current = null;
-          }
-        },
-      });
-      viewportAnimationRef.current = didComplete ? null : cancelPanAnimation;
-    },
-    [applyViewportPanPosition, cancelViewportAnimation],
-  );
-
-  useEffect(() => cancelViewportAnimation, [cancelViewportAnimation]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -667,10 +485,6 @@ export default function InfiniteCanvas() {
 
   const deleteItem = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    thumbnailQueueRef.current = thumbnailQueueRef.current.filter(
-      (item) => item.id !== id,
-    );
-    thumbnailRequestedRef.current.delete(id);
     setItems((prev) => prev.filter((i) => i.id !== id));
     setSelectedItems((prev) => {
       const newSet = new Set(prev);
@@ -795,7 +609,7 @@ export default function InfiniteCanvas() {
     }
   }, [itemsRef, selectedItemsRef, setExportingItemId]);
 
-  const { viewLeft, viewTop, viewRight, viewBottom } = getViewBounds(
+  const viewBounds = getViewBounds(
     viewport,
     canvasSize.width,
     canvasSize.height,
@@ -830,111 +644,32 @@ export default function InfiniteCanvas() {
           transform: `scale(${viewport.zoom}) translate(${viewport.x}px, ${viewport.y}px)`,
         }}
       >
-        {items.map((item) => {
-          const { id, url } = item;
-          const crop = getCrop(item);
-          const isCropEditing = editingCropItem === id;
-          const isSelected = selectedItems.has(id);
-          const itemLeft = item.x;
-          const itemTop = item.y;
-          const itemRight = item.x + item.width;
-          const itemBottom = item.y + item.height;
-          const isActiveAudioItem = activeAudioItemId === id;
-
-          const isCulled =
-            itemRight < viewLeft - CULL_MARGIN ||
-            itemLeft > viewRight + CULL_MARGIN ||
-            itemBottom < viewTop - CULL_MARGIN ||
-            itemTop > viewBottom + CULL_MARGIN;
-
-          if (isCulled && !isActiveAudioItem) {
-            return null;
-          }
-
-          const isVisuallyInViewport =
-            itemRight >= viewLeft &&
-            itemLeft <= viewRight &&
-            itemBottom >= viewTop &&
-            itemTop <= viewBottom;
-          const isInViewport = isVisuallyInViewport || isActiveAudioItem;
-
-          const zIndex =
-            draggingItem === id ||
-            resizingItem === id ||
-            croppingItem === id ||
-            isCropEditing ||
-            isSelected
-              ? 100
-              : 1;
-
-          return (
-            <div
-              key={id}
-              data-media-id={id}
-              className={[
-                "media-item",
-                isSelected && "selected",
-                isCropEditing && "crop-editing",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              style={{
-                left: item.x,
-                top: item.y,
-                width: item.width,
-                height: item.height,
-                zIndex,
-              }}
-              onPointerDown={(e) => handleItemPointerDown(id, e)}
-              onPointerMove={(e) => handleItemPointerMove(id, e)}
-              onPointerUp={(e) => handleItemPointerUp(id, e)}
-            >
-              <MediaFrameActions
-                item={item}
-                revealItem={(id, e) => {
-                  revealItem({ e, id, items });
-                }}
-                screenshotItem={screenshotItem}
-                resetSize={resetSize}
-                deleteItem={deleteItem}
-                startCropEdit={startCropEdit}
-                toggleAudioPlayback={toggleAudioPlayback}
-                isCropEditing={isCropEditing}
-              />
-              {item.type === "image" ? (
-                <ImageActions
-                  id={id}
-                  url={url}
-                  crop={crop}
-                  item={item}
-                  editingCropItem={editingCropItem}
-                  handleItemPointerDown={handleItemPointerDown}
-                />
-              ) : (
-                <>
-                  <VideoMedia
-                    url={url}
-                    crop={crop}
-                    item={item}
-                    isInViewport={isInViewport}
-                    zoom={viewport.zoom}
-                    onThumbnailNeeded={requestThumbnail}
-                  />
-                  {isCropEditing && (
-                    <CropOverlay
-                      id={id}
-                      handleItemPointerDown={handleItemPointerDown}
-                    />
-                  )}
-                </>
-              )}
-              <div
-                className="resize-handle"
-                onPointerDown={(e) => handleItemPointerDown(id, e)}
-              />
-            </div>
-          );
-        })}
+        {items.map((item) => (
+          <CanvasMediaItem
+            key={item.id}
+            activeAudioItemId={activeAudioItemId}
+            croppingItem={croppingItem}
+            deleteItem={deleteItem}
+            draggingItem={draggingItem}
+            editingCropItem={editingCropItem}
+            handleItemPointerDown={handleItemPointerDown}
+            handleItemPointerMove={handleItemPointerMove}
+            handleItemPointerUp={handleItemPointerUp}
+            item={item}
+            requestThumbnail={requestThumbnail}
+            resetSize={resetSize}
+            resizingItem={resizingItem}
+            revealItem={(id, e) => {
+              revealItem({ e, id, items });
+            }}
+            screenshotItem={screenshotItem}
+            selectedItems={selectedItems}
+            startCropEdit={startCropEdit}
+            toggleAudioPlayback={toggleAudioPlayback}
+            viewBounds={viewBounds}
+            viewport={viewport}
+          />
+        ))}
       </div>
 
       {selectionBox && <SelectionBox selectionBox={selectionBox} />}
