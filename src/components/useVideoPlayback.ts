@@ -1,6 +1,6 @@
 import { RefObject, useCallback, useEffect, useRef } from "react";
 import { useRefState } from "./useRefState";
-import { VideoLod } from "./videoUtils";
+import { VideoLod } from "../utils/videoUtils";
 
 interface UseVideoPlaybackArgs {
   videoRef: RefObject<HTMLVideoElement | null>;
@@ -42,13 +42,7 @@ export function useVideoPlayback({
       .catch(() => {
         onPlaybackError("Playback failed. This file may need transcoding.");
       });
-  }, [
-    isInViewport,
-    lod,
-    onPlaybackError,
-    shouldDeferVideoLoad,
-    videoRef,
-  ]);
+  }, [isInViewport, lod, onPlaybackError, shouldDeferVideoLoad, videoRef]);
 
   const togglePlayback = useCallback(() => {
     const video = videoRef.current;
@@ -92,14 +86,7 @@ export function useVideoPlayback({
       video.pause();
       onPause();
     }
-  }, [
-    isInViewport,
-    lod,
-    onPause,
-    playVideo,
-    shouldDeferVideoLoad,
-    videoRef,
-  ]);
+  }, [isInViewport, lod, onPause, playVideo, shouldDeferVideoLoad, videoRef]);
 
   return {
     isPaused,

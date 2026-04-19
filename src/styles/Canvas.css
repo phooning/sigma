@@ -11,14 +11,15 @@
 }
 
 .canvas-background {
-    position: absolute;
-    background-image: radial-gradient(
-        circle,
-        var(--canvas-grid) var(--grid-dot-size),
-        transparent calc(var(--grid-dot-size) + var(--grid-feather))
-    );
-    background-size: var(--grid-size) var(--grid-size);
+    position: fixed;
+    inset: 0;
+    width: 100dvw;
+    height: 100dvh;
     z-index: var(--z-canvas-base);
+    display: block;
+    transform: translateZ(0);
+    contain: strict;
+    pointer-events: none;
 }
 
 .canvas-world {

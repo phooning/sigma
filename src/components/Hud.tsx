@@ -1,7 +1,12 @@
 import { useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import type { MediaItem } from "../utils/media.types";
 import type { SettingsMenuItem } from "./HudActions";
 import { useDevStore } from "../stores/useDevStore";
+import {
+  useSettingsStore,
+  type CanvasBackgroundPattern,
+} from "../stores/useSettingsStore";
 import { Button } from "./ui/button";
 import {
   Card,
@@ -29,6 +34,8 @@ import { ScrollArea } from "./ui/scroll-area";
 import { Separator } from "./ui/separator";
 import { Switch } from "./ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
+import { useAudioPlayback } from "@/stores/useAudioPlaybackStore";
 
 export interface ISelectionBox {
   startX: number;
@@ -45,34 +52,88 @@ const SETTINGS_PANEL_DESCRIPTIONS: Record<SettingsMenuItem, string> = {
   About: "Version and application details.",
 };
 
+const getMediaFileName = (filePath: string) =>
+  filePath.split(/[\\/]/).filter(Boolean).pop() || "Untitled video";
+
 const Hud = ({
   items,
   saveConfig,
   loadConfig,
   settingsMenuItems,
   settingsVersion,
-  screenshotDirectory,
-  chooseScreenshotDirectory,
-  clearScreenshotDirectory,
-  isSettingsOpen,
-  openSettings,
-  closeSettings,
+  onSelectActiveAudioItem,
 }: {
   items: MediaItem[];
   saveConfig: () => void;
   loadConfig: () => void;
   settingsMenuItems: readonly SettingsMenuItem[];
   settingsVersion: string;
-  screenshotDirectory: string;
-  chooseScreenshotDirectory: () => void;
-  clearScreenshotDirectory: () => void;
-  isSettingsOpen: boolean;
-  openSettings: () => void;
-  closeSettings: () => void;
+  onSelectActiveAudioItem: () => void;
 }) => {
   const [activeSettingsMenuItem, setActiveSettingsMenuItem] =
     useState<SettingsMenuItem>(settingsMenuItems[0]);
   const { devMode, toggleDevMode } = useDevStore();
+  const isSettingsOpen = useSettingsStore((state) => state.isSettingsOpen);
+  const screenshotDirectory = useSettingsStore(
+    (state) => state.screenshotDirectory,
+  );
+  const canvasBackgroundPattern = useSettingsStore(
+    (state) => state.canvasBackgroundPattern,
+  );
+  const openSettings = useSettingsStore((state) => state.openSettings);
+  const closeSettings = useSettingsStore((state) => state.closeSettings);
+  const setScreenshotDirectory = useSettingsStore(
+    (state) => state.setScreenshotDirectory,
+  );
+  const setCanvasBackgroundPattern = useSettingsStore(
+    (state) => state.setCanvasBackgroundPattern,
+  );
+
+  const {
+    activeAudioItemId,
+    audioVolume,
+    isAudioMuted,
+    setAudioVolume,
+    toggleAudioMuted,
+  } = useAudioPlayback();
+
+  const chooseScreenshotDirectory = async () => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: "Choose screenshot directory",
+      defaultPath: screenshotDirectory || undefined,
+    });
+
+    if (typeof selected === "string") {
+      setScreenshotDirectory(selected);
+    }
+  };
+  const activeAudioItem =
+    activeAudioItemId === null
+      ? null
+      : (items.find(
+          (item) => item.id === activeAudioItemId && item.type === "video",
+        ) ?? null);
+  const activeAudioName = activeAudioItem
+    ? getMediaFileName(activeAudioItem.filePath)
+    : "";
+  const audioPercent = Math.round(audioVolume * 100);
+
+  const renderAudioMarqueeItem = (isHidden = false) =>
+    activeAudioItem?.thumbnailUrl ? (
+      <img
+        className="hud-audio-thumbnail"
+        src={activeAudioItem.thumbnailUrl}
+        alt={isHidden ? "" : activeAudioName}
+        aria-hidden={isHidden}
+        draggable={false}
+      />
+    ) : (
+      <span className="hud-audio-filename" aria-hidden={isHidden}>
+        {activeAudioName}
+      </span>
+    );
 
   return (
     <>
@@ -133,6 +194,73 @@ const Hud = ({
               <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 8 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 8a1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3a2 2 0 1 1 4 0v.1A1.7 1.7 0 0 0 16 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.2.4.6.7 1 .9.3.1.7.1 1.1.1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
             </svg>
           </button>
+
+          {activeAudioItem && (
+            <div
+              className="hud-audio-control"
+              onPointerDown={(event) => event.stopPropagation()}
+              onWheel={(event) => event.stopPropagation()}
+              title={activeAudioName}
+            >
+              <button
+                type="button"
+                className="hud-audio-mute-btn"
+                onClick={toggleAudioMuted}
+                aria-label={isAudioMuted ? "Unmute audio" : "Mute audio"}
+                aria-pressed={isAudioMuted}
+                title={isAudioMuted ? "Unmute audio" : "Mute audio"}
+              >
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M11 5 6 9H3v6h3l5 4V5z" />
+                  {isAudioMuted ? (
+                    <>
+                      <path d="m19 9-6 6" />
+                      <path d="m13 9 6 6" />
+                    </>
+                  ) : (
+                    <>
+                      <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+                      <path d="M18.5 5.5a9 9 0 0 1 0 13" />
+                    </>
+                  )}
+                </svg>
+              </button>
+              <button
+                type="button"
+                className="hud-audio-marquee"
+                aria-label={`Audio clip: ${activeAudioName}`}
+                onClick={onSelectActiveAudioItem}
+              >
+                <div className="hud-audio-marquee-track">
+                  {renderAudioMarqueeItem()}
+                  {renderAudioMarqueeItem(true)}
+                </div>
+              </button>
+              <input
+                className="hud-volume-slider"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={audioVolume}
+                aria-label={`Volume for ${activeAudioName}`}
+                aria-valuetext={`${audioPercent}%`}
+                onChange={(event) =>
+                  setAudioVolume(Number(event.currentTarget.value))
+                }
+              />
+            </div>
+          )}
 
           <span className="item-count">{items.length} items</span>
         </div>
@@ -227,12 +355,52 @@ const Hud = ({
                                     type="button"
                                     variant="ghost"
                                     size="sm"
-                                    onClick={clearScreenshotDirectory}
+                                    onClick={() => setScreenshotDirectory("")}
                                   >
                                     Clear
                                   </Button>
                                 ) : null}
                               </div>
+                            </Field>
+                          </FieldGroup>
+                        ) : null}
+
+                        {menuItem === "Appearance" ? (
+                          <FieldGroup>
+                            <Field orientation="responsive">
+                              <FieldContent>
+                                <FieldLabel>Canvas Background</FieldLabel>
+                                <FieldDescription>
+                                  Choose the marker style for navigating the
+                                  canvas.
+                                </FieldDescription>
+                              </FieldContent>
+                              <ToggleGroup
+                                type="single"
+                                value={canvasBackgroundPattern}
+                                onValueChange={(value) => {
+                                  if (value) {
+                                    setCanvasBackgroundPattern(
+                                      value as CanvasBackgroundPattern,
+                                    );
+                                  }
+                                }}
+                                variant="outline"
+                                size="sm"
+                              >
+                                <ToggleGroupItem
+                                  value="dots"
+                                  aria-label="Dots background"
+                                >
+                                  Dots
+                                </ToggleGroupItem>
+                                <ToggleGroupItem
+                                  value="grid"
+                                  aria-label="Grid background"
+                                >
+                                  Grid
+                                </ToggleGroupItem>
+                              </ToggleGroup>
                             </Field>
                           </FieldGroup>
                         ) : null}

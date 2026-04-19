@@ -12,7 +12,7 @@ import {
   getFiniteDuration,
   getLoopRange,
   LoopState,
-} from "./videoUtils";
+} from "../utils/videoUtils";
 
 interface UseVideoTimelineArgs {
   videoRef: RefObject<HTMLVideoElement | null>;
@@ -40,18 +40,21 @@ export function useVideoTimeline({
     playbackRate: 1,
   });
 
-  const writePlayheadPosition = useCallback((time: number) => {
-    const duration = durationStateRef.current;
-    const timeline = timelineRef.current;
-    if (duration <= 0 || !timeline) return;
+  const writePlayheadPosition = useCallback(
+    (time: number) => {
+      const duration = durationStateRef.current;
+      const timeline = timelineRef.current;
+      if (duration <= 0 || !timeline) return;
 
-    const ratio = clampVideoTime(time, duration) / duration;
+      const ratio = clampVideoTime(time, duration) / duration;
 
-    timeline.style.setProperty(
-      "--video-playhead-position",
-      `${ratio * 100}%`,
-    );
-  }, [durationStateRef]);
+      timeline.style.setProperty(
+        "--video-playhead-position",
+        `${ratio * 100}%`,
+      );
+    },
+    [durationStateRef],
+  );
 
   const stopTimelineAnimation = useCallback(() => {
     if (rafRef.current !== null) {
@@ -116,11 +119,7 @@ export function useVideoTimeline({
 
   const startTimelineAnimation = useCallback(() => {
     const video = videoRef.current;
-    if (
-      !video ||
-      durationStateRef.current <= 0 ||
-      isScrubbingRef.current
-    ) {
+    if (!video || durationStateRef.current <= 0 || isScrubbingRef.current) {
       return;
     }
 
@@ -198,8 +197,7 @@ export function useVideoTimeline({
       if (!timeline) return;
 
       const rect = timeline.getBoundingClientRect();
-      const ratio =
-        rect.width > 0 ? (clientX - rect.left) / rect.width : 0;
+      const ratio = rect.width > 0 ? (clientX - rect.left) / rect.width : 0;
       seekToRatio(Math.min(Math.max(ratio, 0), 1));
     },
     [seekToRatio],

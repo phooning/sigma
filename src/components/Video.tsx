@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import { CropInsets, MediaItem } from "../utils/media.types";
+import { useAudioPlaybackStore } from "../stores/useAudioPlaybackStore";
 import { useVideoLoop } from "./useVideoLoop";
 import { useVideoPlayback } from "./useVideoPlayback";
 import { useVideoTimeline } from "./useVideoTimeline";
@@ -15,13 +16,13 @@ import {
   getVideoLod,
   initialLoopState,
   shouldRequestVideoThumbnail,
-} from "./videoUtils";
+} from "../utils/videoUtils";
 
 export {
   clampVideoTime,
   getVideoLod,
   shouldRequestVideoThumbnail,
-} from "./videoUtils";
+} from "../utils/videoUtils";
 
 interface VideoMediaProps {
   url: string;
@@ -44,10 +45,17 @@ export function VideoMedia({
   const [playbackError, setPlaybackError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const externalLoopRef = useRef(initialLoopState);
-  const lod = isLoadRequested
+  const activeAudioItemId = useAudioPlaybackStore(
+    (state) => state.activeItemId,
+  );
+  const audioVolume = useAudioPlaybackStore((state) => state.volume);
+  const isAudioMuted = useAudioPlaybackStore((state) => state.muted);
+  const isAudioActive = activeAudioItemId === item.id;
+  const isVideoRequested = isLoadRequested || isAudioActive;
+  const lod = isVideoRequested
     ? "video"
     : getVideoLod(zoom, !!item.thumbnailUrl, item);
-  const shouldDeferVideoLoad = !!item.deferVideoLoad && !isLoadRequested;
+  const shouldDeferVideoLoad = !!item.deferVideoLoad && !isVideoRequested;
 
   const stopCanvasGesture = (
     e: ReactPointerEvent<HTMLElement> | ReactMouseEvent<HTMLElement>,
@@ -96,21 +104,28 @@ export function VideoMedia({
     syncTimelineFromVideo,
   });
 
-  const {
-    isPaused,
-    playVideo,
-    togglePlayback,
-    handlePlay,
-    handlePause,
-  } = useVideoPlayback({
-    videoRef,
-    lod,
-    isInViewport,
-    shouldDeferVideoLoad,
-    onPause: stopTimelineAnimation,
-    onPlay: startTimelineAnimation,
-    onPlaybackError: setPlaybackError,
-  });
+  const { isPaused, playVideo, togglePlayback, handlePlay, handlePause } =
+    useVideoPlayback({
+      videoRef,
+      lod,
+      isInViewport,
+      shouldDeferVideoLoad,
+      onPause: stopTimelineAnimation,
+      onPlay: startTimelineAnimation,
+      onPlaybackError: setPlaybackError,
+    });
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.volume = Math.min(1, Math.max(0, audioVolume));
+    video.muted = !isAudioActive || isAudioMuted || audioVolume <= 0;
+
+    if (isAudioActive) {
+      playVideo();
+    }
+  }, [audioVolume, isAudioActive, isAudioMuted, playVideo]);
 
   const mediaStyle = {
     left: -crop.left,
@@ -176,9 +191,9 @@ export function VideoMedia({
         className={`media-content ${isLoadRequested ? "video-load-requested" : ""}`}
         src={url}
         autoPlay={isInViewport}
-        preload={isLoadRequested && isInViewport ? "auto" : "metadata"}
+        preload={isVideoRequested && isInViewport ? "auto" : "metadata"}
         loop={!loop.enabled}
-        muted
+        muted={!isAudioActive || isAudioMuted || audioVolume <= 0}
         playsInline
         draggable={false}
         onLoadedMetadata={() => updateVideoMetadata(playVideo)}

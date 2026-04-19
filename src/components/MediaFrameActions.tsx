@@ -1,5 +1,6 @@
 import { CROP_HANDLES, EMPTY_CROP } from "../utils/media";
 import { MediaItem } from "../utils/media.types";
+import { useAudioPlaybackStore } from "../stores/useAudioPlaybackStore";
 
 export function CropOverlay({
   id,
@@ -50,6 +51,7 @@ export function MediaFrameActions({
   resetSize,
   deleteItem,
   startCropEdit,
+  toggleAudioPlayback,
   isCropEditing,
 }: {
   item: MediaItem;
@@ -58,8 +60,13 @@ export function MediaFrameActions({
   resetSize: (id: string, e: React.MouseEvent) => void;
   deleteItem: (id: string, e: React.MouseEvent) => void;
   startCropEdit: (id: string, e: React.MouseEvent) => void;
+  toggleAudioPlayback: (id: string, e: React.MouseEvent) => void;
   isCropEditing: boolean;
 }) {
+  const isAudioActive = useAudioPlaybackStore(
+    (state) => state.activeItemId === item.id,
+  );
+
   return (
     <>
       <button
@@ -91,6 +98,19 @@ export function MediaFrameActions({
       >
         ⧉
       </button>
+      {item.type === "video" && (
+        <button
+          className="audio-btn"
+          onClick={(e) => toggleAudioPlayback(item.id, e)}
+          title={isAudioActive ? "Disable Audio" : "Enable Audio"}
+          aria-label={
+            isAudioActive ? "Disable audio playback" : "Enable audio playback"
+          }
+          aria-pressed={isAudioActive}
+        >
+          ♪
+        </button>
+      )}
       <button
         className="delete-btn"
         onClick={(e) => deleteItem(item.id, e)}

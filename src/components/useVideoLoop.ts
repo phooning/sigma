@@ -1,16 +1,11 @@
-import {
-  MutableRefObject,
-  RefObject,
-  useCallback,
-  useEffect,
-} from "react";
+import { MutableRefObject, RefObject, useCallback, useEffect } from "react";
 import { useRefState } from "./useRefState";
 import {
   clampVideoTime,
   getLoopRange,
   initialLoopState,
   LoopState,
-} from "./videoUtils";
+} from "../utils/videoUtils";
 
 interface UseVideoLoopArgs {
   videoRef: RefObject<HTMLVideoElement | null>;
@@ -34,34 +29,37 @@ export function useVideoLoop({
   const [loop, loopRef, setLoop] = useRefState<LoopState>(initialLoopState);
   externalLoopRef.current = loopRef.current;
 
-  const writeLoopPosition = useCallback((nextLoop: LoopState) => {
-    const duration = durationRef.current;
-    const timeline = timelineRef.current;
-    if (duration <= 0 || !timeline) return;
+  const writeLoopPosition = useCallback(
+    (nextLoop: LoopState) => {
+      const duration = durationRef.current;
+      const timeline = timelineRef.current;
+      if (duration <= 0 || !timeline) return;
 
-    const aPosition =
-      nextLoop.a === null
-        ? "-100%"
-        : `${(clampVideoTime(nextLoop.a, duration) / duration) * 100}%`;
-    const bPosition =
-      nextLoop.b === null
-        ? "-100%"
-        : `${(clampVideoTime(nextLoop.b, duration) / duration) * 100}%`;
-    const range = getLoopRange(nextLoop);
-    const rangeStart =
-      range === null
-        ? "0%"
-        : `${(clampVideoTime(range.start, duration) / duration) * 100}%`;
-    const rangeEnd =
-      range === null
-        ? "0%"
-        : `${(clampVideoTime(range.end, duration) / duration) * 100}%`;
+      const aPosition =
+        nextLoop.a === null
+          ? "-100%"
+          : `${(clampVideoTime(nextLoop.a, duration) / duration) * 100}%`;
+      const bPosition =
+        nextLoop.b === null
+          ? "-100%"
+          : `${(clampVideoTime(nextLoop.b, duration) / duration) * 100}%`;
+      const range = getLoopRange(nextLoop);
+      const rangeStart =
+        range === null
+          ? "0%"
+          : `${(clampVideoTime(range.start, duration) / duration) * 100}%`;
+      const rangeEnd =
+        range === null
+          ? "0%"
+          : `${(clampVideoTime(range.end, duration) / duration) * 100}%`;
 
-    timeline.style.setProperty("--video-loop-a-position", aPosition);
-    timeline.style.setProperty("--video-loop-b-position", bPosition);
-    timeline.style.setProperty("--video-loop-start-position", rangeStart);
-    timeline.style.setProperty("--video-loop-end-position", rangeEnd);
-  }, [durationRef, timelineRef]);
+      timeline.style.setProperty("--video-loop-a-position", aPosition);
+      timeline.style.setProperty("--video-loop-b-position", bPosition);
+      timeline.style.setProperty("--video-loop-start-position", rangeStart);
+      timeline.style.setProperty("--video-loop-end-position", rangeEnd);
+    },
+    [durationRef, timelineRef],
+  );
 
   const updateLoop = useCallback(
     (getNextLoop: (previous: LoopState) => LoopState) => {

@@ -8,6 +8,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: var(--space-4);
     color: var(--text-default);
     background: var(--surface-toolbar);
     border-bottom: var(--border-width) solid var(--border);
@@ -31,6 +32,7 @@
     align-items: center;
     justify-content: flex-end;
     gap: var(--space-3);
+    min-width: 0;
 }
 
 .hud-btn {
@@ -64,6 +66,7 @@
 }
 
 .hud-title {
+    flex: 0 0 auto;
     color: var(--text-strong);
     font-size: var(--text-sm);
     font-weight: 700;
@@ -88,4 +91,132 @@
 
 .hud-btn:active {
     background: var(--surface-control-active);
+}
+
+.hud-audio-control {
+    display: inline-flex;
+    align-items: center;
+    height: var(--space-7);
+    min-width: 0;
+    gap: var(--space-2);
+    padding: 0 var(--space-2);
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius-xs);
+    background: var(--surface-control);
+    color: var(--text-control);
+}
+
+.hud-audio-mute-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--space-6);
+    height: var(--space-6);
+    flex: 0 0 auto;
+    padding: 0;
+    border: var(--border-width) solid transparent;
+    border-radius: var(--radius-xs);
+    background: transparent;
+    color: var(--text-control);
+    cursor: pointer;
+}
+
+.hud-audio-mute-btn:hover,
+.hud-audio-mute-btn[aria-pressed="true"] {
+    border-color: var(--input);
+    background: var(--surface-control-hover);
+    color: var(--text-strong);
+}
+
+.hud-audio-marquee {
+    position: relative;
+    display: block;
+    width: min(10rem, 26vw);
+    min-width: var(--space-16);
+    height: calc(var(--space-7) - var(--space-1));
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    border-radius: var(--radius-xs);
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+
+.hud-audio-marquee::before,
+.hud-audio-marquee::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: var(--space-4);
+    pointer-events: none;
+    z-index: var(--z-canvas-world);
+}
+
+.hud-audio-marquee::before {
+    left: 0;
+    background: linear-gradient(90deg, var(--surface-control), transparent);
+}
+
+.hud-audio-marquee::after {
+    right: 0;
+    background: linear-gradient(90deg, transparent, var(--surface-control));
+}
+
+.hud-audio-marquee-track {
+    display: flex;
+    align-items: center;
+    width: max-content;
+    height: 100%;
+    gap: var(--space-2);
+    animation: hud-audio-marquee 8s linear infinite;
+}
+
+.hud-audio-control:hover .hud-audio-marquee-track {
+    animation-play-state: paused;
+}
+
+.hud-audio-thumbnail {
+    width: var(--space-11);
+    height: 100%;
+    flex: 0 0 auto;
+    object-fit: cover;
+    border-radius: var(--radius-xs);
+    box-shadow: inset 0 0 0 var(--border-width) var(--border);
+}
+
+.hud-audio-filename {
+    flex: 0 0 auto;
+    max-width: none;
+    color: var(--text-strong);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: var(--leading-none);
+    text-transform: none;
+    white-space: nowrap;
+}
+
+.hud-volume-slider {
+    width: min(8rem, 20vw);
+    min-width: var(--space-20);
+    accent-color: var(--primary);
+    cursor: pointer;
+}
+
+@keyframes hud-audio-marquee {
+    from {
+        transform: translateX(0);
+    }
+
+    to {
+        transform: translateX(calc(-50% - var(--space-1)));
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .hud-audio-marquee-track {
+        animation: none;
+    }
 }
