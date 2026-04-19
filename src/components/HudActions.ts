@@ -1,7 +1,7 @@
-import { message } from "@tauri-apps/plugin-dialog";
 import packageJson from "../../package.json";
 import { saveToStorage } from "../utils/fs";
 import { MediaItem, Viewport } from "../utils/media.types";
+import { notify } from "../utils/notifications";
 
 export const SETTINGS_MENU_ITEMS = [
   "General",
@@ -31,15 +31,13 @@ export const saveConfig = async ({
         : "Unknown error while saving.";
 
     console.error("Failed to save config:", result.error);
-    await message(`Failed to save config:\n\n${text}`, {
-      title: "Save failed",
-      kind: "error",
+    notify.error("Save failed", {
+      description: text,
     });
     return;
   }
 
-  await message("Config saved successfully.", {
-    title: "Save completed",
-    kind: "info",
+  notify.success("Save completed", {
+    description: "Config saved successfully.",
   });
 };
