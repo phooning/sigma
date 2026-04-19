@@ -66,13 +66,16 @@ export function MediaFrameActions({
   const isAudioActive = useAudioPlaybackStore(
     (state) => state.activeItemId === item.id,
   );
+  const audioLabel = isAudioActive
+    ? "Disable audio playback"
+    : "Enable audio playback";
 
   return (
     <>
       <button
         className="crop-btn"
         onClick={(e) => startCropEdit(item.id, e)}
-        title="Crop"
+        aria-label="Crop"
         aria-pressed={isCropEditing}
       >
         C
@@ -80,21 +83,21 @@ export function MediaFrameActions({
       <button
         className="reset-btn"
         onClick={(e) => resetSize(item.id, e)}
-        title="Reset Size"
+        aria-label="Reset size"
       >
         ⤡
       </button>
       <button
         className="reveal-btn"
         onClick={(e) => revealItem(item.id, e)}
-        title="Show in Folder"
+        aria-label="Show in folder"
       >
         ⌕
       </button>
       <button
         className="screenshot-btn"
         onClick={(e) => screenshotItem(item.id, e)}
-        title="Save Screenshot"
+        aria-label="Save screenshot"
       >
         ⧉
       </button>
@@ -102,10 +105,7 @@ export function MediaFrameActions({
         <button
           className="audio-btn"
           onClick={(e) => toggleAudioPlayback(item.id, e)}
-          title={isAudioActive ? "Disable Audio" : "Enable Audio"}
-          aria-label={
-            isAudioActive ? "Disable audio playback" : "Enable audio playback"
-          }
+          aria-label={audioLabel}
           aria-pressed={isAudioActive}
         >
           ♪
@@ -114,7 +114,7 @@ export function MediaFrameActions({
       <button
         className="delete-btn"
         onClick={(e) => deleteItem(item.id, e)}
-        title="Delete"
+        aria-label="Delete"
       >
         ✕
       </button>
