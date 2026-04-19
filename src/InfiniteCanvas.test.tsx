@@ -761,12 +761,48 @@ describe('InfiniteCanvas Application', () => {
 
     expect(world.style.transform).toContain('translate(-1500px, -1000px)');
 
+    const animationFrames: FrameRequestCallback[] = [];
+    let animationFrameHandle = 0;
+    const requestAnimationFrameSpy = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation((callback) => {
+        if (callback.name === 'tick') {
+          animationFrames.push(callback);
+        }
+        animationFrameHandle += 1;
+        return animationFrameHandle;
+      });
+    const cancelAnimationFrameSpy = vi
+      .spyOn(window, 'cancelAnimationFrame')
+      .mockImplementation(() => {});
+    const performanceNowSpy = vi
+      .spyOn(performance, 'now')
+      .mockImplementation(() => 0);
+
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /audio clip: pan-target\.mp4/i }));
     });
 
     expect(document.querySelector('.media-item')).toHaveClass('selected');
+    expect(world.style.transform).toContain('translate(-1500px, -1000px)');
+    expect(animationFrames).toHaveLength(1);
+
+    await act(async () => {
+      animationFrames.shift()?.(1);
+    });
+
+    expect(world.style.transform).not.toContain('translate(-1500px, -1000px)');
+    expect(world.style.transform).not.toContain('translate(-950px, -502px)');
+
+    await act(async () => {
+      animationFrames.shift()?.(1000);
+    });
+
     expect(world.style.transform).toContain('translate(-950px, -502px)');
+
+    requestAnimationFrameSpy.mockRestore();
+    cancelAnimationFrameSpy.mockRestore();
+    performanceNowSpy.mockRestore();
 
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,

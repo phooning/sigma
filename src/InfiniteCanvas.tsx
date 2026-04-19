@@ -59,6 +59,7 @@ import {
   useVideoExportStore,
 } from "./stores/useVideoExportStore";
 import { getLoopRange } from "./utils/videoUtils";
+import { animateKineticPan } from "./utils/animations";
 
 const VIEW_FIT_GAP = 50;
 const HUD_HEIGHT_FALLBACK = 48;
@@ -114,9 +115,9 @@ type UseActiveAudioSelectionParams = {
   activeAudioItemId: string | null;
   containerRef: MutableRefObject<HTMLDivElement | null>;
   itemsRef: MutableRefObject<MediaItem[]>;
+  panViewportTo: (target: Pick<Viewport, "x" | "y">) => void;
   setEditingCropItem: Dispatch<SetStateAction<string | null>>;
   setSelectedItems: Dispatch<SetStateAction<Set<string>>>;
-  setViewport: Dispatch<SetStateAction<Viewport>>;
   viewportRef: MutableRefObject<Viewport>;
 };
 
@@ -124,9 +125,9 @@ const useActiveAudioSelection = ({
   activeAudioItemId,
   containerRef,
   itemsRef,
+  panViewportTo,
   setEditingCropItem,
   setSelectedItems,
-  setViewport,
   viewportRef,
 }: UseActiveAudioSelectionParams) =>
   useCallback(() => {
@@ -180,20 +181,19 @@ const useActiveAudioSelection = ({
       nextViewTop = itemTop - VIEW_FIT_GAP - headerHeight;
     }
 
-    setViewport((prev) => ({
-      ...prev,
+    panViewportTo({
       x: -nextViewLeft,
       y: -nextViewTop,
-    }));
+    });
     setSelectedItems(new Set([item.id]));
     setEditingCropItem(null);
   }, [
     activeAudioItemId,
     containerRef,
     itemsRef,
+    panViewportTo,
     setEditingCropItem,
     setSelectedItems,
-    setViewport,
     viewportRef,
   ]);
 
@@ -255,6 +255,7 @@ export default function InfiniteCanvas() {
   const cropStartRef = useRef<TCropStart>(null);
   const thumbnailQueueRef = useRef<MediaItem[]>([]);
   const thumbnailRequestedRef = useRef<Set<string>>(new Set());
+  const viewportAnimationRef = useRef<(() => void) | null>(null);
 
   // Canvas integrations.
   const { requestThumbnail } = useThumbnailQueue(setItems);
@@ -277,6 +278,51 @@ export default function InfiniteCanvas() {
     }
   }, [activeAudioItemId, clearAudioItem, items]);
 
+  const cancelViewportAnimation = useCallback(() => {
+    if (viewportAnimationRef.current === null) return;
+
+    viewportAnimationRef.current();
+    viewportAnimationRef.current = null;
+  }, []);
+
+  const applyViewportPanPosition = useCallback(
+    (position: Pick<Viewport, "x" | "y">) => {
+      viewportRef.current = {
+        ...viewportRef.current,
+        x: position.x,
+        y: position.y,
+      };
+      setViewport((prev) => ({ ...prev, x: position.x, y: position.y }));
+    },
+    [],
+  );
+
+  const panViewportTo = useCallback(
+    (target: Pick<Viewport, "x" | "y">) => {
+      cancelViewportAnimation();
+
+      let didComplete = false;
+      let cancelPanAnimation: (() => void) | null = null;
+
+      cancelPanAnimation = animateKineticPan({
+        start: viewportRef.current,
+        target,
+        onUpdate: applyViewportPanPosition,
+        onComplete: () => {
+          didComplete = true;
+
+          if (viewportAnimationRef.current === cancelPanAnimation) {
+            viewportAnimationRef.current = null;
+          }
+        },
+      });
+      viewportAnimationRef.current = didComplete ? null : cancelPanAnimation;
+    },
+    [applyViewportPanPosition, cancelViewportAnimation],
+  );
+
+  useEffect(() => cancelViewportAnimation, [cancelViewportAnimation]);
+
   useEffect(() => {
     const handleResize = () => {
       setCanvasSize({
@@ -294,6 +340,7 @@ export default function InfiniteCanvas() {
     clientX: number,
     clientY: number,
   ) => {
+    cancelViewportAnimation();
     setIsPanning(true);
     startDragRef.current = { x: clientX, y: clientY };
     containerRef.current?.setPointerCapture(pointerId);
@@ -340,6 +387,7 @@ export default function InfiniteCanvas() {
       setItems(loadedItems);
     }
     if (data.viewport) {
+      cancelViewportAnimation();
       setViewport(data.viewport);
     }
     setSelectedItems(new Set());
@@ -351,9 +399,9 @@ export default function InfiniteCanvas() {
     activeAudioItemId,
     containerRef,
     itemsRef,
+    panViewportTo,
     setEditingCropItem,
     setSelectedItems,
-    setViewport,
     viewportRef,
   });
 
@@ -363,6 +411,8 @@ export default function InfiniteCanvas() {
       e.target === containerRef.current ||
       (e.target as HTMLElement).classList.contains("canvas-background")
     ) {
+      cancelViewportAnimation();
+
       if (e.button === 0) {
         // Selection Box logic - correct offset by using getBoundingClientRect
         const rect = containerRef.current!.getBoundingClientRect();
@@ -458,6 +508,7 @@ export default function InfiniteCanvas() {
 
   const handleWheel = (e: ReactWheelEvent) => {
     e.preventDefault();
+    cancelViewportAnimation();
     const data =
       getWheelInputType(e) === "trackpad-pan"
         ? handlePanAction({ e, viewport })
@@ -475,6 +526,7 @@ export default function InfiniteCanvas() {
     }
 
     e.stopPropagation();
+    cancelViewportAnimation();
 
     if (e.button === 1 || e.button === 2) {
       e.preventDefault();
