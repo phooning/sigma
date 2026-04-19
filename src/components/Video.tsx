@@ -7,6 +7,10 @@ import {
 } from "react";
 import { CropInsets, MediaItem } from "../utils/media.types";
 import { useAudioPlaybackStore } from "../stores/useAudioPlaybackStore";
+import {
+  getStoredVideoLoop,
+  useVideoExportStore,
+} from "../stores/useVideoExportStore";
 import { useVideoLoop } from "./useVideoLoop";
 import { useVideoPlayback } from "./useVideoPlayback";
 import { useVideoTimeline } from "./useVideoTimeline";
@@ -43,8 +47,12 @@ export function VideoMedia({
 }: VideoMediaProps) {
   const [isLoadRequested, setIsLoadRequested] = useState(false);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
+  const [initialLoop] = useState(() => getStoredVideoLoop(item.id));
   const videoRef = useRef<HTMLVideoElement>(null);
   const externalLoopRef = useRef(initialLoopState);
+  const setVideoLoopState = useVideoExportStore(
+    (state) => state.setLoopState,
+  );
   const activeAudioItemId = useAudioPlaybackStore(
     (state) => state.activeItemId,
   );
@@ -99,10 +107,15 @@ export function VideoMedia({
     timelineRef,
     durationRef,
     externalLoopRef,
+    initialLoop,
     duration,
     url,
     syncTimelineFromVideo,
   });
+
+  useEffect(() => {
+    setVideoLoopState(item.id, loop);
+  }, [item.id, loop, setVideoLoopState]);
 
   const { isPaused, playVideo, togglePlayback, handlePlay, handlePause } =
     useVideoPlayback({

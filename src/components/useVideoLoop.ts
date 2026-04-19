@@ -12,6 +12,7 @@ interface UseVideoLoopArgs {
   timelineRef: RefObject<HTMLDivElement | null>;
   durationRef: MutableRefObject<number>;
   externalLoopRef: MutableRefObject<LoopState>;
+  initialLoop?: LoopState;
   duration: number;
   url: string;
   syncTimelineFromVideo: (time: number, nextDuration?: number) => void;
@@ -22,11 +23,12 @@ export function useVideoLoop({
   timelineRef,
   durationRef,
   externalLoopRef,
+  initialLoop = initialLoopState,
   duration,
   url,
   syncTimelineFromVideo,
 }: UseVideoLoopArgs) {
-  const [loop, loopRef, setLoop] = useRefState<LoopState>(initialLoopState);
+  const [loop, loopRef, setLoop] = useRefState<LoopState>(initialLoop);
   externalLoopRef.current = loopRef.current;
 
   const writeLoopPosition = useCallback(
@@ -131,9 +133,9 @@ export function useVideoLoop({
   }, [duration, externalLoopRef, loop, writeLoopPosition]);
 
   useEffect(() => {
-    externalLoopRef.current = initialLoopState;
-    setLoop(initialLoopState);
-  }, [externalLoopRef, setLoop, url]);
+    externalLoopRef.current = initialLoop;
+    setLoop(initialLoop);
+  }, [externalLoopRef, initialLoop, setLoop, url]);
 
   return {
     loop,

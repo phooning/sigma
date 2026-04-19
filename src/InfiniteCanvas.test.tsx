@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
-import { open } from '@tauri-apps/plugin-dialog';
+import { message, open, save } from '@tauri-apps/plugin-dialog';
+import { writeTextFile } from '@tauri-apps/plugin-fs';
 import packageJson from '../package.json';
 import InfiniteCanvas from './InfiniteCanvas';
 import { useSettingsStore } from './stores/useSettingsStore';
 import { useAudioPlaybackStore } from './stores/useAudioPlaybackStore';
+import { useVideoExportStore } from './stores/useVideoExportStore';
 
 // Mock Tauri APIs
 let dropCallback: any = null;
@@ -42,6 +44,10 @@ vi.mock('@tauri-apps/api/core', () => ({
 
     if (command === 'save_media_screenshot') {
       return Promise.resolve('/shots/test-screenshot.png');
+    }
+
+    if (command === 'export_video') {
+      return Promise.resolve('/exports/test-video.mp4');
     }
 
     return Promise.resolve(null);
@@ -133,6 +139,7 @@ describe('InfiniteCanvas Application', () => {
     localStorage.clear();
     useSettingsStore.getState().resetSettings();
     useAudioPlaybackStore.getState().resetAudioPlayback();
+    useVideoExportStore.getState().resetVideoExportState();
     dropCallback = null;
   });
 
@@ -163,6 +170,26 @@ describe('InfiniteCanvas Application', () => {
     expect(screen.getByText('Video count')).toBeInTheDocument();
   });
 
+  it('lists available hotkeys in settings', async () => {
+    render(<InfiniteCanvas />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /open settings/i }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('tab', { name: 'Hotkeys' }));
+    });
+
+    expect(screen.getByText('Ctrl/Cmd+S')).toBeInTheDocument();
+    expect(screen.getByText('Save the current canvas configuration.')).toBeInTheDocument();
+    expect(screen.getByText('Spacebar')).toBeInTheDocument();
+    expect(screen.getByText('Pause selected videos.')).toBeInTheDocument();
+    expect(screen.getByText('Ctrl/Cmd+A')).toBeInTheDocument();
+    expect(screen.getByText('Select every item on the canvas.')).toBeInTheDocument();
+    expect(screen.getByText('Delete/Backspace')).toBeInTheDocument();
+    expect(screen.getByText('Delete the selected items.')).toBeInTheDocument();
+  });
+
   it('chooses a screenshot directory from general settings', async () => {
     vi.mocked(open).mockResolvedValue('/shots');
 
@@ -181,6 +208,28 @@ describe('InfiniteCanvas Application', () => {
     });
     expect(screen.getByText('/shots')).toBeInTheDocument();
     expect(localStorage.getItem('sigma:screenshot-directory')).toBe('/shots');
+  });
+
+  it('saves from the keyboard shortcut', async () => {
+    vi.mocked(save).mockResolvedValue('/tmp/canvas.json');
+
+    render(<InfiniteCanvas />);
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+    });
+
+    await waitFor(() => {
+      expect(writeTextFile).toHaveBeenCalledOnce();
+    });
+    expect(writeTextFile).toHaveBeenCalledWith(
+      '/tmp/canvas.json',
+      expect.stringContaining('"items"')
+    );
+    expect(message).toHaveBeenCalledWith('Config saved successfully.', {
+      title: 'Save completed',
+      kind: 'info'
+    });
   });
 
   it('switches the canvas background from dots to grid', async () => {
@@ -251,6 +300,51 @@ describe('InfiniteCanvas Application', () => {
       writable: true,
       value: originalInnerWidth
     });
+  });
+
+  it('pauses selected videos with the spacebar', async () => {
+    const videoPath = '/path/to/spacebar-video.mp4';
+
+    render(<InfiniteCanvas />);
+
+    await act(async () => {
+      if (dropCallback) {
+        dropCallback({
+          payload: {
+            type: 'drop',
+            paths: [videoPath]
+          }
+        });
+      }
+    });
+
+    const video = await waitFor(() => {
+      const found = document.querySelector('video.media-content') as HTMLVideoElement | null;
+      expect(found).toBeInTheDocument();
+      return found!;
+    });
+    const pause = vi.fn();
+    Object.defineProperty(video, 'paused', {
+      configurable: true,
+      get: () => false
+    });
+    Object.defineProperty(video, 'pause', {
+      configurable: true,
+      value: pause
+    });
+
+    const mediaItem = document.querySelector('.media-item') as HTMLElement;
+    await act(async () => {
+      fireEvent.pointerDown(mediaItem, { button: 0, clientX: 10, clientY: 10, pointerId: 21 });
+    });
+
+    expect(mediaItem).toHaveClass('selected');
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: ' ', code: 'Space' });
+    });
+
+    expect(pause).toHaveBeenCalledOnce();
   });
 
   it('drops large videos as deferred load proxies until playback is requested', async () => {
@@ -414,6 +508,102 @@ describe('InfiniteCanvas Application', () => {
         name: /volume for generated-lod-test-1080p\.mp4/i
       })).not.toBeInTheDocument();
       expect(video.muted).toBe(true);
+    });
+
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: originalInnerWidth
+    });
+  });
+
+  it('exports the selected video with the current A/B loop range', async () => {
+    const originalInnerWidth = window.innerWidth;
+    const videoPath = new URL(
+      '../fixtures/generated-lod-test-1080p.mp4',
+      import.meta.url
+    ).pathname;
+    let currentTime = 0;
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 3000
+    });
+    vi.mocked(save).mockResolvedValue('/exports/generated-lod-test-1080p');
+
+    render(<InfiniteCanvas />);
+
+    await act(async () => {
+      if (dropCallback) {
+        dropCallback({
+          payload: {
+            type: 'drop',
+            paths: [videoPath]
+          }
+        });
+      }
+    });
+
+    await waitFor(() => {
+      expect(document.querySelector('video.media-content')).toBeInTheDocument();
+    });
+
+    const video = document.querySelector('video.media-content') as HTMLVideoElement;
+    Object.defineProperty(video, 'duration', {
+      configurable: true,
+      get: () => 8
+    });
+    Object.defineProperty(video, 'currentTime', {
+      configurable: true,
+      get: () => currentTime,
+      set: (value) => {
+        currentTime = value;
+      }
+    });
+
+    fireEvent.loadedMetadata(video);
+    currentTime = 2;
+    fireEvent.timeUpdate(video);
+    fireEvent.click(screen.getByRole('button', { name: /set loop a point/i }));
+    currentTime = 5;
+    fireEvent.timeUpdate(video);
+    fireEvent.click(screen.getByRole('button', { name: /set loop b point/i }));
+
+    const mediaItem = document.querySelector('.media-item') as HTMLElement;
+    await act(async () => {
+      fireEvent.pointerDown(mediaItem, { button: 0, clientX: 0, clientY: 0, pointerId: 21 });
+      fireEvent.pointerUp(mediaItem, { pointerId: 21 });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /export selected video/i }));
+    });
+
+    expect(save).toHaveBeenCalledWith({
+      title: 'Export video',
+      defaultPath: 'generated-lod-test-1080p.mp4',
+      filters: [
+        {
+          name: 'MP4 Video',
+          extensions: ['mp4']
+        }
+      ]
+    });
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('export_video', {
+        path: videoPath,
+        outputPath: '/exports/generated-lod-test-1080p.mp4',
+        crop: {
+          x: 0,
+          y: 0,
+          width: 1,
+          height: 1,
+          boxWidth: 1280,
+          boxHeight: 720
+        },
+        startTime: 2,
+        endTime: 5
+      });
     });
 
     Object.defineProperty(window, 'innerWidth', {

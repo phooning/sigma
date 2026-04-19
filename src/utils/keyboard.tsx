@@ -1,10 +1,11 @@
 import { useEffect } from "react";
-import { isMacOS } from "../components/CanvasActions";
 import { MediaItem } from "./media.types";
 
 type CanvasHotkeyConfig = {
+  containerRef: React.RefObject<HTMLDivElement | null>;
   itemsRef: React.RefObject<MediaItem[]>;
   selectedItemsRef: React.RefObject<Set<string>>;
+  onSave: () => void | Promise<void>;
   setItems: React.Dispatch<React.SetStateAction<MediaItem[]>>;
   setSelectedItems: React.Dispatch<React.SetStateAction<Set<string>>>;
   setEditingCropItem: React.Dispatch<React.SetStateAction<string | null>>;
@@ -19,12 +20,37 @@ const isEditableTarget = (target: EventTarget | null) => {
 };
 
 const loadCanvasHotkeys = ({
+  containerRef,
   itemsRef,
+  onSave,
   selectedItemsRef,
   setItems,
   setSelectedItems,
   setEditingCropItem,
 }: CanvasHotkeyConfig) => {
+  const pauseSelectedVideos = () => {
+    const selected = selectedItemsRef.current;
+    if (selected.size === 0) return false;
+
+    let hasSelectedVideo = false;
+
+    itemsRef.current
+      .filter((item) => item.type === "video" && selected.has(item.id))
+      .forEach((item) => {
+        hasSelectedVideo = true;
+        const mediaElement = containerRef.current?.querySelector<HTMLElement>(
+          `[data-media-id="${item.id}"]`,
+        );
+        const video = mediaElement?.querySelector("video");
+
+        if (video && !video.paused) {
+          video.pause();
+        }
+      });
+
+    return hasSelectedVideo;
+  };
+
   const handleKeyDown = (event: KeyboardEvent) => {
     if (isEditableTarget(event.target)) return;
 
@@ -46,9 +72,24 @@ const loadCanvasHotkeys = ({
       return;
     }
 
+    const isSave =
+      event.key.toLowerCase() === "s" && (event.ctrlKey || event.metaKey);
+
+    if (isSave) {
+      event.preventDefault();
+      onSave();
+      return;
+    }
+
+    if (event.key === " " || event.code === "Space") {
+      if (pauseSelectedVideos()) {
+        event.preventDefault();
+      }
+      return;
+    }
+
     const isSelectAll =
-      event.key.toLowerCase() === "a" &&
-      (isMacOS() ? event.metaKey : event.ctrlKey);
+      event.key.toLowerCase() === "a" && (event.ctrlKey || event.metaKey);
 
     if (isSelectAll) {
       event.preventDefault();

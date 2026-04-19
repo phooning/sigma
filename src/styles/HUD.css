@@ -79,13 +79,25 @@
     flex-shrink: 0;
 }
 
-.hud-btn:hover {
+.hud-btn:hover:not(:disabled) {
     color: var(--text-strong);
     background: var(--surface-control-hover);
     border-color: var(--input);
 }
 
-.hud-btn:hover svg {
+.hud-btn:disabled {
+    color: var(--text-muted);
+    background: var(--surface-control);
+    border-color: var(--border);
+    cursor: not-allowed;
+    opacity: 0.65;
+}
+
+.hud-btn:disabled svg {
+    opacity: 0.45;
+}
+
+.hud-btn:hover:not(:disabled) svg {
     opacity: 1;
 }
 

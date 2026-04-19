@@ -9,7 +9,7 @@ import {
   WheelEvent as ReactWheelEvent,
 } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { message, open } from "@tauri-apps/plugin-dialog";
+import { message, open, save } from "@tauri-apps/plugin-dialog";
 import { ISelectionBox, SelectionBox } from "./components/SelectionBox";
 import { Hud } from "./components/Hud";
 import { DevelopmentOverlay } from "./components/DevelopmentOverlay";
@@ -18,7 +18,12 @@ import {
   MediaFrameActions,
   resetFrameSize,
 } from "./components/MediaFrameActions";
-import { getCrop, saveMediaScreenshot, useThumbnailQueue } from "./utils/media";
+import {
+  exportMediaVideo,
+  getCrop,
+  saveMediaScreenshot,
+  useThumbnailQueue,
+} from "./utils/media";
 import {
   CropHandle,
   CropInsets,
@@ -49,12 +54,32 @@ import { VideoMedia } from "./components/Video";
 import { useSettingsStore } from "./stores/useSettingsStore";
 import { useAudioPlaybackStore } from "./stores/useAudioPlaybackStore";
 import { useBackgroundCanvas } from "./components/useBackgroundCanvas";
+import {
+  getStoredVideoLoop,
+  useVideoExportStore,
+} from "./stores/useVideoExportStore";
+import { getLoopRange } from "./utils/videoUtils";
 
 const VIEW_FIT_GAP = 50;
 const HUD_HEIGHT_FALLBACK = 48;
 const CULL_MARGIN = 500;
 const ACTION_SELECTORS =
   ".reset-btn, .delete-btn, .crop-btn, .reveal-btn, .screenshot-btn, .audio-btn";
+
+const getMediaFileStem = (filePath: string) => {
+  const fileName = filePath.split(/[\\/]/).filter(Boolean).pop() || "video";
+  const extensionIndex = fileName.lastIndexOf(".");
+
+  return extensionIndex > 0 ? fileName.slice(0, extensionIndex) : fileName;
+};
+
+const getExportDefaultPath = (filePath: string) => {
+  const safeStem = getMediaFileStem(filePath)
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, "_")
+    .trim();
+
+  return `${safeStem || "video"}.mp4`;
+};
 
 type ViewBounds = {
   viewLeft: number;
@@ -200,6 +225,16 @@ export default function InfiniteCanvas() {
   );
   const toggleAudioItem = useAudioPlaybackStore((state) => state.toggleItem);
   const clearAudioItem = useAudioPlaybackStore((state) => state.clearItem);
+  const exportingItemId = useVideoExportStore((state) => state.exportingItemId);
+  const setExportingItemId = useVideoExportStore(
+    (state) => state.setExportingItemId,
+  );
+  const clearVideoExportItemState = useVideoExportStore(
+    (state) => state.clearItemState,
+  );
+  const clearAllVideoExportState = useVideoExportStore(
+    (state) => state.clearAllItemState,
+  );
 
   // Refs mirrored for async callbacks and global pointer gestures.
   const viewportRef = useRef(viewport);
@@ -266,7 +301,13 @@ export default function InfiniteCanvas() {
 
   useTauriDrop({ viewportRef, setItems });
   useCanvasHotkeys({
+    containerRef,
     itemsRef,
+    onSave: () =>
+      saveConfig({
+        items: itemsRef.current,
+        viewport: viewportRef.current,
+      }),
     selectedItemsRef,
     setItems,
     setSelectedItems,
@@ -303,6 +344,7 @@ export default function InfiniteCanvas() {
     }
     setSelectedItems(new Set());
     clearAudioItem();
+    clearAllVideoExportState();
   };
 
   const selectActiveAudioItem = useActiveAudioSelection({
@@ -579,6 +621,7 @@ export default function InfiniteCanvas() {
     });
     setEditingCropItem((prev) => (prev === id ? null : prev));
     clearAudioItem(id);
+    clearVideoExportItemState(id);
   };
 
   const startCropEdit = (id: string, e: React.MouseEvent) => {
@@ -639,12 +682,78 @@ export default function InfiniteCanvas() {
     toggleAudioItem(id);
   };
 
+  const exportSelectedVideo = useCallback(async () => {
+    const selectedVideoItems = itemsRef.current.filter(
+      (item) => item.type === "video" && selectedItemsRef.current.has(item.id),
+    );
+
+    if (selectedVideoItems.length !== 1) {
+      await message("Select one video to export.", {
+        title: "Export unavailable",
+        kind: "warning",
+      });
+      return;
+    }
+
+    if (useVideoExportStore.getState().exportingItemId !== null) {
+      await message("Wait for the current export to finish.", {
+        title: "Export in progress",
+        kind: "info",
+      });
+      return;
+    }
+
+    const item = selectedVideoItems[0];
+    const outputPath = await save({
+      title: "Export video",
+      defaultPath: getExportDefaultPath(item.filePath),
+      filters: [
+        {
+          name: "MP4 Video",
+          extensions: ["mp4"],
+        },
+      ],
+    });
+
+    if (!outputPath) return;
+
+    setExportingItemId(item.id);
+
+    try {
+      const mp4OutputPath = outputPath.toLowerCase().endsWith(".mp4")
+        ? outputPath
+        : `${outputPath}.mp4`;
+      const output = await exportMediaVideo({
+        item,
+        outputPath: mp4OutputPath,
+        loopRange: getLoopRange(getStoredVideoLoop(item.id)),
+      });
+
+      await message(`Video exported:\n\n${output}`, {
+        title: "Export complete",
+        kind: "info",
+      });
+    } catch (error) {
+      await message(`Failed to export video:\n\n${String(error)}`, {
+        title: "Export failed",
+        kind: "error",
+      });
+    } finally {
+      setExportingItemId(null);
+    }
+  }, [itemsRef, selectedItemsRef, setExportingItemId]);
+
   const { viewLeft, viewTop, viewRight, viewBottom } = getViewBounds(
     viewport,
     canvasSize.width,
     canvasSize.height,
   );
   const totalVideoCount = items.filter((item) => item.type === "video").length;
+  const selectedVideoItems = items.filter(
+    (item) => item.type === "video" && selectedItems.has(item.id),
+  );
+  const selectedVideoExportItem =
+    selectedVideoItems.length === 1 ? selectedVideoItems[0] : null;
 
   return (
     <div
@@ -709,6 +818,7 @@ export default function InfiniteCanvas() {
           return (
             <div
               key={id}
+              data-media-id={id}
               className={[
                 "media-item",
                 isSelected && "selected",
@@ -786,7 +896,11 @@ export default function InfiniteCanvas() {
         loadConfig={loadConfig}
         settingsMenuItems={SETTINGS_MENU_ITEMS}
         settingsVersion={appVersion}
+        selectedVideoExportItem={selectedVideoExportItem}
+        selectedVideoExportCount={selectedVideoItems.length}
+        isExportingSelectedVideo={exportingItemId !== null}
         onSelectActiveAudioItem={selectActiveAudioItem}
+        onExportSelectedVideo={exportSelectedVideo}
       />
     </div>
   );

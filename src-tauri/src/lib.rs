@@ -194,6 +194,21 @@ async fn save_media_screenshot(
     .map_err(|err| format!("Failed to save screenshot: {err}"))?
 }
 
+#[tauri::command]
+async fn export_video(
+    path: String,
+    output_path: String,
+    crop: CropRatio,
+    start_time: Option<f64>,
+    end_time: Option<f64>,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        export_video_blocking(path, output_path, crop, start_time, end_time)
+    })
+    .await
+    .map_err(|err| format!("Failed to export video: {err}"))?
+}
+
 fn save_media_screenshot_blocking(
     path: String,
     media_type: String,
@@ -260,6 +275,120 @@ fn save_media_screenshot_blocking(
             Err("ffmpeg failed to save the screenshot".to_string())
         } else {
             Err(format!("ffmpeg failed to save the screenshot: {detail}"))
+        }
+    }
+}
+
+fn export_video_blocking(
+    path: String,
+    output_path: String,
+    crop: CropRatio,
+    start_time: Option<f64>,
+    end_time: Option<f64>,
+) -> Result<String, String> {
+    if output_path.trim().is_empty() {
+        return Err("Choose an export location".to_string());
+    }
+
+    if path == output_path {
+        return Err(
+            "Choose an export location that is different from the source video".to_string(),
+        );
+    }
+
+    let metadata = probe_media_blocking(path.clone())?;
+    let source_width = metadata.width.max(1);
+    let source_height = metadata.height.max(1);
+    let (crop_x, crop_y, crop_width, crop_height) = crop_pixels(&crop, source_width, source_height);
+    let should_crop =
+        crop_x > 0 || crop_y > 0 || crop_width < source_width || crop_height < source_height;
+    let mut video_filters = Vec::new();
+
+    if should_crop {
+        video_filters.push(format!("crop={crop_width}:{crop_height}:{crop_x}:{crop_y}"));
+    }
+
+    if crop_width % 2 != 0 || crop_height % 2 != 0 {
+        video_filters.push("scale=trunc(iw/2)*2:trunc(ih/2)*2".to_string());
+    }
+    video_filters.push("format=yuv420p".to_string());
+
+    let output_path = PathBuf::from(output_path);
+    if let Some(parent) = output_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("Failed to create export directory: {err}"))?;
+    }
+
+    let output_path_str = output_path
+        .to_str()
+        .ok_or("Export output path is not valid UTF-8")?;
+
+    let start = start_time
+        .filter(|seconds| seconds.is_finite())
+        .map(|seconds| seconds.max(0.0));
+    let duration = match (start, end_time.filter(|seconds| seconds.is_finite())) {
+        (Some(start), Some(end)) if end > start => Some(end - start),
+        _ => None,
+    };
+
+    let mut args = vec![
+        "-y".to_string(),
+        "-loglevel".to_string(),
+        "error".to_string(),
+    ];
+
+    if let Some(start) = start {
+        args.push("-ss".to_string());
+        args.push(format!("{start:.3}"));
+    }
+
+    args.push("-i".to_string());
+    args.push(path);
+
+    if let Some(duration) = duration {
+        args.push("-t".to_string());
+        args.push(format!("{duration:.3}"));
+    }
+
+    args.extend([
+        "-map".to_string(),
+        "0:v:0".to_string(),
+        "-map".to_string(),
+        "0:a?".to_string(),
+        "-vf".to_string(),
+        video_filters.join(","),
+        "-c:v".to_string(),
+        "libx264".to_string(),
+        "-preset".to_string(),
+        "veryfast".to_string(),
+        "-crf".to_string(),
+        "20".to_string(),
+        "-c:a".to_string(),
+        "aac".to_string(),
+        "-b:a".to_string(),
+        "192k".to_string(),
+        "-movflags".to_string(),
+        "+faststart".to_string(),
+        output_path_str.to_string(),
+    ]);
+
+    let output = Command::new("ffmpeg")
+        .args(args)
+        .output()
+        .map_err(|err| format!("Failed to run ffmpeg: {err}"))?;
+
+    if output.status.success() {
+        Ok(output_path.to_string_lossy().into_owned())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let detail = stderr.trim();
+        if detail.is_empty() {
+            Err("ffmpeg failed to export the video".to_string())
+        } else {
+            Err(format!("ffmpeg failed to export the video: {detail}"))
         }
     }
 }
@@ -349,7 +478,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             probe_media,
             generate_video_thumbnail,
-            save_media_screenshot
+            save_media_screenshot,
+            export_video
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
