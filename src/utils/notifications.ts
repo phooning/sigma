@@ -22,13 +22,16 @@ const withDescription = ({
     : { ...options, description: normalizedDescription };
 };
 
+type ToastType = "success" | "info" | "warning" | "error";
+
+const createNotifyMethod = (method: ToastType) => {
+  return (title: string, options?: NotificationOptions) =>
+    toast[method](title, withDescription(options));
+};
+
 export const notify = {
-  success: (title: string, options?: NotificationOptions) =>
-    toast.success(title, withDescription(options)),
-  info: (title: string, options?: NotificationOptions) =>
-    toast.info(title, withDescription(options)),
-  warning: (title: string, options?: NotificationOptions) =>
-    toast.warning(title, withDescription(options)),
-  error: (title: string, options?: NotificationOptions) =>
-    toast.error(title, withDescription(options)),
+  success: createNotifyMethod("success"),
+  info: createNotifyMethod("info"),
+  warning: createNotifyMethod("warning"),
+  error: createNotifyMethod("error"),
 };
