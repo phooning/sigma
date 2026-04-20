@@ -36,6 +36,15 @@ const toTransferableBuffer = (message: unknown): ArrayBuffer | null => {
   if (message instanceof ArrayBuffer) return message;
 
   if (message instanceof Uint8Array) {
+    // Transfer the exact IPC buffer when possible; only slice partial views.
+    if (
+      message.byteOffset === 0 &&
+      message.byteLength === message.buffer.byteLength &&
+      message.buffer instanceof ArrayBuffer
+    ) {
+      return message.buffer;
+    }
+
     return message.buffer.slice(
       message.byteOffset,
       message.byteOffset + message.byteLength,
@@ -76,7 +85,9 @@ export function NativeVideoSurface({
       .then((profile) => {
         if (!cancelled) {
           isBaseValidatedRef.current = profile.baseCaseValidated;
-          setIsEnabled(profile.baseCaseValidated || shouldForceNativePlayback());
+          setIsEnabled(
+            profile.baseCaseValidated || shouldForceNativePlayback(),
+          );
         }
       })
       .catch(() => {

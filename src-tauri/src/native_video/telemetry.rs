@@ -24,6 +24,8 @@ pub struct TelemetrySnapshot {
     pub safe_budget_bytes_per_sec: u64,
     pub predicted_cost_bytes_per_sec: u64,
     pub over_budget: bool,
+    pub frame_pool_capacity: usize,
+    pub frame_pool_exhaustions: u64,
 }
 
 pub(crate) fn update_telemetry(

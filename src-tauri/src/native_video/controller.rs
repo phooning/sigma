@@ -7,11 +7,11 @@ use tokio::sync::{mpsc, oneshot, watch};
 
 use super::{
     constants::{
-        BASE_CASE_MAX_STREAMS_BEFORE_VALIDATION, BYTES_PER_PIXEL_RGBA8, DOWNGRADE_DROP_RATE,
-        DOWNGRADE_QUEUE_PRESSURE, MATERIAL_OVERSAMPLE, MIN_DOWNGRADE_DWELL_MS,
-        MIN_UPGRADE_DWELL_MS, SCALING_MAX_STREAMS_AFTER_VALIDATION, UPGRADE_HEADROOM,
-        UPGRADE_QUEUE_PRESSURE,
+        BASE_CASE_MAX_STREAMS_BEFORE_VALIDATION, DOWNGRADE_DROP_RATE, DOWNGRADE_QUEUE_PRESSURE,
+        MATERIAL_OVERSAMPLE, MIN_DOWNGRADE_DWELL_MS, MIN_UPGRADE_DWELL_MS,
+        SCALING_MAX_STREAMS_AFTER_VALIDATION, UPGRADE_HEADROOM, UPGRADE_QUEUE_PRESSURE,
     },
+    frame_packet::yuv420_payload_len,
     profile::PerformanceProfile,
     telemetry::{update_telemetry, TelemetrySnapshot},
     types::{
@@ -19,7 +19,7 @@ use super::{
         VisibleAsset, QUALITY_TIERS, SUSPENDED_TIER,
     },
     util::{now_millis, stable_stream_id},
-    worker::{reconcile_workers, DecodedFrame, WorkerHandle},
+    worker::{reconcile_workers, DecodedFrame, FramePool, WorkerHandle},
 };
 
 #[derive(Debug)]
@@ -36,6 +36,7 @@ pub(crate) enum ControlMessage {
 pub(crate) fn spawn_controller(
     mut control_rx: mpsc::Receiver<ControlMessage>,
     broker_tx: mpsc::Sender<DecodedFrame>,
+    frame_pool: Arc<FramePool>,
     telemetry: Arc<Mutex<TelemetrySnapshot>>,
     telemetry_tx: watch::Sender<TelemetrySnapshot>,
     profile: Arc<Mutex<PerformanceProfile>>,
@@ -72,7 +73,14 @@ pub(crate) fn spawn_controller(
                         &allocations,
                     );
 
-                    reconcile_workers(&mut workers, &next_allocations, broker_tx.clone());
+                    reconcile_workers(
+                        &mut workers,
+                        &next_allocations,
+                        broker_tx.clone(),
+                        frame_pool.clone(),
+                        telemetry.clone(),
+                        telemetry_tx.clone(),
+                    );
                     allocations = next_allocations
                         .iter()
                         .cloned()
@@ -352,7 +360,8 @@ fn even_dimension(value: u32) -> u32 {
 }
 
 fn tier_cost_bytes_per_sec(width: u32, height: u32, fps: u32, profile: &PerformanceProfile) -> u64 {
-    let raw_bytes = width as u64 * height as u64 * BYTES_PER_PIXEL_RGBA8 * fps.max(1) as u64;
+    // Arbiter cost modeling follows YUV420 bandwidth instead of RGBA8.
+    let raw_bytes = yuv420_payload_len(width, height) as u64 * fps.max(1) as u64;
     let factor =
         (profile.decode_cost_factor + profile.upload_cost_factor + profile.composite_cost_factor)
             .max(1.0);

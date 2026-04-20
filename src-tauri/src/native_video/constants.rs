@@ -1,9 +1,12 @@
 pub(crate) const RESOURCE_SAMPLE_MS: u64 = 150;
 pub(crate) const BROKER_QUEUE_CAPACITY: usize = 96;
-pub(crate) const FRAME_BROADCAST_CAPACITY: usize = 32;
 pub(crate) const FRAME_PACKET_HEADER_LEN: usize = 64;
 pub(crate) const FRAME_PACKET_MAGIC: &[u8; 4] = b"SVF1";
-pub(crate) const BYTES_PER_PIXEL_RGBA8: u64 = 4;
+pub(crate) const PIXEL_FORMAT_YUV420: u8 = 2;
+pub(crate) const YUV420_BYTES_PER_2_PIXELS: u64 = 3;
+pub(crate) const YUV420_PIXELS_PER_BYTE_GROUP: u64 = 2;
+pub(crate) const MAX_FRAME_WIDTH: u32 = 3840;
+pub(crate) const MAX_FRAME_HEIGHT: u32 = 2160;
 pub(crate) const SAFE_BUDGET_FACTOR: f64 = 0.8;
 pub(crate) const BASE_CASE_MAX_STREAMS_BEFORE_VALIDATION: usize = 1;
 pub(crate) const SCALING_MAX_STREAMS_AFTER_VALIDATION: usize = 32;

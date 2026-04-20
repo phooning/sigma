@@ -10,10 +10,10 @@ use tauri::{
 use tokio::{io::AsyncReadExt, process::Command as TokioCommand, sync::oneshot, time};
 
 use super::{
-    constants::BYTES_PER_PIXEL_RGBA8,
+    constants::PIXEL_FORMAT_YUV420,
     controller::ControlMessage,
-    frame_packet::{make_frame_packet, make_frame_packet_from_payload},
-    profile::{bounded_factor, persist_profile, PerformanceProfile},
+    frame_packet::{make_frame_packet, make_frame_packet_from_payload, yuv420_payload_len},
+    profile::{bounded_factor, measure_ram_bandwidth, persist_profile, PerformanceProfile},
     state::NativeVideoState,
     telemetry::{update_telemetry, TelemetrySnapshot},
     types::{
@@ -75,24 +75,13 @@ pub fn native_video_subscribe_frames(
     state: State<'_, NativeVideoState>,
     on_frame: Channel<InvokeResponseBody>,
 ) -> Result<(), String> {
-    let mut rx = state.frame_tx.subscribe();
-
-    tauri::async_runtime::spawn(async move {
-        loop {
-            match rx.recv().await {
-                Ok(packet) => {
-                    if on_frame
-                        .send(InvokeResponseBody::Raw(packet.as_ref().to_vec()))
-                        .is_err()
-                    {
-                        break;
-                    }
-                }
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-            }
-        }
-    });
+    // The broker dispatches the owned pool buffer directly; subscribers no longer clone broadcast frames.
+    let mut subscribers = state
+        .frame_subscribers
+        .lock()
+        .map_err(|_| "native video frame subscriber lock poisoned".to_string())?;
+    subscribers.clear();
+    subscribers.push(on_frame);
 
     Ok(())
 }
@@ -131,11 +120,13 @@ pub async fn native_video_record_frontend_metrics(
         .max(metrics.measured_ipc_bytes_per_sec);
     profile.upload_cost_factor = bounded_factor(metrics.upload_latency_p95_ms, 16.667);
     profile.composite_cost_factor = bounded_factor(metrics.composite_latency_p95_ms, 16.667);
+    profile.base_probe_frame_drop_rate = Some(metrics.frame_drop_rate);
     profile.base_case_validated = metrics.canvas_width >= 3840
         && metrics.canvas_height >= 2160
         && metrics.frame_drop_rate <= 0.01
         && metrics.composite_latency_p95_ms <= 8.0
-        && metrics.upload_latency_p95_ms <= 8.0;
+        && metrics.upload_latency_p95_ms <= 8.0
+        && profile.base_probe_ram_bandwidth_bytes_per_sec.is_some();
     profile.calibrated_at_ms = Some(now_millis());
     profile.notes = vec![
         format!("Frontend renderer: {}", metrics.renderer),
@@ -171,6 +162,7 @@ pub async fn native_video_reset_profile(
 
 #[tauri::command]
 pub async fn native_video_run_base_case_probe(
+    state: State<'_, NativeVideoState>,
     config: BaseCaseProbeConfig,
     on_frame: Channel<InvokeResponseBody>,
 ) -> Result<BaseCaseProbeReport, String> {
@@ -185,7 +177,10 @@ pub async fn native_video_run_base_case_probe(
         .map(str::trim)
         .filter(|path| !path.is_empty())
     {
-        return run_ffmpeg_base_case_probe(source_path, width, height, fps, frames, on_frame).await;
+        let report =
+            run_ffmpeg_base_case_probe(source_path, width, height, fps, frames, on_frame).await?;
+        persist_base_case_probe_metrics(&state, &report).await?;
+        return Ok(report);
     }
 
     let stream_id = stable_stream_id("base-case-probe");
@@ -224,8 +219,8 @@ pub async fn native_video_run_base_case_probe(
         0
     };
 
-    Ok(BaseCaseProbeReport {
-        decode_backend: "synthetic-rgba".into(),
+    let report = BaseCaseProbeReport {
+        decode_backend: "synthetic-yuv420".into(),
         width,
         height,
         fps,
@@ -241,7 +236,9 @@ pub async fn native_video_run_base_case_probe(
             .get(p95_index(send_latencies.len()))
             .copied()
             .unwrap_or(0.0),
-    })
+    };
+    persist_base_case_probe_metrics(&state, &report).await?;
+    Ok(report)
 }
 
 async fn run_ffmpeg_base_case_probe(
@@ -253,7 +250,7 @@ async fn run_ffmpeg_base_case_probe(
     on_frame: Channel<InvokeResponseBody>,
 ) -> Result<BaseCaseProbeReport, String> {
     let stream_id = stable_stream_id(source_path);
-    let payload_len = width as usize * height as usize * BYTES_PER_PIXEL_RGBA8 as usize;
+    let payload_len = yuv420_payload_len(width, height);
     let mut child = TokioCommand::new("ffmpeg")
         .args([
             "-v",
@@ -264,7 +261,7 @@ async fn run_ffmpeg_base_case_probe(
             source_path,
             "-an",
             "-vf",
-            &format!("fps={fps},scale={width}:{height}:flags=fast_bilinear,format=rgba"),
+            &format!("fps={fps},scale={width}:{height}:flags=fast_bilinear,format=yuv420p"),
             "-frames:v",
             &frames.to_string(),
             "-f",
@@ -333,7 +330,7 @@ async fn run_ffmpeg_base_case_probe(
     };
 
     Ok(BaseCaseProbeReport {
-        decode_backend: "ffmpeg-rawvideo-rgba".into(),
+        decode_backend: "ffmpeg-rawvideo-yuv420p".into(),
         width,
         height,
         fps,
@@ -350,4 +347,60 @@ async fn run_ffmpeg_base_case_probe(
             .copied()
             .unwrap_or(0.0),
     })
+}
+
+async fn persist_base_case_probe_metrics(
+    state: &State<'_, NativeVideoState>,
+    report: &BaseCaseProbeReport,
+) -> Result<(), String> {
+    // RAM bandwidth measurement is part of base-case probe completion.
+    let should_measure = state
+        .profile
+        .lock()
+        .map_err(|_| "native video profile lock poisoned".to_string())?
+        .should_measure_ram_bandwidth();
+
+    let ram_bandwidth = if should_measure {
+        tokio::task::spawn_blocking(measure_ram_bandwidth)
+            .await
+            .map_err(|err| format!("failed to join RAM bandwidth probe: {err}"))?
+    } else {
+        state
+            .profile
+            .lock()
+            .map_err(|_| "native video profile lock poisoned".to_string())?
+            .ram_bandwidth_bytes_per_sec
+    };
+
+    let mut profile = state
+        .profile
+        .lock()
+        .map_err(|_| "native video profile lock poisoned".to_string())?
+        .clone();
+
+    profile.ipc_budget_bytes_per_sec = profile
+        .ipc_budget_bytes_per_sec
+        .max(report.measured_ipc_bytes_per_sec);
+    profile.base_probe_ipc_latency_p95_ms = Some(report.send_latency_p95_ms);
+    profile.base_probe_ram_bandwidth_bytes_per_sec = Some(ram_bandwidth);
+    profile.ram_bandwidth_bytes_per_sec = ram_bandwidth;
+    profile.calibrated_at_ms = Some(now_millis());
+    profile.notes = vec![
+        format!("Base-case decode backend: {}", report.decode_backend),
+        format!("SVF1 pixel format: {}", PIXEL_FORMAT_YUV420),
+        "Base case probe writes IPC latency, frontend frame-drop metrics, and RAM bandwidth before validation.".into(),
+    ];
+    profile.recompute_safe_budget();
+
+    persist_profile(&state.profile_path, &profile)?;
+    *state
+        .profile
+        .lock()
+        .map_err(|_| "native video profile lock poisoned".to_string())? = profile.clone();
+
+    update_telemetry(&state.telemetry, &state.telemetry_tx, |snapshot| {
+        snapshot.safe_budget_bytes_per_sec = profile.safe_budget_bytes_per_sec;
+    });
+
+    Ok(())
 }

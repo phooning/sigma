@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use super::{
-    constants::{BYTES_PER_PIXEL_RGBA8, FRAME_PACKET_HEADER_LEN, FRAME_PACKET_MAGIC},
+    constants::{FRAME_PACKET_HEADER_LEN, FRAME_PACKET_MAGIC, PIXEL_FORMAT_YUV420},
     controller::Arbiter,
-    frame_packet::make_frame_packet,
+    frame_packet::{make_frame_packet, yuv420_payload_len},
     profile::PerformanceProfile,
     telemetry::TelemetrySnapshot,
     types::{CanvasManifest, StreamState, VisibleAsset},
@@ -15,6 +15,7 @@ fn profile_with_budget(budget: u64, validated: bool) -> PerformanceProfile {
         safe_budget_bytes_per_sec: budget,
         cpu_decode_budget_bytes_per_sec: budget,
         ipc_budget_bytes_per_sec: budget,
+        ram_bandwidth_bytes_per_sec: budget as f64,
         ram_bandwidth_budget_bytes_per_sec: budget,
         ..PerformanceProfile::uncalibrated()
     }
@@ -94,6 +95,7 @@ fn packet_header_is_little_endian_and_binary() {
 
     assert_eq!(&packet[0..4], FRAME_PACKET_MAGIC);
     assert_eq!(packet[5], FRAME_PACKET_HEADER_LEN as u8);
+    assert_eq!(packet[6], PIXEL_FORMAT_YUV420);
     assert_eq!(u64::from_le_bytes(packet[8..16].try_into().unwrap()), 7);
     assert_eq!(
         u64::from_le_bytes(packet[16..24].try_into().unwrap()),
@@ -104,6 +106,6 @@ fn packet_header_is_little_endian_and_binary() {
     assert_eq!(u32::from_le_bytes(packet[36..40].try_into().unwrap()), 72);
     assert_eq!(
         packet.len(),
-        FRAME_PACKET_HEADER_LEN + 128 * 72 * BYTES_PER_PIXEL_RGBA8 as usize
+        FRAME_PACKET_HEADER_LEN + yuv420_payload_len(128, 72)
     );
 }
