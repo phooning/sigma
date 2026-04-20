@@ -1,15 +1,13 @@
-# SIGMA Media Canvas (Community Edition)
+# SIGMA Media Canvas
 
-**SIGMA Media Canvas** is a high-performance, local-first infinite canvas designed for organizing, visualizing, and analyzing media assets. Built with **Tauri**, **Rust**, and **React**, it offers a lightweight OS-native alternative to heavy electron-based media tools, specifically optimized for creative workflows and technical analysis.
+**SIGMA Media Canvas** is a high-performance, local-first infinite canvas designed for organizing, visualizing, and cutting up media assets. 
 
-Film edit planning, ML/dataset triage, moodboarding with massive clips, evidence intel boards: just throw a bunch of media down and think about it spatially.
+<img alt="Image" src="https://github.com/user-attachments/assets/443eaeea-3534-4c63-94c9-78b86dd00630" />
 
-- Save your config preserves the just the video location, so you can load up templates at any time.
-- Lightweight: currently under 1K LoC
-- Video/images as first class assets in spatial state
+Built with Tauri, Rust, and React with the help of multi-agents, it offers a lightweight OS-native alternative to heavy electron-based media tools, specifically optimized for creative workflows and high performance viewing.
 
 <div align="center">
-  <video src="https://github.com/user-attachments/assets/646810a7-b566-4168-8cd3-a6a06a22df72" 
+  <video src="https://github.com/user-attachments/assets/1b56a101-d80d-46a1-a4df-2c7f6ced73f8" 
          autoplay 
          loop 
          muted 
@@ -19,17 +17,23 @@ Film edit planning, ML/dataset triage, moodboarding with massive clips, evidence
   </video>
 </div>
 
+> *Film edit planning, ML/dataset triage, moodboarding with massive clips, evidence intel boards: just throw a bunch of media down and think about it spatially.*
+
 ## Key Features
+
+Video/images are first class assets active in spatial state.
+
 - **Infinite Spatial Canvas**: Drag, drop, and organize videos and images in a non-linear workspace.
-- **Advanced Video Controls**: Frame-accurate scrubbing, A/B looping, and dynamic visual cropping.
+- **Video Controls**: Frame-accurate scrubbing, A/B looping, and dynamic visual cropping.
 - **Local-First Performance**: Leverages Rust-based backend for zero-latency media handling and low memory footprint.
-- **ComfyUI Integration**: Connect to your local ComfyUI instance to visualize AI generation outputs in real-time.
 - **Export Utility**: Basic H.264 export for A/B loops and cropped segments.
+- **Workflows:** Config can be saved to preserve layout, so you can load up templates at any time.
+- **ComfyUI Integration (WIP)**: Connect to your local ComfyUI instance to visualize AI generation outputs in real-time.
 
 ## Tech Stack
 - **Frontend**: React + Vite + TypeScript
 - **Backend**: Tauri (Rust)
-- **Styling**: Tailwind CSS
+- **Styling**: Tailwind CSS/shadcn
 - **Testing**: Vitest
 
 ## Getting Started
@@ -71,7 +75,7 @@ pnpm test
 ```
 
 ## Roadmap & Tiers
-This Community Edition provides the core visualization engine. **SIGMA Pro** offers advanced features for power users and industrial applications:
+This Community Edition provides the core visualization engine. A planned **SIGMA Pro** offers advanced features for power users and lab applications:
 
 | Feature | Community | Pro |
 | :--- | :--- | :--- |

@@ -1,0 +1,27 @@
+jobs:
+  test-and-build:
+    # 1. Use the specific versioned image for faster startup than 'latest'
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 2. Use Corepack (Native Node pnpm management)
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      # 3. Use --prefer-offline to skip staleness checks if cache hits
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
