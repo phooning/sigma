@@ -22,6 +22,17 @@
     pointer-events: none;
 }
 
+.native-video-surface {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-canvas-world) + 1);
+    display: block;
+    width: 100dvw;
+    height: 100dvh;
+    contain: strict;
+    pointer-events: none;
+}
+
 .canvas-world {
     position: absolute;
     top: 0;

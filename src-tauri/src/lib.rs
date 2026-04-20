@@ -10,6 +10,8 @@ use std::{
 
 use tauri::Manager;
 
+mod native_video;
+
 #[derive(serde::Serialize)]
 struct MediaMetadata {
     width: u32,
@@ -475,11 +477,24 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            let app_handle = app.handle().clone();
+            app.manage(native_video::NativeVideoState::new(&app_handle));
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             probe_media,
             generate_video_thumbnail,
             save_media_screenshot,
-            export_video
+            export_video,
+            native_video::commands::native_video_get_profile,
+            native_video::commands::native_video_update_manifest,
+            native_video::commands::native_video_stop_all,
+            native_video::commands::native_video_subscribe_frames,
+            native_video::commands::native_video_subscribe_telemetry,
+            native_video::commands::native_video_record_frontend_metrics,
+            native_video::commands::native_video_reset_profile,
+            native_video::commands::native_video_run_base_case_probe
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

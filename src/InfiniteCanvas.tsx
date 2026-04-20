@@ -58,6 +58,7 @@ import { getViewBounds } from "./utils/viewport";
 import { getLoopRange } from "./utils/videoUtils";
 import { notify } from "./utils/notifications";
 import { ACTION_SELECTORS } from "./utils/press";
+import { NativeVideoSurface } from "./components/native-video/NativeVideoSurface";
 
 export default function InfiniteCanvas() {
   const [items, setItems] = useState<MediaItem[]>([]);
@@ -662,6 +663,13 @@ export default function InfiniteCanvas() {
           .filter(Boolean)
           .join(" ")}
         aria-hidden="true"
+      />
+      <NativeVideoSurface
+        items={items}
+        viewport={viewport}
+        canvasSize={canvasSize}
+        selectedItems={selectedItems}
+        activeAudioItemId={activeAudioItemId}
       />
       <div
         className="canvas-world"
