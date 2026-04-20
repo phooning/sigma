@@ -1,0 +1,19 @@
+strategy:
+  fail-fast: false
+  matrix:
+    platform: [macos-latest, ubuntu-22.04, windows-latest]
+
+runs-on: ${{ matrix.platform }}
+steps:
+  - uses: actions/checkout@v4
+  - name: setup node
+    uses: actions/setup-node@v4
+  - name: install Rust
+    uses: dtolnay/rust-toolchain@stable
+  - name: build app
+    uses: tauri-apps/tauri-action@v0
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    with:
+      tagName: app-v__VERSION__ # version is pulled from tauri.conf.json
+      releaseName: "App v__VERSION__"

@@ -1,9 +1,16 @@
 [package]
 name = "sigma"
-version = "0.1.0"
+version = "0.2.0"
+authors = ["David Pham <ph0ne@protonmail.com>"]
 description = "Scalable media canvas"
-authors = ["you"]
+homepage = "https://github.com/phooning/sigma"
+repository = "https://github.com/phooning/sigma"
 edition = "2021"
+
+[profile.release]
+lto = true
+codgen-units = 1
+panic = "abort"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
