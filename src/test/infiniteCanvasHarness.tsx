@@ -87,7 +87,10 @@ vi.mock('@tauri-apps/api/webview', () => ({
 
 vi.mock('@tauri-apps/api/core', () => ({
   convertFileSrc: (path: string) => `asset://${path}`,
-  invoke: invokeMock
+  invoke: invokeMock,
+  Channel: class MockChannel<T> {
+    onmessage: ((message: T) => void) | null = null;
+  }
 }));
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({

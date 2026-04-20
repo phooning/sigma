@@ -197,6 +197,12 @@ const serializeItemForStorage = (
   height: item.height,
   ...(typeof item.fileSize === "number" ? { fileSize: item.fileSize } : {}),
   ...(typeof item.duration === "number" ? { duration: item.duration } : {}),
+  ...(typeof item.sourceWidth === "number"
+    ? { sourceWidth: item.sourceWidth }
+    : {}),
+  ...(typeof item.sourceHeight === "number"
+    ? { sourceHeight: item.sourceHeight }
+    : {}),
   ...(item.deferVideoLoad ? { deferVideoLoad: item.deferVideoLoad } : {}),
   ...(item.thumbnailPath ? { thumbnailPath: item.thumbnailPath } : {}),
   ...(item.crop ? { crop: item.crop } : {}),

@@ -20,6 +20,8 @@ export interface MediaItem {
   url: string;
   fileSize?: number;
   duration?: number;
+  sourceWidth?: number;
+  sourceHeight?: number;
   deferVideoLoad?: boolean;
   thumbnailPath?: string;
   thumbnailUrl?: string;

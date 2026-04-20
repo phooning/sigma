@@ -134,6 +134,8 @@ export const onDropMedia = ({
             createItem(mediaWidth, mediaHeight, {
               fileSize: size,
               duration,
+              sourceWidth: mediaWidth,
+              sourceHeight: mediaHeight,
               deferVideoLoad:
                 typeof size === "number" &&
                 size >= LARGE_VIDEO_LOAD_THRESHOLD_BYTES,
