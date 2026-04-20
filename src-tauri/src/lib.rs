@@ -487,14 +487,14 @@ pub fn run() {
             generate_video_thumbnail,
             save_media_screenshot,
             export_video,
-            native_video::native_video_get_profile,
-            native_video::native_video_update_manifest,
-            native_video::native_video_stop_all,
-            native_video::native_video_subscribe_frames,
-            native_video::native_video_subscribe_telemetry,
-            native_video::native_video_record_frontend_metrics,
-            native_video::native_video_reset_profile,
-            native_video::native_video_run_base_case_probe
+            native_video::commands::native_video_get_profile,
+            native_video::commands::native_video_update_manifest,
+            native_video::commands::native_video_stop_all,
+            native_video::commands::native_video_subscribe_frames,
+            native_video::commands::native_video_subscribe_telemetry,
+            native_video::commands::native_video_record_frontend_metrics,
+            native_video::commands::native_video_reset_profile,
+            native_video::commands::native_video_run_base_case_probe
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
