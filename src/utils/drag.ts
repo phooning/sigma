@@ -39,17 +39,18 @@ export function useTauriDrop({ getViewport, setItems }: UseTauriDropOptions) {
 
     try {
       unlistenPromise = getCurrentWebview().onDragDropEvent((event) => {
-        if (event.payload.type === "drop") {
-          void (async () => {
-            const items = await onDropMedia({
-              paths: event.payload.paths,
-              viewportRef: { current: getViewportRef.current() },
-            });
+        const payload = event.payload;
+        if (payload.type !== "drop") return;
 
-            if (!isActive || items.length === 0) return;
-            setItemsRef.current((prev) => [...prev, ...items]);
-          })();
-        }
+        void (async () => {
+          const items = await onDropMedia({
+            paths: payload.paths,
+            viewportRef: { current: getViewportRef.current() },
+          });
+
+          if (!isActive || items.length === 0) return;
+          setItemsRef.current((prev) => [...prev, ...items]);
+        })();
       });
     } catch (error) {
       console.warn("Native drag/drop unavailable; falling back to browser-only mode.", error);
