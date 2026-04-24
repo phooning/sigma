@@ -8,7 +8,7 @@ import type {
 
 export const useViewportAnimation = ({
   commitViewport,
-  viewportRef,
+  getViewport,
 }: UseViewportAnimationParams): UseViewportAnimationResult => {
   const viewportAnimationRef = useRef<(() => void) | null>(null);
 
@@ -22,13 +22,13 @@ export const useViewportAnimation = ({
   const applyViewportPanPosition = useCallback(
     (position: ViewportPanPosition) => {
       const nextViewport = {
-        ...viewportRef.current,
+        ...getViewport(),
         x: position.x,
         y: position.y,
       };
       commitViewport(nextViewport, { flushDomNow: true });
     },
-    [commitViewport, viewportRef],
+    [commitViewport, getViewport],
   );
 
   const panViewportTo = useCallback(
@@ -37,14 +37,15 @@ export const useViewportAnimation = ({
 
       let didComplete = false;
       let cancelPanAnimation: (() => void) | null = null;
+      const currentViewport = getViewport();
 
       cancelPanAnimation = animateKineticPan({
-        start: viewportRef.current,
+        start: currentViewport,
         target,
         onUpdate: applyViewportPanPosition,
         onComplete: () => {
           didComplete = true;
-          commitViewport(viewportRef.current, {
+          commitViewport(getViewport(), {
             flushDomNow: true,
             syncReact: true,
           });
@@ -56,7 +57,7 @@ export const useViewportAnimation = ({
       });
       viewportAnimationRef.current = didComplete ? null : cancelPanAnimation;
     },
-    [applyViewportPanPosition, cancelViewportAnimation, commitViewport, viewportRef],
+    [applyViewportPanPosition, cancelViewportAnimation, commitViewport, getViewport],
   );
 
   useEffect(() => cancelViewportAnimation, [cancelViewportAnimation]);

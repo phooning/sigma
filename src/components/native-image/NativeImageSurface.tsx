@@ -24,7 +24,7 @@ const signatureForViewport = ({
 
 export function NativeImageSurface({
   items,
-  viewportRef,
+  viewport,
   canvasSize,
   selectedItems,
   draggingItemId,
@@ -133,7 +133,6 @@ export function NativeImageSurface({
     let lastViewportSignature = "";
 
     const publishManifest = () => {
-      const viewport = viewportRef.current;
       const viewportSignature = signatureForViewport(viewport);
       const inputsChanged =
         lastItems !== items ||
@@ -201,7 +200,7 @@ export function NativeImageSurface({
     requestImagePreview,
     resizingItemId,
     selectedItems,
-    viewportRef,
+    viewport,
   ]);
 
   if (!isEnabled) return null;

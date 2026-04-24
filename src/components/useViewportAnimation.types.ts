@@ -1,18 +1,16 @@
-import type {
-  MutableRefObject,
-} from "react";
 import type { Viewport } from "../utils/media.types";
 
 export type ViewportPanPosition = Pick<Viewport, "x" | "y">;
+export type ViewportCommitOptions = {
+  flushDomNow?: boolean;
+  syncReact?: boolean;
+};
 
 export type UseViewportAnimationParams = {
-  viewportRef: MutableRefObject<Viewport>;
+  getViewport: () => Viewport;
   commitViewport: (
     viewport: Viewport,
-    options?: {
-      flushDomNow?: boolean;
-      syncReact?: boolean;
-    },
+    options?: ViewportCommitOptions,
   ) => void;
 };
 

@@ -1,6 +1,6 @@
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { MediaItem, Viewport } from "./media.types";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { onDropMedia } from "../components/CanvasActions";
 
 export function attachDragPrevention(target: Window) {
@@ -21,26 +21,34 @@ export function attachDragPrevention(target: Window) {
 }
 
 interface UseTauriDropOptions {
-  viewportRef: React.RefObject<Viewport>;
+  getViewport: () => Viewport;
   setItems: React.Dispatch<React.SetStateAction<MediaItem[]>>;
 }
 
-export function useTauriDrop({ viewportRef, setItems }: UseTauriDropOptions) {
+export function useTauriDrop({ getViewport, setItems }: UseTauriDropOptions) {
+  const getViewportRef = useRef(getViewport);
+  const setItemsRef = useRef(setItems);
+
+  getViewportRef.current = getViewport;
+  setItemsRef.current = setItems;
+
   useEffect(() => {
     const removeDragPrevention = attachDragPrevention(window);
+    let isActive = true;
     let unlistenPromise: Promise<(() => void) | void> | null = null;
 
     try {
       unlistenPromise = getCurrentWebview().onDragDropEvent((event) => {
         if (event.payload.type === "drop") {
-          void onDropMedia({
-            paths: event.payload.paths,
-            viewportRef,
-          }).then((items) => {
-            if (items.length > 0) {
-              setItems((prev) => [...prev, ...items]);
-            }
-          });
+          void (async () => {
+            const items = await onDropMedia({
+              paths: event.payload.paths,
+              viewportRef: { current: getViewportRef.current() },
+            });
+
+            if (!isActive || items.length === 0) return;
+            setItemsRef.current((prev) => [...prev, ...items]);
+          })();
         }
       });
     } catch (error) {
@@ -48,6 +56,7 @@ export function useTauriDrop({ viewportRef, setItems }: UseTauriDropOptions) {
     }
 
     return () => {
+      isActive = false;
       removeDragPrevention();
       void unlistenPromise?.then((unlisten) => unlisten?.());
     };

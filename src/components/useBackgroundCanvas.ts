@@ -1,4 +1,4 @@
-import { type MutableRefObject, type RefObject, useLayoutEffect } from "react";
+import { type RefObject, useLayoutEffect } from "react";
 import type { CanvasBackgroundPattern } from "@/stores/useSettingsStore";
 import type { Viewport } from "@/utils/media.types";
 import { drawCanvasBackground } from "./CanvasBackground";
@@ -7,7 +7,7 @@ export const useBackgroundCanvas = (
   backgroundCanvasRef: RefObject<HTMLCanvasElement | null>,
   canvasSize: { width: number; height: number },
   canvasBackgroundPattern: CanvasBackgroundPattern,
-  viewportRef: MutableRefObject<Viewport>,
+  viewport: Viewport,
 ) => {
   // Viewport motion redraws from input and animation handlers. This hook covers
   // mount, resize, and background-pattern changes without a second paint after
@@ -19,7 +19,7 @@ export const useBackgroundCanvas = (
     drawCanvasBackground(canvas, {
       canvasSize,
       pattern: canvasBackgroundPattern,
-      viewport: viewportRef.current,
+      viewport,
     });
-  }, [backgroundCanvasRef, canvasBackgroundPattern, canvasSize, viewportRef]);
+  }, [backgroundCanvasRef, canvasBackgroundPattern, canvasSize, viewport]);
 };

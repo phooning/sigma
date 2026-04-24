@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
   dropFiles,
   getCanvasContainer,
+  getDropListenerRegistrationCount,
   getMediaItem,
   getMediaVideo,
   getMediaVideos,
@@ -135,6 +136,19 @@ describe('InfiniteCanvas media loading', () => {
     expect(invoke).not.toHaveBeenCalledWith('probe_media', {
       path: '/path/to/portrait.webp'
     });
+  });
+
+  it('keeps a single native drop listener across rerenders', async () => {
+    renderCanvas();
+
+    await act(async () => {
+      setViewportSize({ width: 1400, height: 900 });
+      window.dispatchEvent(new Event('resize'));
+      setViewportSize({ width: 1600, height: 1000 });
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    expect(getDropListenerRegistrationCount()).toBe(1);
   });
 
   it('splits large image drops into bounded native probe batches', async () => {

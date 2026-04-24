@@ -1,4 +1,3 @@
-import type { MutableRefObject } from "react";
 import type { MediaItem, Viewport } from "../../utils/media.types";
 
 export type NativeImageManifestAsset = {
@@ -54,7 +53,7 @@ export type BuildNativeImageManifestResult = {
 
 export type NativeImageSurfaceProps = {
   items: MediaItem[];
-  viewportRef: MutableRefObject<Viewport>;
+  viewport: Viewport;
   canvasSize: {
     width: number;
     height: number;

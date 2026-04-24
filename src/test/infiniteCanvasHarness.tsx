@@ -69,7 +69,8 @@ const {
 
   return {
     dragDropState: {
-      callback: null as DropCallback | null
+      callback: null as DropCallback | null,
+      registrationCount: 0
     },
     invokeMock,
     openMock: vi.fn(),
@@ -102,6 +103,7 @@ let defaultViewport: Required<ViewportSize>;
 vi.mock('@tauri-apps/api/webview', () => ({
   getCurrentWebview: () => ({
     onDragDropEvent: (cb: DropCallback) => {
+      dragDropState.registrationCount += 1;
       dragDropState.callback = cb;
       return Promise.resolve(vi.fn());
     }
@@ -194,6 +196,7 @@ beforeEach(() => {
   useAudioPlaybackStore.getState().resetAudioPlayback();
   useVideoExportStore.getState().resetVideoExportState();
   dragDropState.callback = null;
+  dragDropState.registrationCount = 0;
 });
 
 export {
@@ -221,6 +224,8 @@ export const dropFiles = async (paths: string[]) => {
     });
   });
 };
+
+export const getDropListenerRegistrationCount = () => dragDropState.registrationCount;
 
 export const setViewportSize = ({ width, height }: ViewportSize) => {
   if (width !== undefined) {
