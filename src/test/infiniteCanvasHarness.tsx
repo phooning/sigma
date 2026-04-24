@@ -1,7 +1,9 @@
 import { act, render } from '@testing-library/react';
 import { beforeAll, beforeEach, vi } from 'vitest';
+import { createJSONStorage } from 'zustand/middleware';
 import InfiniteCanvas from '../InfiniteCanvas';
 import { useAudioPlaybackStore } from '../stores/useAudioPlaybackStore';
+import { useCanvasSessionStore } from '../stores/useCanvasSessionStore';
 import { useSettingsStore } from '../stores/useSettingsStore';
 import { useVideoExportStore } from '../stores/useVideoExportStore';
 import type { DropCallback, ViewportSize } from './infiniteCanvasHarness.types';
@@ -166,6 +168,11 @@ beforeAll(() => {
       })
     }
   });
+  useCanvasSessionStore.persist.setOptions({
+    storage: createJSONStorage(() => localStorage)
+  });
+  useCanvasSessionStore.persist.clearStorage();
+  useCanvasSessionStore.setState(useCanvasSessionStore.getInitialState(), true);
   Object.defineProperty(globalThis.HTMLVideoElement.prototype, 'videoWidth', { get: () => 1920 });
   Object.defineProperty(globalThis.HTMLVideoElement.prototype, 'videoHeight', { get: () => 1080 });
   Object.defineProperty(globalThis.HTMLMediaElement.prototype, 'play', {
@@ -191,6 +198,8 @@ beforeAll(() => {
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
+  useCanvasSessionStore.persist.clearStorage();
+  useCanvasSessionStore.setState(useCanvasSessionStore.getInitialState(), true);
   setViewportSize(defaultViewport);
   useSettingsStore.getState().resetSettings();
   useAudioPlaybackStore.getState().resetAudioPlayback();
