@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { type CSSProperties, useCallback, useRef } from "react";
 import {
   CropHandle,
   CropInsets,
@@ -27,6 +27,16 @@ export const getCropRatios = (item: MediaItem) => {
     boxHeight: fullHeight,
   };
 };
+
+export const getCropBoxStyle = (
+  item: MediaItem,
+  crop: CropInsets,
+): CSSProperties => ({
+  left: -crop.left,
+  top: -crop.top,
+  width: item.width + crop.left + crop.right,
+  height: item.height + crop.top + crop.bottom,
+});
 
 export const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);

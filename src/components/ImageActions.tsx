@@ -1,4 +1,9 @@
-import { clamp, CROP_HANDLES, MIN_MEDIA_SIZE } from "../utils/media";
+import {
+  clamp,
+  CROP_HANDLES,
+  getCropBoxStyle,
+  MIN_MEDIA_SIZE,
+} from "../utils/media";
 import { CropHandle, CropInsets, MediaItem } from "../utils/media.types";
 
 export type TCropStart = {
@@ -182,19 +187,15 @@ export function ImageActions({
 }) {
   return (
     <>
-      <img
-        className="media-content"
-        src={url}
-        alt="canvas item"
-        draggable={false}
-        onDragStart={(e) => e.preventDefault()}
-        style={{
-          left: -crop.left,
-          top: -crop.top,
-          width: item.width + crop.left + crop.right,
-          height: item.height + crop.top + crop.bottom,
-        }}
-      />
+      <div className="media-crop-box" style={getCropBoxStyle(item, crop)}>
+        <img
+          className="media-content"
+          src={url}
+          alt="canvas item"
+          draggable={false}
+          onDragStart={(e) => e.preventDefault()}
+        />
+      </div>
       {editingCropItem === id && (
         <div className="crop-overlay" aria-hidden="true">
           {CROP_HANDLES.map((handle) => (

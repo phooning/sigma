@@ -16,6 +16,7 @@ import {
   initialLoopState,
   shouldRequestVideoThumbnail,
 } from "../utils/videoUtils";
+import { getCropBoxStyle } from "../utils/media";
 import { VideoLoadProxy, VideoProxy, VideoThumbnail } from "./VideoLodViews";
 import { VideoTimeline } from "./VideoTimeline";
 import type { VideoMediaProps } from "./Video.types";
@@ -128,17 +129,12 @@ export function VideoMedia({
     }
   }, [audioVolume, isAudioActive, isAudioMuted, playVideo]);
 
-  const mediaStyle = {
-    left: -crop.left,
-    top: -crop.top,
-    width: item.width + crop.left + crop.right,
-    height: item.height + crop.top + crop.bottom,
-  };
+  const cropBoxStyle = getCropBoxStyle(item, crop);
 
   if (shouldDeferVideoLoad) {
     return (
       <VideoLoadProxy
-        mediaStyle={mediaStyle}
+        cropBoxStyle={cropBoxStyle}
         thumbnailUrl={item.thumbnailUrl}
         onLoadRequested={() => {
           setPlaybackError(null);
@@ -151,7 +147,7 @@ export function VideoMedia({
   if (lod === "thumbnail" && item.thumbnailUrl) {
     return (
       <VideoThumbnail
-        mediaStyle={mediaStyle}
+        cropBoxStyle={cropBoxStyle}
         thumbnailUrl={item.thumbnailUrl}
       />
     );
@@ -163,45 +159,46 @@ export function VideoMedia({
 
   return (
     <>
-      <video
-        ref={videoRef}
-        className={`media-content ${isLoadRequested ? "video-load-requested" : ""}`}
-        src={url}
-        autoPlay={isInViewport}
-        preload={isVideoRequested && isInViewport ? "auto" : "metadata"}
-        loop={!loop.enabled}
-        muted={!isAudioActive || isAudioMuted || audioVolume <= 0}
-        playsInline
-        draggable={false}
-        onLoadedMetadata={() => updateVideoMetadata(playVideo)}
-        onCanPlay={() => {
-          playVideo();
-          startTimelineAnimation();
-        }}
-        onDurationChange={() => updateVideoMetadata()}
-        onPlay={handlePlay}
-        onPause={handlePause}
-        onRateChange={(e) => {
-          syncPlaybackRate(
-            e.currentTarget.currentTime,
-            e.currentTarget.playbackRate,
-          );
-        }}
-        onSeeked={(e) => {
-          syncTimelineFromVideo(e.currentTarget.currentTime);
-          startTimelineAnimation();
-        }}
-        onTimeUpdate={(e) => {
-          if (!isScrubbingRef.current) {
+      <div className="media-crop-box" style={cropBoxStyle}>
+        <video
+          ref={videoRef}
+          className={`media-content ${isLoadRequested ? "video-load-requested" : ""}`}
+          src={url}
+          autoPlay={isInViewport}
+          preload={isVideoRequested && isInViewport ? "auto" : "metadata"}
+          loop={!loop.enabled}
+          muted={!isAudioActive || isAudioMuted || audioVolume <= 0}
+          playsInline
+          draggable={false}
+          onLoadedMetadata={() => updateVideoMetadata(playVideo)}
+          onCanPlay={() => {
+            playVideo();
+            startTimelineAnimation();
+          }}
+          onDurationChange={() => updateVideoMetadata()}
+          onPlay={handlePlay}
+          onPause={handlePause}
+          onRateChange={(e) => {
+            syncPlaybackRate(
+              e.currentTarget.currentTime,
+              e.currentTarget.playbackRate,
+            );
+          }}
+          onSeeked={(e) => {
             syncTimelineFromVideo(e.currentTarget.currentTime);
-          }
-        }}
-        onError={() => {
-          setPlaybackError("Playback failed. This file may need transcoding.");
-        }}
-        onDragStart={(e) => e.preventDefault()}
-        style={mediaStyle}
-      />
+            startTimelineAnimation();
+          }}
+          onTimeUpdate={(e) => {
+            if (!isScrubbingRef.current) {
+              syncTimelineFromVideo(e.currentTarget.currentTime);
+            }
+          }}
+          onError={() => {
+            setPlaybackError("Playback failed. This file may need transcoding.");
+          }}
+          onDragStart={(e) => e.preventDefault()}
+        />
+      </div>
       <VideoTimeline
         clearLoop={clearLoop}
         currentTime={currentTime}

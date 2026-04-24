@@ -45,9 +45,9 @@
     -webkit-user-drag: none;
 }
 
-.media-item img.media-content,
-.media-item video.media-content {
-    inset: auto;
+.media-crop-box {
+    position: absolute;
+    pointer-events: none;
 }
 
 .media-item.selected {

@@ -4,7 +4,7 @@ import type {
 } from "./VideoLodViews.types";
 
 export function VideoLoadProxy({
-  mediaStyle,
+  cropBoxStyle,
   onLoadRequested,
   thumbnailUrl,
 }: VideoLoadProxyProps) {
@@ -20,14 +20,15 @@ export function VideoLoadProxy({
       }}
     >
       {thumbnailUrl && (
-        <img
-          className="media-content video-lod-thumbnail video-load-thumbnail"
-          src={thumbnailUrl}
-          alt=""
-          draggable={false}
-          onDragStart={(e) => e.preventDefault()}
-          style={mediaStyle}
-        />
+        <div className="media-crop-box" style={cropBoxStyle}>
+          <img
+            className="media-content video-lod-thumbnail video-load-thumbnail"
+            src={thumbnailUrl}
+            alt=""
+            draggable={false}
+            onDragStart={(e) => e.preventDefault()}
+          />
+        </div>
       )}
       <span className="video-lod-icon" aria-hidden="true" />
       <span className="video-load-label">Load video</span>
@@ -36,18 +37,19 @@ export function VideoLoadProxy({
 }
 
 export function VideoThumbnail({
-  mediaStyle,
+  cropBoxStyle,
   thumbnailUrl,
 }: VideoThumbnailProps) {
   return (
-    <img
-      className="media-content video-lod-thumbnail"
-      src={thumbnailUrl}
-      alt="video thumbnail"
-      draggable={false}
-      onDragStart={(e) => e.preventDefault()}
-      style={mediaStyle}
-    />
+    <div className="media-crop-box" style={cropBoxStyle}>
+      <img
+        className="media-content video-lod-thumbnail"
+        src={thumbnailUrl}
+        alt="video thumbnail"
+        draggable={false}
+        onDragStart={(e) => e.preventDefault()}
+      />
+    </div>
   );
 }
 

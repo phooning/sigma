@@ -117,7 +117,12 @@ export const onDropMedia = ({
       if (isImage) {
         const img = new Image();
         img.onload = () => {
-          resolve(createItem(img.width, img.height));
+          resolve(
+            createItem(img.width, img.height, {
+              sourceWidth: img.width,
+              sourceHeight: img.height,
+            }),
+          );
           img.src = "";
         };
         img.onerror = () => {

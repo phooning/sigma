@@ -41,7 +41,7 @@ import {
   handlePanAction,
   handleZoomAction,
 } from "./components/CanvasActions";
-import { useTauriDrop } from "./utils/drag";
+import { useTauriDrop as useUploadDrop } from "./utils/drag";
 import { useCanvasHotkeys } from "./utils/keyboard";
 import { useGetSettingsStore } from "./stores/useSettingsStore";
 import { useAudioPlayback } from "./stores/useAudioPlaybackStore";
@@ -176,7 +176,7 @@ export default function InfiniteCanvas() {
     containerRef.current?.setPointerCapture(pointerId);
   };
 
-  useTauriDrop({ viewportRef, setItems });
+  useUploadDrop({ viewportRef, setItems });
   useCanvasHotkeys({
     containerRef,
     itemsRef,

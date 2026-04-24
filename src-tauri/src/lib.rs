@@ -504,6 +504,14 @@ pub fn run() {
 mod tests {
     use super::*;
 
+    fn command_available(command: &str) -> bool {
+        Command::new(command)
+            .arg("-version")
+            .output()
+            .map(|output| output.status.success())
+            .unwrap_or(false)
+    }
+
     fn crop(x: f64, y: f64, width: f64, height: f64, box_width: f64, box_height: f64) -> CropRatio {
         CropRatio {
             x,
@@ -531,5 +539,136 @@ mod tests {
         );
 
         assert_eq!(result, (375, 0, 1305, 1080));
+    }
+
+    #[test]
+    fn image_screenshot_export_matches_system_crop_pixels() {
+        if !command_available("magick")
+            || !command_available("ffmpeg")
+            || !command_available("ffprobe")
+        {
+            eprintln!(
+                "skipping pixel crop export test because magick, ffmpeg, or ffprobe is missing"
+            );
+            return;
+        }
+
+        let test_id = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after Unix epoch")
+            .as_nanos();
+        let temp_dir = std::env::temp_dir().join(format!(
+            "sigma-crop-export-{}-{test_id}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&temp_dir).expect("failed to create temp test directory");
+
+        let source_path = temp_dir.join("source.png");
+        let reference_path = temp_dir.join("reference.png");
+        let output_dir = temp_dir.join("exported");
+        fs::create_dir_all(&output_dir).expect("failed to create output directory");
+
+        let generate = Command::new("magick")
+            .args([
+                "-size",
+                "192x108",
+                "xc:black",
+                "-channel",
+                "R",
+                "-fx",
+                "i/w",
+                "-channel",
+                "G",
+                "-fx",
+                "j/h",
+                "-channel",
+                "B",
+                "-fx",
+                "(i+j)/(w+h)",
+                "+channel",
+                "-depth",
+                "8",
+                source_path.to_str().expect("source path should be UTF-8"),
+            ])
+            .output()
+            .expect("failed to run ImageMagick source generation");
+        assert!(
+            generate.status.success(),
+            "ImageMagick source generation failed: {}",
+            String::from_utf8_lossy(&generate.stderr)
+        );
+
+        let crop = crop(
+            24.0 / 128.0,
+            18.0 / 72.0,
+            80.0 / 128.0,
+            42.0 / 72.0,
+            128.0,
+            72.0,
+        );
+        let (crop_x, crop_y, crop_width, crop_height) = crop_pixels(&crop, 192, 108);
+        let crop_geometry = format!("{crop_width}x{crop_height}+{crop_x}+{crop_y}");
+
+        let reference = Command::new("magick")
+            .args([
+                source_path.to_str().expect("source path should be UTF-8"),
+                "-crop",
+                &crop_geometry,
+                "+repage",
+                "-depth",
+                "8",
+                reference_path
+                    .to_str()
+                    .expect("reference path should be UTF-8"),
+            ])
+            .output()
+            .expect("failed to run ImageMagick reference crop");
+        assert!(
+            reference.status.success(),
+            "ImageMagick reference crop failed: {}",
+            String::from_utf8_lossy(&reference.stderr)
+        );
+
+        let exported_path = save_media_screenshot_blocking(
+            source_path.to_string_lossy().into_owned(),
+            "image".to_string(),
+            Some(output_dir.to_string_lossy().into_owned()),
+            None,
+            crop,
+        )
+        .expect("Sigma screenshot export should succeed");
+
+        let compare = Command::new("magick")
+            .args([
+                "compare",
+                "-metric",
+                "AE",
+                &exported_path,
+                reference_path
+                    .to_str()
+                    .expect("reference path should be UTF-8"),
+                "null:",
+            ])
+            .output()
+            .expect("failed to compare exported crop to reference crop");
+        let stderr = String::from_utf8_lossy(&compare.stderr);
+        let stdout = String::from_utf8_lossy(&compare.stdout);
+        let compare_metric = stderr
+            .split_whitespace()
+            .next()
+            .or_else(|| stdout.split_whitespace().next())
+            .unwrap_or("");
+        let differing_pixels = if compare.status.success() && compare_metric.is_empty() {
+            0
+        } else {
+            compare_metric.parse::<u64>().unwrap_or(u64::MAX)
+        };
+
+        let _ = fs::remove_dir_all(&temp_dir);
+
+        assert_eq!(
+            differing_pixels, 0,
+            "exported screenshot pixels differed from ImageMagick crop: stdout={stdout:?} stderr={stderr:?}"
+        );
     }
 }

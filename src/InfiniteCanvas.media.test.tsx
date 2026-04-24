@@ -285,6 +285,7 @@ describe('InfiniteCanvas media item interactions', () => {
   it('crops an image in place from side and corner handles', async () => {
     const mediaItem = getMediaItem();
     const image = screen.getByAltText('canvas item') as HTMLImageElement;
+    const cropBox = image.parentElement as HTMLDivElement;
     const cropBtn = document.querySelector('.crop-btn') as HTMLElement;
 
     expect(cropBtn).toBeInTheDocument();
@@ -321,8 +322,8 @@ describe('InfiniteCanvas media item interactions', () => {
 
     expect(mediaItem.style.left).toBe(`${startLeft + 120}px`);
     expect(mediaItem.style.width).toBe('1160px');
-    expect(image.style.left).toBe('-120px');
-    expect(image.style.width).toBe('1280px');
+    expect(cropBox.style.left).toBe('-120px');
+    expect(cropBox.style.width).toBe('1280px');
 
     const northWestHandle = document.querySelector('.crop-handle-nw') as HTMLElement;
 
@@ -350,7 +351,94 @@ describe('InfiniteCanvas media item interactions', () => {
     expect(mediaItem.style.top).toBe(`${startTop + 80}px`);
     expect(mediaItem.style.width).toBe('1210px');
     expect(mediaItem.style.height).toBe('880px');
-    expect(image.style.left).toBe('-70px');
-    expect(image.style.top).toBe('-80px');
+    expect(cropBox.style.left).toBe('-70px');
+    expect(cropBox.style.top).toBe('-80px');
+  });
+
+  it('keeps the crop box stable while cropping a resized frame', async () => {
+    const mediaItem = getMediaItem();
+    const image = screen.getByAltText('canvas item') as HTMLImageElement;
+    const cropBox = image.parentElement as HTMLDivElement;
+    const resizeHandle = document.querySelector('.resize-handle') as HTMLElement;
+
+    await act(async () => {
+      fireEvent.pointerDown(resizeHandle, {
+        clientX: 0,
+        clientY: 0,
+        pointerId: 13,
+        button: 0
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerMove(mediaItem, {
+        clientX: 100,
+        clientY: 200,
+        pointerId: 13,
+        button: 0
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerUp(mediaItem, { pointerId: 13, button: 0 });
+    });
+
+    const cropBtn = document.querySelector('.crop-btn') as HTMLElement;
+    await act(async () => {
+      fireEvent.click(cropBtn);
+    });
+
+    expect(cropBox.style.left).toBe('0px');
+    expect(cropBox.style.width).toBe('1380px');
+
+    const eastHandle = document.querySelector('.crop-handle-e') as HTMLElement;
+    await act(async () => {
+      fireEvent.pointerDown(eastHandle, {
+        clientX: 0,
+        clientY: 0,
+        pointerId: 14,
+        button: 0
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerMove(mediaItem, {
+        clientX: -120,
+        clientY: 0,
+        pointerId: 14,
+        button: 0
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerUp(mediaItem, { pointerId: 14, button: 0 });
+    });
+
+    expect(mediaItem.style.width).toBe('1260px');
+    expect(cropBox.style.left).toBe('0px');
+    expect(cropBox.style.width).toBe('1380px');
+
+    const startLeft = parseFloat(mediaItem.style.left);
+    const westHandle = document.querySelector('.crop-handle-w') as HTMLElement;
+    await act(async () => {
+      fireEvent.pointerDown(westHandle, {
+        clientX: 0,
+        clientY: 0,
+        pointerId: 15,
+        button: 0
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerMove(mediaItem, {
+        clientX: 120,
+        clientY: 0,
+        pointerId: 15,
+        button: 0
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerUp(mediaItem, { pointerId: 15, button: 0 });
+    });
+
+    expect(mediaItem.style.left).toBe(`${startLeft + 120}px`);
+    expect(mediaItem.style.width).toBe('1140px');
+    expect(cropBox.style.left).toBe('-120px');
+    expect(cropBox.style.width).toBe('1380px');
   });
 });
