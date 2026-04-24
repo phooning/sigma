@@ -8,19 +8,21 @@ const HUD_HEIGHT_FALLBACK = 48;
 export const useActiveAudioSelection = ({
   activeAudioItemId,
   containerRef,
-  itemsRef,
+  getItems,
+  getViewport,
   panViewportTo,
   setEditingCropItem,
   setSelectedItems,
-  viewportRef,
 }: UseActiveAudioSelectionParams) =>
   useCallback(() => {
     if (!activeAudioItemId) return;
 
-    const item = itemsRef.current.find((i) => i.id === activeAudioItemId);
+    const items = getItems();
+    const viewport = getViewport();
+    const item = items.find((i) => i.id === activeAudioItemId);
     if (!item) return;
 
-    const zoom = viewportRef.current.zoom;
+    const zoom = viewport.zoom;
     const hudHeight = containerRef.current
       ?.querySelector(".ui-overlay")
       ?.getBoundingClientRect().height;
@@ -32,11 +34,7 @@ export const useActiveAudioSelection = ({
       viewTop,
       viewRight,
       viewBottom,
-    } = getViewBounds(
-      viewportRef.current,
-      window.innerWidth,
-      window.innerHeight,
-    );
+    } = getViewBounds(viewport, window.innerWidth, window.innerHeight);
     const usableViewTop = viewTop + headerHeight;
     const itemLeft = item.x;
     const itemTop = item.y;
@@ -74,9 +72,9 @@ export const useActiveAudioSelection = ({
   }, [
     activeAudioItemId,
     containerRef,
-    itemsRef,
+    getItems,
+    getViewport,
     panViewportTo,
     setEditingCropItem,
     setSelectedItems,
-    viewportRef,
   ]);

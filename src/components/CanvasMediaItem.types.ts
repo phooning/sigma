@@ -1,4 +1,4 @@
-import type { MediaItem, Viewport } from "../utils/media.types";
+import type { MediaItem } from "../utils/media.types";
 import type { ViewBounds } from "../utils/viewport.types";
 
 export type MediaPointerHandler = (
@@ -12,26 +12,28 @@ export type MediaActionHandler = (
 ) => void;
 
 export type CanvasMediaItemProps = {
-  activeAudioItemId: string | null;
-  croppingItem: string | null;
   deleteItem: MediaActionHandler;
-  draggingItem: string | null;
-  editingCropItem: string | null;
   handleItemPointerDown: MediaPointerHandler;
   handleItemPointerMove: MediaPointerHandler;
   handleItemPointerUp: MediaPointerHandler;
   item: MediaItem;
+  isActiveAudioItem: boolean;
+  isCropping: boolean;
+  isCropEditing: boolean;
+  isDragging: boolean;
+  useNativeImageSurface: boolean;
+  isResizing: boolean;
+  isSelected: boolean;
+  requestImagePreview: (item: MediaItem, maxDimension: 256 | 1024) => void;
   requestThumbnail: (item: MediaItem) => void;
   resetSize: MediaActionHandler;
-  resizingItem: string | null;
   revealItem: MediaActionHandler;
   screenshotItem: MediaActionHandler;
-  selectedItems: Set<string>;
   startCropEdit: MediaActionHandler;
   toggleAudioPlayback: MediaActionHandler;
   viewBounds: Pick<
     ViewBounds,
     "viewLeft" | "viewTop" | "viewRight" | "viewBottom"
   >;
-  viewport: Viewport;
+  zoom: number;
 };

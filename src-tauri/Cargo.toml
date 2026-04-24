@@ -35,3 +35,4 @@ tauri-plugin-fs = "2.4.5"
 tauri-plugin-dialog = "2.6.0"
 tauri-plugin-os = "2.3.2"
 tauri-plugin-shell = "2.3.5"
+image = { version = "0.25", default-features = false, features = ["gif", "jpeg", "png", "webp"] }

@@ -21,5 +21,5 @@ export const useBackgroundCanvas = (
       pattern: canvasBackgroundPattern,
       viewport,
     });
-  }, [backgroundCanvasRef, canvasBackgroundPattern, canvasSize]);
+  }, [backgroundCanvasRef, canvasBackgroundPattern, canvasSize, viewport]);
 };

@@ -7,9 +7,8 @@ import type {
 } from "./useViewportAnimation.types";
 
 export const useViewportAnimation = ({
-  onViewportChange,
-  viewportRef,
-  setViewport,
+  commitViewport,
+  getViewport,
 }: UseViewportAnimationParams): UseViewportAnimationResult => {
   const viewportAnimationRef = useRef<(() => void) | null>(null);
 
@@ -23,15 +22,13 @@ export const useViewportAnimation = ({
   const applyViewportPanPosition = useCallback(
     (position: ViewportPanPosition) => {
       const nextViewport = {
-        ...viewportRef.current,
+        ...getViewport(),
         x: position.x,
         y: position.y,
       };
-      viewportRef.current = nextViewport;
-      onViewportChange?.(nextViewport);
-      setViewport((prev) => ({ ...prev, x: position.x, y: position.y }));
+      commitViewport(nextViewport, { flushDomNow: true });
     },
-    [onViewportChange, setViewport, viewportRef],
+    [commitViewport, getViewport],
   );
 
   const panViewportTo = useCallback(
@@ -40,13 +37,18 @@ export const useViewportAnimation = ({
 
       let didComplete = false;
       let cancelPanAnimation: (() => void) | null = null;
+      const currentViewport = getViewport();
 
       cancelPanAnimation = animateKineticPan({
-        start: viewportRef.current,
+        start: currentViewport,
         target,
         onUpdate: applyViewportPanPosition,
         onComplete: () => {
           didComplete = true;
+          commitViewport(getViewport(), {
+            flushDomNow: true,
+            syncReact: true,
+          });
 
           if (viewportAnimationRef.current === cancelPanAnimation) {
             viewportAnimationRef.current = null;
@@ -55,7 +57,7 @@ export const useViewportAnimation = ({
       });
       viewportAnimationRef.current = didComplete ? null : cancelPanAnimation;
     },
-    [applyViewportPanPosition, cancelViewportAnimation, viewportRef],
+    [applyViewportPanPosition, cancelViewportAnimation, commitViewport, getViewport],
   );
 
   useEffect(() => cancelViewportAnimation, [cancelViewportAnimation]);

@@ -1,4 +1,6 @@
+import { memo } from "react";
 import { getCrop } from "../utils/media";
+import { getImageLod } from "../utils/videoUtils";
 import { ImageActions } from "./ImageActions";
 import { CropOverlay, MediaFrameActions } from "./MediaFrameActions";
 import { VideoMedia } from "./Video";
@@ -6,36 +8,15 @@ import type { CanvasMediaItemProps } from "./CanvasMediaItem.types";
 
 const CULL_MARGIN = 500;
 
-export function CanvasMediaItem({
-  activeAudioItemId,
-  croppingItem,
-  deleteItem,
-  draggingItem,
-  editingCropItem,
-  handleItemPointerDown,
-  handleItemPointerMove,
-  handleItemPointerUp,
+const getViewportState = ({
   item,
-  requestThumbnail,
-  resetSize,
-  resizingItem,
-  revealItem,
-  screenshotItem,
-  selectedItems,
-  startCropEdit,
-  toggleAudioPlayback,
+  isActiveAudioItem,
   viewBounds,
-  viewport,
-}: CanvasMediaItemProps) {
-  const { id, url } = item;
-  const crop = getCrop(item);
-  const isCropEditing = editingCropItem === id;
-  const isSelected = selectedItems.has(id);
+}: Pick<CanvasMediaItemProps, "item" | "isActiveAudioItem" | "viewBounds">) => {
   const itemLeft = item.x;
   const itemTop = item.y;
   const itemRight = item.x + item.width;
   const itemBottom = item.y + item.height;
-  const isActiveAudioItem = activeAudioItemId === id;
   const { viewLeft, viewTop, viewRight, viewBottom } = viewBounds;
 
   const isCulled =
@@ -43,22 +24,91 @@ export function CanvasMediaItem({
     itemLeft > viewRight + CULL_MARGIN ||
     itemBottom < viewTop - CULL_MARGIN ||
     itemTop > viewBottom + CULL_MARGIN;
-
-  if (isCulled && !isActiveAudioItem) {
-    return null;
-  }
-
   const isVisuallyInViewport =
     itemRight >= viewLeft &&
     itemLeft <= viewRight &&
     itemBottom >= viewTop &&
     itemTop <= viewBottom;
-  const isInViewport = isVisuallyInViewport || isActiveAudioItem;
+
+  return {
+    isCulled,
+    isInViewport: isVisuallyInViewport || isActiveAudioItem,
+  };
+};
+
+const areCanvasMediaItemPropsEqual = (
+  prevProps: CanvasMediaItemProps,
+  nextProps: CanvasMediaItemProps,
+) => {
+  if (prevProps.item !== nextProps.item) return false;
+  if (prevProps.isActiveAudioItem !== nextProps.isActiveAudioItem) return false;
+  if (prevProps.isCropping !== nextProps.isCropping) return false;
+  if (prevProps.isCropEditing !== nextProps.isCropEditing) return false;
+  if (prevProps.isDragging !== nextProps.isDragging) return false;
+  if (prevProps.useNativeImageSurface !== nextProps.useNativeImageSurface) {
+    return false;
+  }
+  if (prevProps.isResizing !== nextProps.isResizing) return false;
+  if (prevProps.isSelected !== nextProps.isSelected) return false;
+  if (prevProps.item.type === "video" && prevProps.zoom !== nextProps.zoom) {
+    return false;
+  }
+  if (
+    prevProps.item.type === "image" &&
+    getImageLod(prevProps.zoom, prevProps.item) !==
+      getImageLod(nextProps.zoom, nextProps.item)
+  ) {
+    return false;
+  }
+
+  const prevViewportState = getViewportState(prevProps);
+  const nextViewportState = getViewportState(nextProps);
+
+  return (
+    prevViewportState.isCulled === nextViewportState.isCulled &&
+    prevViewportState.isInViewport === nextViewportState.isInViewport
+  );
+};
+
+export const CanvasMediaItem = memo(function CanvasMediaItem({
+  deleteItem,
+  handleItemPointerDown,
+  handleItemPointerMove,
+  handleItemPointerUp,
+  item,
+  isActiveAudioItem,
+  isCropping,
+  isCropEditing,
+  isDragging,
+  useNativeImageSurface,
+  isResizing,
+  isSelected,
+  requestImagePreview,
+  requestThumbnail,
+  resetSize,
+  revealItem,
+  screenshotItem,
+  startCropEdit,
+  toggleAudioPlayback,
+  viewBounds,
+  zoom,
+}: CanvasMediaItemProps) {
+  const { id, url } = item;
+  const crop = getCrop(item);
+  const { isCulled, isInViewport } = getViewportState({
+    item,
+    isActiveAudioItem,
+    viewBounds,
+  });
+
+  if (isCulled && !isActiveAudioItem) {
+    return null;
+  }
 
   const zIndex =
-    draggingItem === id ||
-    resizingItem === id ||
-    croppingItem === id ||
+    isDragging ||
+    isResizing ||
+    isCropping ||
     isCropEditing ||
     isSelected
       ? 100
@@ -71,6 +121,8 @@ export function CanvasMediaItem({
         "media-item",
         isSelected && "selected",
         isCropEditing && "crop-editing",
+        item.type === "image" && useNativeImageSurface && "native-image-item",
+        (isDragging || isResizing) && "is-transforming",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -98,11 +150,16 @@ export function CanvasMediaItem({
       {item.type === "image" ? (
         <ImageActions
           id={id}
-          url={url}
           crop={crop}
           item={item}
-          editingCropItem={editingCropItem}
+          isCropEditing={isCropEditing}
+          isDragging={isDragging}
+          isCropping={isCropping}
+          isResizing={isResizing}
+          useNativeImageSurface={useNativeImageSurface}
           handleItemPointerDown={handleItemPointerDown}
+          requestImagePreview={requestImagePreview}
+          zoom={zoom}
         />
       ) : (
         <>
@@ -111,7 +168,7 @@ export function CanvasMediaItem({
             crop={crop}
             item={item}
             isInViewport={isInViewport}
-            zoom={viewport.zoom}
+            zoom={zoom}
             onThumbnailNeeded={requestThumbnail}
           />
           {isCropEditing && (
@@ -128,4 +185,4 @@ export function CanvasMediaItem({
       />
     </div>
   );
-}
+}, areCanvasMediaItemPropsEqual);

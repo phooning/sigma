@@ -1,7 +1,9 @@
-import { useCallback, useRef } from "react";
+import { type CSSProperties, useCallback, useRef } from "react";
 import {
   CropHandle,
   CropInsets,
+  ImageLodAssets,
+  ImagePreviewDimension,
   MediaItem,
   SetItems,
   VideoLodAssets,
@@ -27,6 +29,16 @@ export const getCropRatios = (item: MediaItem) => {
     boxHeight: fullHeight,
   };
 };
+
+export const getCropBoxStyle = (
+  item: MediaItem,
+  crop: CropInsets,
+): CSSProperties => ({
+  left: -crop.left,
+  top: -crop.top,
+  width: item.width + crop.left + crop.right,
+  height: item.height + crop.top + crop.bottom,
+});
 
 export const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
@@ -61,6 +73,35 @@ export const generateVideoThumbnail = async (
     };
   } catch (err) {
     console.warn("Failed to generate video thumbnail:", err);
+    return {};
+  }
+};
+
+export const generateImagePreview = async (
+  filePath: string,
+  maxDimension: ImagePreviewDimension,
+): Promise<ImageLodAssets> => {
+  try {
+    const previewPath = await invoke<string | null>("generate_image_preview", {
+      path: filePath,
+      maxDimension,
+    });
+
+    if (!previewPath) return {};
+
+    if (maxDimension === 256) {
+      return {
+        imagePreview256Path: previewPath,
+        imagePreview256Url: convertFileSrc(previewPath),
+      };
+    }
+
+    return {
+      imagePreview1024Path: previewPath,
+      imagePreview1024Url: convertFileSrc(previewPath),
+    };
+  } catch (err) {
+    console.warn("Failed to generate image preview:", err);
     return {};
   }
 };
@@ -103,6 +144,75 @@ export const exportMediaVideo = ({
     startTime: loopRange?.start ?? null,
     endTime: loopRange?.end ?? null,
   });
+
+export function useImagePreviewQueue(setItems: SetItems) {
+  const queueRef = useRef<
+    Array<{
+      filePath: string;
+      itemId: string;
+      maxDimension: ImagePreviewDimension;
+    }>
+  >([]);
+  const requestedRef = useRef<Set<string>>(new Set());
+  const processingRef = useRef(false);
+
+  const processQueue = useCallback(async () => {
+    if (processingRef.current) return;
+
+    const request = queueRef.current.shift();
+    if (!request) return;
+
+    processingRef.current = true;
+    try {
+      const previewAssets = await generateImagePreview(
+        request.filePath,
+        request.maxDimension,
+      );
+      const previewKey =
+        request.maxDimension === 256
+          ? "imagePreview256Url"
+          : "imagePreview1024Url";
+
+      if (previewAssets[previewKey]) {
+        setItems((prev) =>
+          prev.map((item) =>
+            item.id === request.itemId ? { ...item, ...previewAssets } : item,
+          ),
+        );
+      }
+    } finally {
+      processingRef.current = false;
+      void processQueue();
+    }
+  }, [setItems]);
+
+  const requestImagePreview = useCallback(
+    (item: MediaItem, maxDimension: ImagePreviewDimension) => {
+      if (item.type !== "image") return;
+
+      if (
+        (maxDimension === 256 && item.imagePreview256Url) ||
+        (maxDimension === 1024 && item.imagePreview1024Url)
+      ) {
+        return;
+      }
+
+      const requestKey = `${item.id}:${maxDimension}`;
+      if (requestedRef.current.has(requestKey)) return;
+
+      requestedRef.current.add(requestKey);
+      queueRef.current.push({
+        filePath: item.filePath,
+        itemId: item.id,
+        maxDimension,
+      });
+      void processQueue();
+    },
+    [processQueue],
+  );
+
+  return { requestImagePreview };
+}
 
 export function useThumbnailQueue(setItems: SetItems) {
   const queueRef = useRef<MediaItem[]>([]);

@@ -1,14 +1,15 @@
 import { useEffect } from "react";
+import type { SetStateAction } from "react";
 import { MediaItem } from "./media.types";
 
 type CanvasHotkeyConfig = {
   containerRef: React.RefObject<HTMLDivElement | null>;
-  itemsRef: React.RefObject<MediaItem[]>;
+  getItems: () => MediaItem[];
   selectedItemsRef: React.RefObject<Set<string>>;
   onSave: () => void | Promise<void>;
   setItems: React.Dispatch<React.SetStateAction<MediaItem[]>>;
   setSelectedItems: React.Dispatch<React.SetStateAction<Set<string>>>;
-  setEditingCropItem: React.Dispatch<React.SetStateAction<string | null>>;
+  setEditingCropItem: (value: SetStateAction<string | null>) => void;
 };
 
 const isEditableTarget = (target: EventTarget | null) => {
@@ -21,7 +22,7 @@ const isEditableTarget = (target: EventTarget | null) => {
 
 const loadCanvasHotkeys = ({
   containerRef,
-  itemsRef,
+  getItems,
   onSave,
   selectedItemsRef,
   setItems,
@@ -34,7 +35,7 @@ const loadCanvasHotkeys = ({
 
     let hasSelectedVideo = false;
 
-    itemsRef.current
+    getItems()
       .filter((item) => item.type === "video" && selected.has(item.id))
       .forEach((item) => {
         hasSelectedVideo = true;
@@ -93,7 +94,7 @@ const loadCanvasHotkeys = ({
 
     if (isSelectAll) {
       event.preventDefault();
-      setSelectedItems(new Set(itemsRef.current.map((item) => item.id)));
+      setSelectedItems(new Set(getItems().map((item) => item.id)));
       setEditingCropItem(null);
     }
   };
