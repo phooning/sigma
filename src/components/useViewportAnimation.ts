@@ -7,9 +7,8 @@ import type {
 } from "./useViewportAnimation.types";
 
 export const useViewportAnimation = ({
-  onViewportChange,
+  commitViewport,
   viewportRef,
-  setViewport,
 }: UseViewportAnimationParams): UseViewportAnimationResult => {
   const viewportAnimationRef = useRef<(() => void) | null>(null);
 
@@ -27,11 +26,9 @@ export const useViewportAnimation = ({
         x: position.x,
         y: position.y,
       };
-      viewportRef.current = nextViewport;
-      onViewportChange?.(nextViewport);
-      setViewport((prev) => ({ ...prev, x: position.x, y: position.y }));
+      commitViewport(nextViewport, { flushDomNow: true });
     },
-    [onViewportChange, setViewport, viewportRef],
+    [commitViewport, viewportRef],
   );
 
   const panViewportTo = useCallback(
@@ -47,6 +44,10 @@ export const useViewportAnimation = ({
         onUpdate: applyViewportPanPosition,
         onComplete: () => {
           didComplete = true;
+          commitViewport(viewportRef.current, {
+            flushDomNow: true,
+            syncReact: true,
+          });
 
           if (viewportAnimationRef.current === cancelPanAnimation) {
             viewportAnimationRef.current = null;
@@ -55,7 +56,7 @@ export const useViewportAnimation = ({
       });
       viewportAnimationRef.current = didComplete ? null : cancelPanAnimation;
     },
-    [applyViewportPanPosition, cancelViewportAnimation, viewportRef],
+    [applyViewportPanPosition, cancelViewportAnimation, commitViewport, viewportRef],
   );
 
   useEffect(() => cancelViewportAnimation, [cancelViewportAnimation]);

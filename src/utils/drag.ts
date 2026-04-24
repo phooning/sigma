@@ -28,28 +28,28 @@ interface UseTauriDropOptions {
 export function useTauriDrop({ viewportRef, setItems }: UseTauriDropOptions) {
   useEffect(() => {
     const removeDragPrevention = attachDragPrevention(window);
+    let unlistenPromise: Promise<(() => void) | void> | null = null;
 
-    const unlistenPromise = getCurrentWebview().onDragDropEvent((event) => {
-      if (event.payload.type === "drop") {
-        Promise.all(
-          onDropMedia({
+    try {
+      unlistenPromise = getCurrentWebview().onDragDropEvent((event) => {
+        if (event.payload.type === "drop") {
+          void onDropMedia({
             paths: event.payload.paths,
             viewportRef,
-          }),
-        ).then((results) => {
-          const validItems = results.filter(
-            (item): item is MediaItem => item !== null,
-          );
-          if (validItems.length > 0) {
-            setItems((prev) => [...prev, ...validItems]);
-          }
-        });
-      }
-    });
+          }).then((items) => {
+            if (items.length > 0) {
+              setItems((prev) => [...prev, ...items]);
+            }
+          });
+        }
+      });
+    } catch (error) {
+      console.warn("Native drag/drop unavailable; falling back to browser-only mode.", error);
+    }
 
     return () => {
       removeDragPrevention();
-      unlistenPromise.then((unlisten) => unlisten());
+      void unlistenPromise?.then((unlisten) => unlisten?.());
     };
   }, []);
 }

@@ -116,6 +116,91 @@ describe('InfiniteCanvas media loading', () => {
     expect(getMediaVideo()).toHaveAttribute('src', `asset://${heavyVideoPath}`);
     expect(HTMLMediaElement.prototype.play).toHaveBeenCalled();
   });
+
+  it('drops images through native probe batches instead of browser Image probes', async () => {
+    renderCanvas();
+    await dropFiles(['/path/to/test.png', '/path/to/portrait.webp']);
+
+    await waitFor(() => {
+      expect(document.querySelector('.item-count')?.textContent).toContain('2 items');
+      expect(screen.getByAltText('canvas item')).toBeInTheDocument();
+    });
+
+    expect(invoke).toHaveBeenCalledWith('probe_images', {
+      paths: ['/path/to/test.png', '/path/to/portrait.webp']
+    });
+    expect(invoke).not.toHaveBeenCalledWith('probe_media', {
+      path: '/path/to/test.png'
+    });
+    expect(invoke).not.toHaveBeenCalledWith('probe_media', {
+      path: '/path/to/portrait.webp'
+    });
+  });
+
+  it('splits large image drops into bounded native probe batches', async () => {
+    const imagePaths = Array.from({ length: 9 }, (_, index) => `/path/to/gallery-${index}.png`);
+
+    renderCanvas();
+    await dropFiles(imagePaths);
+
+    await waitFor(() => {
+      expect(document.querySelector('.item-count')?.textContent).toContain('9 items');
+    });
+
+    const probeImageCalls = vi
+      .mocked(invoke)
+      .mock.calls.filter(([command]) => command === 'probe_images');
+
+    expect(probeImageCalls).toHaveLength(2);
+    expect(probeImageCalls[0][1]).toEqual({
+      paths: imagePaths.slice(0, 8)
+    });
+    expect(probeImageCalls[1][1]).toEqual({
+      paths: imagePaths.slice(8)
+    });
+  });
+
+  it('renders images from the full asset at default canvas scale', async () => {
+    renderCanvas();
+    await dropFiles(['/path/to/test.png']);
+
+    expect(invoke).not.toHaveBeenCalledWith('generate_image_preview', {
+      path: '/path/to/test.png',
+      maxDimension: 1024
+    });
+
+    await waitFor(() => {
+      expect(screen.getByAltText('canvas item')).toHaveAttribute(
+        'src',
+        'asset:///path/to/test.png'
+      );
+    });
+  });
+
+  it('requests a 256 preview when an image shrinks into the small-preview LOD', async () => {
+    renderCanvas();
+    await dropFiles(['/path/to/test.png']);
+    await screen.findByAltText('canvas item');
+
+    const container = getCanvasContainer();
+    mockCanvasRect(container);
+
+    await act(async () => {
+      fireEvent.wheel(container, {
+        ctrlKey: true,
+        deltaY: 900,
+        clientX: 10,
+        clientY: 10
+      });
+    });
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('generate_image_preview', {
+        path: '/path/to/test.png',
+        maxDimension: 256
+      });
+    });
+  });
 });
 
 describe('InfiniteCanvas media item interactions', () => {

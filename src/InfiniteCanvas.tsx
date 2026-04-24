@@ -1,6 +1,9 @@
 import {
+  startTransition,
   useCallback,
   useEffect,
+  useLayoutEffect,
+  useMemo,
   useState,
   useRef,
   WheelEvent as ReactWheelEvent,
@@ -15,6 +18,7 @@ import {
   exportMediaVideo,
   getCrop,
   saveMediaScreenshot,
+  useImagePreviewQueue,
   useThumbnailQueue,
 } from "./utils/media";
 import {
@@ -59,10 +63,17 @@ import { getLoopRange } from "./utils/videoUtils";
 import { notify } from "./utils/notifications";
 import { ACTION_SELECTORS } from "./utils/press";
 import { NativeVideoSurface } from "./components/native-video/NativeVideoSurface";
+import {
+  NativeImageSurface,
+  supportsNativeImageSurface,
+} from "./components/native-image/NativeImageSurface";
+
+const INITIAL_VIEWPORT: Viewport = { x: 0, y: 0, zoom: 1 };
+const VIEWPORT_STATE_SYNC_MS = 120;
 
 export default function InfiniteCanvas() {
   const [items, setItems] = useState<MediaItem[]>([]);
-  const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, zoom: 1 });
+  const [viewport, setViewport] = useState<Viewport>(INITIAL_VIEWPORT);
   const [isPanning, setIsPanning] = useState(false);
   const [draggingItem, setDraggingItem] = useState<string | null>(null);
   const [resizingItem, setResizingItem] = useState<string | null>(null);
@@ -95,14 +106,26 @@ export default function InfiniteCanvas() {
   );
 
   // Refs mirrored for async callbacks and global pointer gestures.
-  const viewportRef = useRef(viewport);
-  viewportRef.current = viewport;
+  const viewportRef = useRef<Viewport>(INITIAL_VIEWPORT);
+  const worldRef = useRef<HTMLDivElement>(null);
+  const pendingViewportRef = useRef<Viewport | null>(null);
+  const viewportFrameRef = useRef<number | null>(null);
+  const pendingViewportStateRef = useRef<Viewport | null>(null);
+  const viewportStateTimeoutRef = useRef<number | null>(null);
   const itemsRef = useRef(items);
   itemsRef.current = items;
   const selectedItemsRef = useRef(selectedItems);
   selectedItemsRef.current = selectedItems;
+  const draggingItemRef = useRef(draggingItem);
+  draggingItemRef.current = draggingItem;
+  const resizingItemRef = useRef(resizingItem);
+  resizingItemRef.current = resizingItem;
+  const croppingItemRef = useRef(croppingItem);
+  croppingItemRef.current = croppingItem;
   const canvasSizeRef = useRef(canvasSize);
   canvasSizeRef.current = canvasSize;
+  const screenshotDirectoryRef = useRef(screenshotDirectory);
+  screenshotDirectoryRef.current = screenshotDirectory;
   const canvasBackgroundPatternRef = useRef(canvasBackgroundPattern);
   canvasBackgroundPatternRef.current = canvasBackgroundPattern;
 
@@ -127,19 +150,106 @@ export default function InfiniteCanvas() {
     });
   }, []);
 
+  const applyViewportToDom = useCallback(
+    (nextViewport: Viewport) => {
+      if (worldRef.current) {
+        worldRef.current.style.transform = `scale(${nextViewport.zoom}) translate(${nextViewport.x}px, ${nextViewport.y}px)`;
+      }
+
+      redrawBackgroundCanvas(nextViewport);
+    },
+    [redrawBackgroundCanvas],
+  );
+
+  const syncViewportState = useCallback((nextViewport: Viewport) => {
+    pendingViewportStateRef.current = nextViewport;
+
+    startTransition(() => {
+      setViewport(nextViewport);
+    });
+  }, []);
+
+  const scheduleViewportStateSync = useCallback(
+    (nextViewport: Viewport) => {
+      pendingViewportStateRef.current = nextViewport;
+
+      if (viewportStateTimeoutRef.current !== null) {
+        return;
+      }
+
+      viewportStateTimeoutRef.current = window.setTimeout(() => {
+        viewportStateTimeoutRef.current = null;
+
+        const pendingViewport = pendingViewportStateRef.current;
+        if (!pendingViewport) return;
+
+        syncViewportState(pendingViewport);
+      }, VIEWPORT_STATE_SYNC_MS);
+    },
+    [syncViewportState],
+  );
+
+  const commitViewport = useCallback(
+    (
+      nextViewport: Viewport,
+      options: {
+        flushDomNow?: boolean;
+        syncReact?: boolean;
+      } = {},
+    ) => {
+      viewportRef.current = nextViewport;
+      pendingViewportRef.current = nextViewport;
+
+      if (options.flushDomNow) {
+        if (viewportFrameRef.current !== null) {
+          window.cancelAnimationFrame(viewportFrameRef.current);
+          viewportFrameRef.current = null;
+        }
+
+        applyViewportToDom(nextViewport);
+      } else if (viewportFrameRef.current === null) {
+        viewportFrameRef.current = window.requestAnimationFrame(() => {
+          viewportFrameRef.current = null;
+
+          const pendingViewport = pendingViewportRef.current;
+          if (!pendingViewport) return;
+
+          applyViewportToDom(pendingViewport);
+        });
+      }
+
+      if (options.syncReact) {
+        if (viewportStateTimeoutRef.current !== null) {
+          window.clearTimeout(viewportStateTimeoutRef.current);
+          viewportStateTimeoutRef.current = null;
+        }
+
+        syncViewportState(nextViewport);
+        return;
+      }
+
+      scheduleViewportStateSync(nextViewport);
+    },
+    [applyViewportToDom, scheduleViewportStateSync, syncViewportState],
+  );
+
   // Canvas integrations.
+  const { requestImagePreview } = useImagePreviewQueue(setItems);
   const { requestThumbnail } = useThumbnailQueue(setItems);
   const { cancelViewportAnimation, panViewportTo } = useViewportAnimation({
-    onViewportChange: redrawBackgroundCanvas,
+    commitViewport,
     viewportRef,
-    setViewport,
   });
   useBackgroundCanvas(
     backgroundCanvasRef,
     canvasSize,
     canvasBackgroundPattern,
-    viewport,
+    viewportRef,
   );
+
+  useLayoutEffect(() => {
+    applyViewportToDom(viewportRef.current);
+  }, [applyViewportToDom]);
 
   // Effects that keep external state in sync with the canvas.
   useEffect(() => {
@@ -163,6 +273,18 @@ export default function InfiniteCanvas() {
 
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (viewportFrameRef.current !== null) {
+        window.cancelAnimationFrame(viewportFrameRef.current);
+      }
+
+      if (viewportStateTimeoutRef.current !== null) {
+        window.clearTimeout(viewportStateTimeoutRef.current);
+      }
+    };
   }, []);
 
   const startPanning = (
@@ -218,14 +340,21 @@ export default function InfiniteCanvas() {
         thumbnailUrl: i.thumbnailPath
           ? convertFileSrc(i.thumbnailPath)
           : undefined,
+        imagePreview256Url: i.imagePreview256Path
+          ? convertFileSrc(i.imagePreview256Path)
+          : undefined,
+        imagePreview1024Url: i.imagePreview1024Path
+          ? convertFileSrc(i.imagePreview1024Path)
+          : undefined,
       }));
       setItems(loadedItems);
     }
     if (data.viewport) {
       cancelViewportAnimation();
-      viewportRef.current = data.viewport;
-      redrawBackgroundCanvas(data.viewport);
-      setViewport(data.viewport);
+      commitViewport(data.viewport, {
+        flushDomNow: true,
+        syncReact: true,
+      });
     }
     setSelectedItems(new Set());
     clearAudioItem();
@@ -289,9 +418,7 @@ export default function InfiniteCanvas() {
         y: currentViewport.y + dy,
       };
 
-      viewportRef.current = nextViewport;
-      redrawBackgroundCanvas(nextViewport);
-      setViewport(nextViewport);
+      commitViewport(nextViewport);
       startDragRef.current = { x: e.clientX, y: e.clientY };
     } else if (selectionBox && containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
@@ -341,6 +468,10 @@ export default function InfiniteCanvas() {
     if (isPanning) {
       setIsPanning(false);
       startDragRef.current = null;
+      commitViewport(viewportRef.current, {
+        flushDomNow: true,
+        syncReact: true,
+      });
     }
     if (selectionBox) {
       setSelectionBox(null);
@@ -362,96 +493,99 @@ export default function InfiniteCanvas() {
         : handleZoomAction({ e, viewport: currentViewport, containerRef });
 
     if (data) {
-      viewportRef.current = data;
-      redrawBackgroundCanvas(data);
-      setViewport(data);
+      commitViewport(data);
     }
   };
 
   // Media item pointer handlers.
-  const handleItemPointerDown = (id: string, e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest(ACTION_SELECTORS)) {
-      return;
-    }
-
-    e.stopPropagation();
-    cancelViewportAnimation();
-
-    if (e.button === 1 || e.button === 2) {
-      e.preventDefault();
-      startPanning(e.pointerId, e.clientX, e.clientY);
-      return;
-    }
-
-    const cropHandle = (e.target as HTMLElement).closest<HTMLElement>(
-      ".crop-handle",
-    )?.dataset.cropHandle as CropHandle | undefined;
-    const isResize = (e.target as HTMLElement).classList.contains(
-      "resize-handle",
-    );
-
-    if (!selectedItems.has(id)) {
-      setSelectedItems(new Set([id]));
-    }
-
-    if (cropHandle) {
-      const cropItem = items.find((item) => item.id === id);
-      if (!cropItem) return;
-
-      setEditingCropItem(id);
-      setCroppingItem(id);
-      setDraggingItem(null);
-      setResizingItem(null);
-      cropHandleRef.current = cropHandle;
-      cropStartRef.current = {
-        x: cropItem.x,
-        y: cropItem.y,
-        width: cropItem.width,
-        height: cropItem.height,
-        crop: { ...getCrop(cropItem) },
-      };
-      resizeStartRef.current = null;
-    } else if (isResize) {
-      setResizingItem(id);
-      setCroppingItem(null);
-      const resizeIds = selectedItems.has(id) ? selectedItems : new Set([id]);
-      resizeStartRef.current = new Map(
-        items
-          .filter((item) => resizeIds.has(item.id))
-          .map((item) => [
-            item.id,
-            {
-              width: item.width,
-              height: item.height,
-              crop: { ...getCrop(item) },
-            },
-          ]),
-      );
-    } else {
-      setDraggingItem(id);
-      setCroppingItem(null);
-      resizeStartRef.current = null;
-    }
-
-    startDragRef.current = { x: e.clientX, y: e.clientY };
-
-    // Capture container so move events fire globally, even when the pointer
-    // leaves the item or container bounds on mid-drag.
-    containerRef.current?.setPointerCapture(e.pointerId);
-
-    setItems((prev) => {
-      const itemIndex = prev.findIndex((i) => i.id === id);
-      if (itemIndex > -1) {
-        const newItems = [...prev];
-        const [item] = newItems.splice(itemIndex, 1);
-        newItems.push(item);
-        return newItems;
+  const handleItemPointerDown = useCallback(
+    (id: string, e: React.PointerEvent) => {
+      if ((e.target as HTMLElement).closest(ACTION_SELECTORS)) {
+        return;
       }
-      return prev;
-    });
-  };
 
-  const handleItemPointerMove = (id: string, e: React.PointerEvent) => {
+      e.stopPropagation();
+      cancelViewportAnimation();
+
+      if (e.button === 1 || e.button === 2) {
+        e.preventDefault();
+        startPanning(e.pointerId, e.clientX, e.clientY);
+        return;
+      }
+
+      const cropHandle = (e.target as HTMLElement).closest<HTMLElement>(
+        ".crop-handle",
+      )?.dataset.cropHandle as CropHandle | undefined;
+      const isResize = (e.target as HTMLElement).classList.contains(
+        "resize-handle",
+      );
+
+      if (!selectedItemsRef.current.has(id)) {
+        setSelectedItems(new Set([id]));
+      }
+
+      if (cropHandle) {
+        const cropItem = itemsRef.current.find((item) => item.id === id);
+        if (!cropItem) return;
+
+        setEditingCropItem(id);
+        setCroppingItem(id);
+        setDraggingItem(null);
+        setResizingItem(null);
+        cropHandleRef.current = cropHandle;
+        cropStartRef.current = {
+          x: cropItem.x,
+          y: cropItem.y,
+          width: cropItem.width,
+          height: cropItem.height,
+          crop: { ...getCrop(cropItem) },
+        };
+        resizeStartRef.current = null;
+      } else if (isResize) {
+        setResizingItem(id);
+        setCroppingItem(null);
+        const resizeIds = selectedItemsRef.current.has(id)
+          ? selectedItemsRef.current
+          : new Set([id]);
+        resizeStartRef.current = new Map(
+          itemsRef.current
+            .filter((item) => resizeIds.has(item.id))
+            .map((item) => [
+              item.id,
+              {
+                width: item.width,
+                height: item.height,
+                crop: { ...getCrop(item) },
+              },
+            ]),
+        );
+      } else {
+        setDraggingItem(id);
+        setCroppingItem(null);
+        resizeStartRef.current = null;
+      }
+
+      startDragRef.current = { x: e.clientX, y: e.clientY };
+
+      // Capture container so move events fire globally, even when the pointer
+      // leaves the item or container bounds on mid-drag.
+      containerRef.current?.setPointerCapture(e.pointerId);
+
+      setItems((prev) => {
+        const itemIndex = prev.findIndex((i) => i.id === id);
+        if (itemIndex > -1) {
+          const newItems = [...prev];
+          const [item] = newItems.splice(itemIndex, 1);
+          newItems.push(item);
+          return newItems;
+        }
+        return prev;
+      });
+    },
+    [cancelViewportAnimation],
+  );
+
+  const handleItemPointerMove = useCallback((id: string, e: React.PointerEvent) => {
     const dragStart = startDragRef.current;
     if (!dragStart) return;
 
@@ -459,17 +593,17 @@ export default function InfiniteCanvas() {
     const dx = (e.clientX - dragStart.x) / currentViewport.zoom;
     const dy = (e.clientY - dragStart.y) / currentViewport.zoom;
 
-    if (draggingItem === id) {
+    if (draggingItemRef.current === id) {
       setItems((prev) =>
         prev.map((item) =>
-          selectedItems.has(item.id)
+          selectedItemsRef.current.has(item.id)
             ? { ...item, x: item.x + dx, y: item.y + dy }
             : item,
         ),
       );
 
       startDragRef.current = { x: e.clientX, y: e.clientY };
-    } else if (resizingItem === id) {
+    } else if (resizingItemRef.current === id) {
       const resizeStart = resizeStartRef.current;
 
       setItems((prev) =>
@@ -481,7 +615,7 @@ export default function InfiniteCanvas() {
           isHoldingShift: !!e.shiftKey,
         }),
       );
-    } else if (croppingItem === id) {
+    } else if (croppingItemRef.current === id) {
       const cropStart = cropStartRef.current;
       const cropHandle = cropHandleRef.current;
       if (!cropStart || !cropHandle) return;
@@ -490,10 +624,14 @@ export default function InfiniteCanvas() {
         handleImageCrop({ id, dx, dy, prev, cropStart, cropHandle }),
       );
     }
-  };
+  }, []);
 
-  const handleItemPointerUp = (id: string, e: React.PointerEvent) => {
-    if (draggingItem === id || resizingItem === id || croppingItem === id) {
+  const handleItemPointerUp = useCallback((id: string, e: React.PointerEvent) => {
+    if (
+      draggingItemRef.current === id ||
+      resizingItemRef.current === id ||
+      croppingItemRef.current === id
+    ) {
       setDraggingItem(null);
       setResizingItem(null);
       setCroppingItem(null);
@@ -507,9 +645,9 @@ export default function InfiniteCanvas() {
         // Pointer capture may already be gone if the browser cancelled the gesture.
       }
     }
-  };
+  }, []);
 
-  const deleteItem = (id: string, e: React.MouseEvent) => {
+  const deleteItem = useCallback((id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setItems((prev) => prev.filter((i) => i.id !== id));
     setSelectedItems((prev) => {
@@ -520,21 +658,22 @@ export default function InfiniteCanvas() {
     setEditingCropItem((prev) => (prev === id ? null : prev));
     clearAudioItem(id);
     clearVideoExportItemState(id);
-  };
+  }, [clearAudioItem, clearVideoExportItemState]);
 
-  const startCropEdit = (id: string, e: React.MouseEvent) => {
+  const startCropEdit = useCallback((id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditingCropItem((prev) => (prev === id ? null : id));
     setSelectedItems(new Set([id]));
-  };
+  }, []);
 
-  const resetSize = (id: string, e: React.MouseEvent) => {
-    const result = resetImageSize(e);
+  const resetSize = useCallback((id: string, e: React.MouseEvent) => {
+    const item = itemsRef.current.find((entry) => entry.id === id);
+    const result = resetImageSize(e, item);
     if (!result) return;
     setItems((prev) => resetFrameSize({ id, prev, ...result }));
-  };
+  }, []);
 
-  const screenshotItem = async (id: string, e: React.MouseEvent) => {
+  const screenshotItem = useCallback(async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const item = itemsRef.current.find((i) => i.id === id);
     if (!item) return;
@@ -542,7 +681,7 @@ export default function InfiniteCanvas() {
       e.currentTarget as HTMLElement
     ).parentElement?.querySelector("video") as HTMLVideoElement | null;
 
-    let outputDirectory = screenshotDirectory;
+    let outputDirectory = screenshotDirectoryRef.current;
     if (!outputDirectory) {
       const selected = await open({
         directory: true,
@@ -570,13 +709,17 @@ export default function InfiniteCanvas() {
         description: error,
       });
     }
-  };
+  }, [setScreenshotDirectory]);
 
-  const toggleAudioPlayback = (id: string, e: React.MouseEvent) => {
+  const toggleAudioPlayback = useCallback((id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setSelectedItems(new Set([id]));
     toggleAudioItem(id);
-  };
+  }, [toggleAudioItem]);
+
+  const revealCanvasItem = useCallback((id: string, e: React.MouseEvent) => {
+    revealItem({ e, id, items: itemsRef.current });
+  }, []);
 
   const exportSelectedVideo = useCallback(async () => {
     const selectedVideoItems = itemsRef.current.filter(
@@ -635,8 +778,9 @@ export default function InfiniteCanvas() {
     }
   }, [itemsRef, selectedItemsRef, setExportingItemId]);
 
+  const renderViewport = viewportRef.current;
   const viewBounds = getViewBounds(
-    viewport,
+    renderViewport,
     canvasSize.width,
     canvasSize.height,
   );
@@ -646,6 +790,14 @@ export default function InfiniteCanvas() {
   );
   const selectedVideoExportItem =
     selectedVideoItems.length === 1 ? selectedVideoItems[0] : null;
+  const [isNativeImageSurfaceReady, setIsNativeImageSurfaceReady] =
+    useState(false);
+  const isNativeImageSurfaceSupported = useMemo(
+    () => supportsNativeImageSurface(),
+    [],
+  );
+  const isNativeImageSurfaceEnabled =
+    isNativeImageSurfaceSupported && isNativeImageSurfaceReady;
 
   return (
     <div
@@ -664,6 +816,18 @@ export default function InfiniteCanvas() {
           .join(" ")}
         aria-hidden="true"
       />
+      <NativeImageSurface
+        items={items}
+        viewportRef={viewportRef}
+        canvasSize={canvasSize}
+        selectedItems={selectedItems}
+        draggingItemId={draggingItem}
+        resizingItemId={resizingItem}
+        croppingItemId={croppingItem}
+        editingCropItemId={editingCropItem}
+        onReadyChange={setIsNativeImageSurfaceReady}
+        requestImagePreview={requestImagePreview}
+      />
       <NativeVideoSurface
         items={items}
         viewport={viewport}
@@ -673,34 +837,32 @@ export default function InfiniteCanvas() {
       />
       <div
         className="canvas-world"
-        style={{
-          transform: `scale(${viewport.zoom}) translate(${viewport.x}px, ${viewport.y}px)`,
-        }}
+        ref={worldRef}
       >
         {items.map((item) => (
           <CanvasMediaItem
             key={item.id}
-            activeAudioItemId={activeAudioItemId}
-            croppingItem={croppingItem}
             deleteItem={deleteItem}
-            draggingItem={draggingItem}
-            editingCropItem={editingCropItem}
             handleItemPointerDown={handleItemPointerDown}
             handleItemPointerMove={handleItemPointerMove}
             handleItemPointerUp={handleItemPointerUp}
             item={item}
+            isActiveAudioItem={activeAudioItemId === item.id}
+            isCropping={croppingItem === item.id}
+            isCropEditing={editingCropItem === item.id}
+            isDragging={draggingItem === item.id}
+            isResizing={resizingItem === item.id}
+            isSelected={selectedItems.has(item.id)}
+            requestImagePreview={requestImagePreview}
             requestThumbnail={requestThumbnail}
             resetSize={resetSize}
-            resizingItem={resizingItem}
-            revealItem={(id, e) => {
-              revealItem({ e, id, items });
-            }}
+            revealItem={revealCanvasItem}
             screenshotItem={screenshotItem}
-            selectedItems={selectedItems}
             startCropEdit={startCropEdit}
             toggleAudioPlayback={toggleAudioPlayback}
+            useNativeImageSurface={isNativeImageSurfaceEnabled}
             viewBounds={viewBounds}
-            viewport={viewport}
+            zoom={renderViewport.zoom}
           />
         ))}
       </div>
@@ -712,7 +874,7 @@ export default function InfiniteCanvas() {
       />
       <Hud
         items={items}
-        saveConfig={() => saveConfig({ items, viewport })}
+        saveConfig={() => saveConfig({ items, viewport: viewportRef.current })}
         loadConfig={loadConfig}
         settingsMenuItems={SETTINGS_MENU_ITEMS}
         settingsVersion={appVersion}

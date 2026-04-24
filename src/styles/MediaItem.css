@@ -2,22 +2,27 @@
     position: absolute;
     border-radius: var(--radius-md-app);
     overflow: hidden;
-    box-shadow:
-        var(--shadow-media),
-        0 0 0 var(--border-width) var(--border);
+    box-shadow: 0 0 0 var(--border-width) var(--border);
     background: var(--surface-control);
     cursor: grab;
     transition:
         box-shadow var(--duration-medium) ease,
         transform var(--duration-medium) ease;
-    will-change: transform;
     user-select: none;
     -webkit-user-select: none;
     -webkit-user-drag: none;
 }
 
+.media-item.is-transforming {
+    will-change: transform;
+}
+
 .media-item.crop-editing {
     cursor: default;
+}
+
+.media-item.native-image-item {
+    background: transparent;
 }
 
 .media-item:active {
@@ -74,8 +79,6 @@
     color: var(--text-strong);
     background: var(--surface-action);
     border: var(--border-width) solid var(--input);
-    backdrop-filter: blur(var(--blur-md));
-    -webkit-backdrop-filter: blur(var(--blur-md));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -87,6 +90,28 @@
         background var(--duration-medium) ease,
         transform var(--duration-medium) ease;
     z-index: var(--z-media-action);
+}
+
+.media-item.selected .reset-btn,
+.media-item.selected .delete-btn,
+.media-item.selected .reveal-btn,
+.media-item.selected .screenshot-btn,
+.media-item.selected .audio-btn,
+.media-item.selected .crop-btn,
+.media-item.is-transforming .reset-btn,
+.media-item.is-transforming .delete-btn,
+.media-item.is-transforming .reveal-btn,
+.media-item.is-transforming .screenshot-btn,
+.media-item.is-transforming .audio-btn,
+.media-item.is-transforming .crop-btn,
+.media-item.crop-editing .reset-btn,
+.media-item.crop-editing .delete-btn,
+.media-item.crop-editing .reveal-btn,
+.media-item.crop-editing .screenshot-btn,
+.media-item.crop-editing .audio-btn,
+.media-item.crop-editing .crop-btn {
+    backdrop-filter: blur(var(--blur-md));
+    -webkit-backdrop-filter: blur(var(--blur-md));
 }
 
 .delete-btn {

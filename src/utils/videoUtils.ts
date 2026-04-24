@@ -5,6 +5,7 @@ const PROXY_MAX_SCREEN_WIDTH = 96;
 const PROXY_MAX_SCREEN_HEIGHT = 72;
 
 export type VideoLod = "video" | "thumbnail" | "proxy";
+export type ImageLod = "proxy" | "preview256" | "preview1024" | "full";
 
 export interface LoopState {
   enabled: boolean;
@@ -81,4 +82,16 @@ export const getLoopRange = (loop: LoopState) => {
     start: Math.min(loop.a, loop.b),
     end: Math.max(loop.a, loop.b),
   };
+};
+
+export const getImageLod = (zoom: number, item: MediaItem): ImageLod => {
+  const screenWidth = item.width * zoom;
+  const screenHeight = item.height * zoom;
+  const longEdge = Math.max(screenWidth, screenHeight);
+  const shortEdge = Math.min(screenWidth, screenHeight);
+
+  if (shortEdge <= 144) return "preview256";
+  if (longEdge <= 256) return "preview1024";
+
+  return "full";
 };

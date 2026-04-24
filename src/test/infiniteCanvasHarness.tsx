@@ -15,7 +15,11 @@ const {
   toastMock,
   writeTextFileMock
 } = vi.hoisted(() => {
-  const invokeMock = vi.fn((command: string, args?: { path?: string }) => {
+  const invokeMock = vi.fn(
+    (
+      command: string,
+      args?: { path?: string; paths?: string[]; maxDimension?: number }
+    ) => {
     if (command === 'probe_media') {
       return Promise.resolve({
         width: args?.path?.includes('heavy_video.mkv') ? 3840 : 1920,
@@ -27,9 +31,28 @@ const {
       });
     }
 
+    if (command === 'probe_images') {
+      return Promise.resolve(
+        (args?.paths ?? []).map((path) => ({
+          path,
+          width: path.includes('portrait') ? 1200 : 640,
+          height: path.includes('portrait') ? 1800 : 480,
+          size: path.includes('large') ? 12 * 1024 * 1024 : 256 * 1024
+        }))
+      );
+    }
+
     if (command === 'generate_video_thumbnail') {
       return Promise.resolve(
         `/tmp/${args?.path?.includes('heavy_video.mkv') ? 'heavy' : 'video'}-thumb.jpg`
+      );
+    }
+
+    if (command === 'generate_image_preview') {
+      return Promise.resolve(
+        `/tmp/${
+          args?.path?.includes('portrait') ? 'portrait' : 'image'
+        }-preview-${args?.maxDimension}.png`
       );
     }
 
@@ -141,22 +164,6 @@ beforeAll(() => {
       })
     }
   });
-
-  Object.defineProperty(globalThis.Image.prototype, 'src', {
-    set(src) {
-      if (src) {
-        setTimeout(() => {
-          if (this.onload) this.onload(new Event('load'));
-        }, 0);
-      }
-    }
-  });
-
-  Object.defineProperty(globalThis.Image.prototype, 'width', { get: () => 640 });
-  Object.defineProperty(globalThis.Image.prototype, 'height', { get: () => 480 });
-  Object.defineProperty(globalThis.Image.prototype, 'naturalWidth', { get: () => 640 });
-  Object.defineProperty(globalThis.Image.prototype, 'naturalHeight', { get: () => 480 });
-
   Object.defineProperty(globalThis.HTMLVideoElement.prototype, 'videoWidth', { get: () => 1920 });
   Object.defineProperty(globalThis.HTMLVideoElement.prototype, 'videoHeight', { get: () => 1080 });
   Object.defineProperty(globalThis.HTMLMediaElement.prototype, 'play', {

@@ -2,6 +2,10 @@
     filter: saturate(0.9) contrast(0.95);
 }
 
+.image-lod-preview {
+    filter: saturate(0.92) contrast(0.96);
+}
+
 .video-lod-proxy {
     position: absolute;
     inset: 0;

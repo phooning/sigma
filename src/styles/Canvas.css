@@ -33,6 +33,17 @@
     pointer-events: none;
 }
 
+.native-image-surface {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-canvas-world);
+    display: block;
+    width: 100dvw;
+    height: 100dvh;
+    contain: strict;
+    pointer-events: none;
+}
+
 .canvas-world {
     position: absolute;
     top: 0;
