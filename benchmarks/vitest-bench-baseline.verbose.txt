@@ -1,0 +1,76 @@
+
+ RUN  v4.1.0 /Users/david/centrum/work/sigma
+
+
+ RUN  v4.1.0 /Users/david/centrum/work/sigma
+
+
+ ✓ src/bench/spatialIndex.bench.ts > spatial indexing 1845ms
+     name                            hz     min     max    mean     p75     p99    p995    p999     rme  samples
+   · brute-force rect query    6,827.22  0.1260  3.3243  0.1465  0.1349  0.3396  0.5212  1.4049  ±2.08%     3414
+   · grid index build            289.62  2.1799  9.6208  3.4528  3.6065  9.1882  9.6208  9.6208  ±6.95%      145
+   · grid index rect query   138,846.74  0.0042  7.3278  0.0072  0.0048  0.0355  0.0537  0.2010  ±5.22%    69424
+
+ ✓ src/bench/spatialIndex.bench.ts > spatial indexing 1845ms
+     name                            hz     min     max    mean     p75     p99    p995    p999     rme  samples
+   · brute-force rect query    6,827.22  0.1260  3.3243  0.1465  0.1349  0.3396  0.5212  1.4049  ±2.08%     3414
+   · grid index build            289.62  2.1799  9.6208  3.4528  3.6065  9.1882  9.6208  9.6208  ±6.95%      145
+   · grid index rect query   138,846.74  0.0042  7.3278  0.0072  0.0048  0.0355  0.0537  0.2010  ±5.22%    69424
+
+ ✓ src/bench/viewportMath.bench.ts > viewport math 1834ms
+     name                                                  hz     min     max    mean     p75     p99    p995    p999     rme  samples
+   · applyPanDelta for repeated trackpad pans       56,066.60  0.0148  2.5662  0.0178  0.0164  0.0542  0.0897  0.1912  ±1.47%    28034
+   · applyZoomAtPoint for pointer-centered zooming  70,218.97  0.0117  0.7383  0.0142  0.0133  0.0430  0.0592  0.1636  ±0.77%    35110
+   · getNextZoom clamp path                         16,351.88  0.0504  0.4689  0.0612  0.0592  0.1415  0.1675  0.2277  ±0.63%     8176
+
+ ✓ src/bench/viewportMath.bench.ts > viewport math 1834ms
+     name                                                  hz     min     max    mean     p75     p99    p995    p999     rme  samples
+   · applyPanDelta for repeated trackpad pans       56,066.60  0.0148  2.5662  0.0178  0.0164  0.0542  0.0897  0.1912  ±1.47%    28034
+   · applyZoomAtPoint for pointer-centered zooming  70,218.97  0.0117  0.7383  0.0142  0.0133  0.0430  0.0592  0.1636  ±0.77%    35110
+   · getNextZoom clamp path                         16,351.88  0.0504  0.4689  0.0612  0.0592  0.1415  0.1675  0.2277  ±0.63%     8176
+
+ ✓ src/bench/culling.bench.ts > culling algorithms 1820ms
+     name                                            hz     min     max    mean     p75     p99    p995    p999     rme  samples
+   · selection-box intersection scan          15,688.74  0.0571  0.3520  0.0637  0.0625  0.1232  0.1537  0.2003  ±0.45%     7845
+   · visible screen area projection scan       1,457.00  0.5712  2.3460  0.6863  0.6775  1.6003  1.7883  2.3460  ±2.05%      729
+   · center weighting for visible candidates   2,007.75  0.4278  1.0679  0.4981  0.5114  0.7255  0.8246  0.9837  ±0.82%     1005
+
+ ✓ src/bench/culling.bench.ts > culling algorithms 1820ms
+     name                                            hz     min     max    mean     p75     p99    p995    p999     rme  samples
+   · selection-box intersection scan          15,688.74  0.0571  0.3520  0.0637  0.0625  0.1232  0.1537  0.2003  ±0.45%     7845
+   · visible screen area projection scan       1,457.00  0.5712  2.3460  0.6863  0.6775  1.6003  1.7883  2.3460  ±2.05%      729
+   · center weighting for visible candidates   2,007.75  0.4278  1.0679  0.4981  0.5114  0.7255  0.8246  0.9837  ±0.82%     1005
+
+ BENCH  Summary
+
+  selection-box intersection scan - src/bench/culling.bench.ts > culling algorithms
+    7.81x faster than center weighting for visible candidates
+    10.77x faster than visible screen area projection scan
+
+  grid index rect query - src/bench/spatialIndex.bench.ts > spatial indexing
+    20.34x faster than brute-force rect query
+    479.41x faster than grid index build
+
+  applyZoomAtPoint for pointer-centered zooming - src/bench/viewportMath.bench.ts > viewport math
+    1.25x faster than applyPanDelta for repeated trackpad pans
+    4.29x faster than getNextZoom clamp path
+
+
+ BENCH  Summary
+
+  selection-box intersection scan - src/bench/culling.bench.ts > culling algorithms
+    7.81x faster than center weighting for visible candidates
+    10.77x faster than visible screen area projection scan
+
+  grid index rect query - src/bench/spatialIndex.bench.ts > spatial indexing
+    20.34x faster than brute-force rect query
+    479.41x faster than grid index build
+
+  applyZoomAtPoint for pointer-centered zooming - src/bench/viewportMath.bench.ts > viewport math
+    1.25x faster than applyPanDelta for repeated trackpad pans
+    4.29x faster than getNextZoom clamp path
+
+Benchmark report written to /Users/david/centrum/work/sigma/benchmarks/vitest-bench-baseline.json
+Benchmark report written to /Users/david/centrum/work/sigma/benchmarks/vitest-bench-baseline.json
+Benchmarking is an experimental feature.
+Breaking changes might not follow SemVer, please pin Vitest's version when using it.

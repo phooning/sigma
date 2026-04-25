@@ -3,6 +3,7 @@ import { MediaItem, Viewport } from "../utils/media.types";
 import { v4 as uuidv4 } from "uuid";
 import { IMAGE_EXTENSIONS, VIDEO_EXTENSIONS } from "../utils/media";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { applyPanDelta, applyZoomAtPoint } from "../utils/viewportMath";
 
 export type WheelInputType = "trackpad-pan" | "zoom";
 
@@ -103,11 +104,7 @@ export const handlePanAction = ({
 }: {
   e: WheelEvent;
   viewport: Viewport;
-}) => ({
-  x: viewport.x - e.deltaX / viewport.zoom,
-  y: viewport.y - e.deltaY / viewport.zoom,
-  zoom: viewport.zoom,
-});
+}) => applyPanDelta(viewport, e.deltaX, e.deltaY);
 
 export const handleZoomAction = ({
   e,
@@ -118,21 +115,14 @@ export const handleZoomAction = ({
   viewport: Viewport;
   containerRef: RefObject<HTMLDivElement | null>;
 }) => {
-  const zoomFactor = -e.deltaY * 0.001;
-  const newZoom = Math.max(0.05, Math.min(viewport.zoom * (1 + zoomFactor), 5));
-
   if (containerRef.current) {
     const rect = containerRef.current.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const prevX = mouseX / viewport.zoom - viewport.x;
-    const prevY = mouseY / viewport.zoom - viewport.y;
-
-    const newX = mouseX / newZoom - prevX;
-    const newY = mouseY / newZoom - prevY;
-
-    return { x: newX, y: newY, zoom: newZoom };
+    return applyZoomAtPoint({
+      viewport,
+      deltaY: e.deltaY,
+      mouseX: e.clientX - rect.left,
+      mouseY: e.clientY - rect.top,
+    });
   }
 };
 

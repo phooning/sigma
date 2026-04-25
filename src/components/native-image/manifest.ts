@@ -1,6 +1,7 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCropRatios } from "../../utils/media";
 import type { MediaItem } from "../../utils/media.types";
+import { getCenterWeight, projectItemToScreen } from "../../utils/spatial";
 import { getImageLod } from "../../utils/videoUtils";
 import type {
   BuildNativeImageManifestOptions,
@@ -68,9 +69,6 @@ export function buildNativeImageManifest({
 }: BuildNativeImageManifestOptions): BuildNativeImageManifestResult {
   const canvasWidth = Math.max(1, Math.round(canvasSize.width));
   const canvasHeight = Math.max(1, Math.round(canvasSize.height));
-  const canvasCenterX = canvasWidth / 2;
-  const canvasCenterY = canvasHeight / 2;
-  const canvasDiagonal = Math.hypot(canvasWidth, canvasHeight) || 1;
   const previewRequests: NativeImagePreviewRequest[] = [];
 
   const assets = items.flatMap((item, index) => {
@@ -86,17 +84,11 @@ export function buildNativeImageManifest({
       return [];
     }
 
-    const screenX = (item.x + viewport.x) * viewport.zoom;
-    const screenY = (item.y + viewport.y) * viewport.zoom;
-    const renderedWidthPx = item.width * viewport.zoom;
-    const renderedHeightPx = item.height * viewport.zoom;
-    const visibleLeft = Math.max(0, screenX);
-    const visibleTop = Math.max(0, screenY);
-    const visibleRight = Math.min(canvasWidth, screenX + renderedWidthPx);
-    const visibleBottom = Math.min(canvasHeight, screenY + renderedHeightPx);
-    const visibleWidth = Math.max(0, visibleRight - visibleLeft);
-    const visibleHeight = Math.max(0, visibleBottom - visibleTop);
-    const visibleAreaPx = visibleWidth * visibleHeight;
+    const screenRect = projectItemToScreen(item, viewport, {
+      width: canvasWidth,
+      height: canvasHeight,
+    });
+    const visibleAreaPx = screenRect.visibleAreaPx;
 
     if (visibleAreaPx <= 0) return [];
 
@@ -108,13 +100,10 @@ export function buildNativeImageManifest({
     }
 
     const crop = getCropRatios(item);
-    const itemCenterX = screenX + renderedWidthPx / 2;
-    const itemCenterY = screenY + renderedHeightPx / 2;
-    const centerDistance = Math.hypot(
-      itemCenterX - canvasCenterX,
-      itemCenterY - canvasCenterY,
-    );
-    const centerWeight = 1 - Math.min(1, centerDistance / canvasDiagonal);
+    const centerWeight = getCenterWeight(screenRect, {
+      width: canvasWidth,
+      height: canvasHeight,
+    });
     const isSelected = selectedItems.has(item.id);
 
     return [
@@ -129,10 +118,10 @@ export function buildNativeImageManifest({
         cropWidthRatio: crop.width,
         cropHeightRatio: crop.height,
         drawOrder: (isSelected ? ACTIVE_IMAGE_Z_INDEX : 0) + index,
-        screenX,
-        screenY,
-        renderedWidthPx,
-        renderedHeightPx,
+        screenX: screenRect.x,
+        screenY: screenRect.y,
+        renderedWidthPx: screenRect.width,
+        renderedHeightPx: screenRect.height,
         visibleAreaPx,
         focusWeight: isSelected ? 2.5 : 1,
         centerWeight,

@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { MediaItem, Viewport } from "../../utils/media.types";
+import { getCenterWeight, projectItemToScreen } from "../../utils/spatial";
 import type { NativeVideoManifest } from "./types";
 
 const TARGET_PRESENTATION_FPS = 60;
@@ -25,9 +26,6 @@ export function useNativeVideoManifest({
   return useMemo(() => {
     const canvasWidth = Math.max(1, Math.round(canvasSize.width));
     const canvasHeight = Math.max(1, Math.round(canvasSize.height));
-    const canvasCenterX = canvasWidth / 2;
-    const canvasCenterY = canvasHeight / 2;
-    const canvasDiagonal = Math.hypot(canvasWidth, canvasHeight) || 1;
 
     return {
       canvasWidth,
@@ -36,27 +34,18 @@ export function useNativeVideoManifest({
       assets: items.flatMap((item) => {
         if (item.type !== "video") return [];
 
-        const screenX = (item.x + viewport.x) * viewport.zoom;
-        const screenY = (item.y + viewport.y) * viewport.zoom;
-        const renderedWidthPx = item.width * viewport.zoom;
-        const renderedHeightPx = item.height * viewport.zoom;
-        const visibleLeft = Math.max(0, screenX);
-        const visibleTop = Math.max(0, screenY);
-        const visibleRight = Math.min(canvasWidth, screenX + renderedWidthPx);
-        const visibleBottom = Math.min(canvasHeight, screenY + renderedHeightPx);
-        const visibleWidth = Math.max(0, visibleRight - visibleLeft);
-        const visibleHeight = Math.max(0, visibleBottom - visibleTop);
-        const visibleAreaPx = visibleWidth * visibleHeight;
+        const screenRect = projectItemToScreen(item, viewport, {
+          width: canvasWidth,
+          height: canvasHeight,
+        });
+        const visibleAreaPx = screenRect.visibleAreaPx;
 
         if (visibleAreaPx <= 0) return [];
 
-        const itemCenterX = screenX + renderedWidthPx / 2;
-        const itemCenterY = screenY + renderedHeightPx / 2;
-        const centerDistance = Math.hypot(
-          itemCenterX - canvasCenterX,
-          itemCenterY - canvasCenterY,
-        );
-        const centerWeight = 1 - Math.min(1, centerDistance / canvasDiagonal);
+        const centerWeight = getCenterWeight(screenRect, {
+          width: canvasWidth,
+          height: canvasHeight,
+        });
         const focusWeight = selectedItems.has(item.id)
           ? 2.5
           : activeAudioItemId === item.id
@@ -75,10 +64,10 @@ export function useNativeVideoManifest({
               1,
               Math.round(item.sourceHeight ?? item.height),
             ),
-            screenX,
-            screenY,
-            renderedWidthPx,
-            renderedHeightPx,
+            screenX: screenRect.x,
+            screenY: screenRect.y,
+            renderedWidthPx: screenRect.width,
+            renderedHeightPx: screenRect.height,
             visibleAreaPx,
             focusWeight,
             centerWeight,

@@ -24,3 +24,17 @@ ffmpeg -f lavfi -i testsrc2=size=3840x2160:rate=60 -t 2400 -c:v libx264 -crf 18 
 pnpm vitest run src/InfiniteCanvas.test.tsx -t "videos"
 pnpm tauri dev
 ```
+
+## Benchmark baselines
+
+Unit-level benches live under `src/bench/*.bench.ts` and focus on viewport math, rectangle culling, and spatial indexing.
+
+```sh
+# Run benches and compare to the committed baseline
+pnpm bench:check
+
+# Refresh the committed JSON baseline and verbose log after an intentional perf change
+pnpm bench:update
+```
+
+Commit `benchmarks/vitest-bench-baseline.json` and `benchmarks/vitest-bench-baseline.verbose.txt` whenever the accepted benchmark baseline changes so CI can diff against git-tracked numbers.

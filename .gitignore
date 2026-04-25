@@ -31,3 +31,5 @@ fixtures/heavy_video.mkv
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+/benchmarks/vitest-bench-current.json
+/benchmarks/vitest-bench-current.verbose.txt

@@ -74,6 +74,16 @@ Run the unit test suite via Vitest:
 pnpm test
 ```
 
+Run the unit benchmark suite and compare against the committed baseline:
+```bash
+pnpm bench:check
+```
+
+Refresh the committed benchmark baseline after an intentional performance change:
+```bash
+pnpm bench:update
+```
+
 ## Roadmap & Tiers
 This Studio edition provides the core visualization capability. A planned **SIGMA Render Lab** offers advanced features for power users and lab applications:
 

@@ -388,19 +388,18 @@ export default function InfiniteCanvas() {
         const resizeIds = selectedItemsRef.current.has(id)
           ? selectedItemsRef.current
           : new Set([id]);
-        resizeStartRef.current = new Map(
-          useCanvasSessionStore
-            .getState()
-            .items.filter((item) => resizeIds.has(item.id))
-            .map((item) => [
-              item.id,
-              {
+        resizeStartRef.current = useCanvasSessionStore
+          .getState()
+          .items.reduce((map, item) => {
+            if (resizeIds.has(item.id)) {
+              map.set(item.id, {
                 width: item.width,
                 height: item.height,
                 crop: { ...getCrop(item) },
-              },
-            ]),
-        );
+              });
+            }
+            return map;
+          }, new Map());
       } else {
         startDragging(id);
         resizeStartRef.current = null;
