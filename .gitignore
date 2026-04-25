@@ -24,3 +24,10 @@ fixtures/heavy_video.mkv
 *.sln
 *.sw?
 .aider*
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
