@@ -1,4 +1,9 @@
 import type { MediaItem, MediaItemType, Viewport } from "../utils/media.types";
+import type {
+  NativeControllerSnapshot,
+  NativeVideoManifest,
+  NativeVideoProfile,
+} from "../components/native-video/types";
 
 export const BENCH_CANVAS_SIZE = {
   width: 1920,
@@ -35,3 +40,47 @@ export const createBenchItems = (
       ...(type === "video" ? { duration: 10 } : {}),
     };
   });
+
+export const createBenchNativeVideoManifest = (
+  assetCount: number,
+): NativeVideoManifest => ({
+  canvasWidth: BENCH_CANVAS_SIZE.width,
+  canvasHeight: BENCH_CANVAS_SIZE.height,
+  viewportZoom: BENCH_VIEWPORT.zoom,
+  assets: createBenchItems(assetCount, "video").map((item, index) => ({
+    id: item.id,
+    path: item.filePath,
+    sourceWidth: item.sourceWidth ?? 1920,
+    sourceHeight: item.sourceHeight ?? 1080,
+    screenX: (item.x + BENCH_VIEWPORT.x) * BENCH_VIEWPORT.zoom,
+    screenY: (item.y + BENCH_VIEWPORT.y) * BENCH_VIEWPORT.zoom,
+    renderedWidthPx: item.width * BENCH_VIEWPORT.zoom,
+    renderedHeightPx: item.height * BENCH_VIEWPORT.zoom,
+    visibleAreaPx: item.width * item.height * BENCH_VIEWPORT.zoom,
+    focusWeight: index % 6 === 0 ? 2.5 : 1,
+    centerWeight: 0.75,
+    targetFps: 60,
+  })),
+});
+
+export const createBenchNativeVideoProfile = (): NativeVideoProfile => ({
+  baseCaseValidated: true,
+  safeBudgetBytesPerSec: 16 * 1024 * 1024 * 1024,
+});
+
+export const createBenchNativeControllerSnapshot = (
+  assetCount: number,
+): NativeControllerSnapshot => ({
+  profile: createBenchNativeVideoProfile(),
+  allocations: Array.from({ length: assetCount }, (_, index) => ({
+    assetId: `video-${index}`,
+    streamId: index + 1,
+    state: index % 4 === 0 ? "thumbnail" : "active",
+    decodeWidth: index % 4 === 0 ? 426 : 1280,
+    decodeHeight: index % 4 === 0 ? 240 : 720,
+    fps: 60,
+  })),
+});
+
+export const createBenchProbeImagePaths = (count: number) =>
+  Array.from({ length: count }, (_, index) => `/bench/image-${index}.png`);

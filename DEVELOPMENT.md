@@ -35,6 +35,11 @@ pnpm bench:check
 
 # Refresh the committed JSON baseline and verbose log after an intentional perf change
 pnpm bench:update
+
+# Measure actual Tauri command dispatch timing separately from JS overhead
+pnpm bench:ipc:rust
 ```
 
 Commit `benchmarks/vitest-bench-baseline.json` and `benchmarks/vitest-bench-baseline.verbose.txt` whenever the accepted benchmark baseline changes so CI can diff against git-tracked numbers.
+
+The JS-side IPC bench uses a mocked `invoke` boundary to keep Vitest stable and focused on frontend serialization/promise overhead. The Rust-side IPC bench uses `tauri::test` plus Criterion so command dispatch timing is measured without spinning up a real window.

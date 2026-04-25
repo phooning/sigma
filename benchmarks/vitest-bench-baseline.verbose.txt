@@ -5,70 +5,90 @@
  RUN  v4.1.0 /Users/david/centrum/work/sigma
 
 
- ✓ src/bench/spatialIndex.bench.ts > spatial indexing 1845ms
-     name                            hz     min     max    mean     p75     p99    p995    p999     rme  samples
-   · brute-force rect query    6,827.22  0.1260  3.3243  0.1465  0.1349  0.3396  0.5212  1.4049  ±2.08%     3414
-   · grid index build            289.62  2.1799  9.6208  3.4528  3.6065  9.1882  9.6208  9.6208  ±6.95%      145
-   · grid index rect query   138,846.74  0.0042  7.3278  0.0072  0.0048  0.0355  0.0537  0.2010  ±5.22%    69424
-
- ✓ src/bench/spatialIndex.bench.ts > spatial indexing 1845ms
-     name                            hz     min     max    mean     p75     p99    p995    p999     rme  samples
-   · brute-force rect query    6,827.22  0.1260  3.3243  0.1465  0.1349  0.3396  0.5212  1.4049  ±2.08%     3414
-   · grid index build            289.62  2.1799  9.6208  3.4528  3.6065  9.1882  9.6208  9.6208  ±6.95%      145
-   · grid index rect query   138,846.74  0.0042  7.3278  0.0072  0.0048  0.0355  0.0537  0.2010  ±5.22%    69424
-
- ✓ src/bench/viewportMath.bench.ts > viewport math 1834ms
+ ✓ src/bench/ipcLatency.bench.ts > ipc latency (mocked invoke) 1810ms
      name                                                  hz     min     max    mean     p75     p99    p995    p999     rme  samples
-   · applyPanDelta for repeated trackpad pans       56,066.60  0.0148  2.5662  0.0178  0.0164  0.0542  0.0897  0.1912  ±1.47%    28034
-   · applyZoomAtPoint for pointer-centered zooming  70,218.97  0.0117  0.7383  0.0142  0.0133  0.0430  0.0592  0.1636  ±0.77%    35110
-   · getNextZoom clamp path                         16,351.88  0.0504  0.4689  0.0612  0.0592  0.1415  0.1675  0.2277  ±0.63%     8176
+   · native_video_get_profile mocked round-trip      9,709.34  0.0829  0.7867  0.1030  0.1009  0.2670  0.3162  0.4374  ±0.90%     4855
+   · native_video_update_manifest mocked round-trip    794.12  1.1450  1.9472  1.2593  1.2995  1.6914  1.9293  1.9472  ±0.98%      398
+   · probe_images mocked round-trip                  1,112.01  0.7753  1.4894  0.8993  0.9067  1.2724  1.3298  1.4894  ±0.92%      557
 
- ✓ src/bench/viewportMath.bench.ts > viewport math 1834ms
+ ✓ src/bench/ipcLatency.bench.ts > ipc latency (mocked invoke) 1810ms
      name                                                  hz     min     max    mean     p75     p99    p995    p999     rme  samples
-   · applyPanDelta for repeated trackpad pans       56,066.60  0.0148  2.5662  0.0178  0.0164  0.0542  0.0897  0.1912  ±1.47%    28034
-   · applyZoomAtPoint for pointer-centered zooming  70,218.97  0.0117  0.7383  0.0142  0.0133  0.0430  0.0592  0.1636  ±0.77%    35110
-   · getNextZoom clamp path                         16,351.88  0.0504  0.4689  0.0612  0.0592  0.1415  0.1675  0.2277  ±0.63%     8176
+   · native_video_get_profile mocked round-trip      9,709.34  0.0829  0.7867  0.1030  0.1009  0.2670  0.3162  0.4374  ±0.90%     4855
+   · native_video_update_manifest mocked round-trip    794.12  1.1450  1.9472  1.2593  1.2995  1.6914  1.9293  1.9472  ±0.98%      398
+   · probe_images mocked round-trip                  1,112.01  0.7753  1.4894  0.8993  0.9067  1.2724  1.3298  1.4894  ±0.92%      557
 
- ✓ src/bench/culling.bench.ts > culling algorithms 1820ms
-     name                                            hz     min     max    mean     p75     p99    p995    p999     rme  samples
-   · selection-box intersection scan          15,688.74  0.0571  0.3520  0.0637  0.0625  0.1232  0.1537  0.2003  ±0.45%     7845
-   · visible screen area projection scan       1,457.00  0.5712  2.3460  0.6863  0.6775  1.6003  1.7883  2.3460  ±2.05%      729
-   · center weighting for visible candidates   2,007.75  0.4278  1.0679  0.4981  0.5114  0.7255  0.8246  0.9837  ±0.82%     1005
+ ✓ src/bench/spatialIndex.bench.ts > spatial indexing 1847ms
+     name                            hz     min     max    mean     p75     p99    p995    p999     rme  samples
+   · brute-force rect query    7,499.65  0.1213  0.8235  0.1333  0.1303  0.2513  0.3776  0.6473  ±0.86%     3750
+   · grid index build            346.50  1.9710  8.9872  2.8860  2.8835  7.3189  8.9872  8.9872  ±5.23%      174
+   · grid index rect query   240,906.61  0.0037  0.2449  0.0042  0.0040  0.0083  0.0104  0.0351  ±0.44%   120454
 
- ✓ src/bench/culling.bench.ts > culling algorithms 1820ms
+ ✓ src/bench/spatialIndex.bench.ts > spatial indexing 1847ms
+     name                            hz     min     max    mean     p75     p99    p995    p999     rme  samples
+   · brute-force rect query    7,499.65  0.1213  0.8235  0.1333  0.1303  0.2513  0.3776  0.6473  ±0.86%     3750
+   · grid index build            346.50  1.9710  8.9872  2.8860  2.8835  7.3189  8.9872  8.9872  ±5.23%      174
+   · grid index rect query   240,906.61  0.0037  0.2449  0.0042  0.0040  0.0083  0.0104  0.0351  ±0.44%   120454
+
+ ✓ src/bench/viewportMath.bench.ts > viewport math 1832ms
+     name                                                  hz     min     max    mean     p75     p99    p995    p999     rme  samples
+   · applyPanDelta for repeated trackpad pans       56,411.81  0.0132  1.6653  0.0177  0.0158  0.0628  0.0985  0.2206  ±1.25%    28206
+   · applyZoomAtPoint for pointer-centered zooming  82,901.81  0.0102  0.2482  0.0121  0.0117  0.0243  0.0389  0.1228  ±0.52%    41451
+   · getNextZoom clamp path                         17,614.41  0.0489  0.2139  0.0568  0.0569  0.0837  0.1001  0.1471  ±0.27%     8808
+
+ ✓ src/bench/viewportMath.bench.ts > viewport math 1832ms
+     name                                                  hz     min     max    mean     p75     p99    p995    p999     rme  samples
+   · applyPanDelta for repeated trackpad pans       56,411.81  0.0132  1.6653  0.0177  0.0158  0.0628  0.0985  0.2206  ±1.25%    28206
+   · applyZoomAtPoint for pointer-centered zooming  82,901.81  0.0102  0.2482  0.0121  0.0117  0.0243  0.0389  0.1228  ±0.52%    41451
+   · getNextZoom clamp path                         17,614.41  0.0489  0.2139  0.0568  0.0569  0.0837  0.1001  0.1471  ±0.27%     8808
+
+ ✓ src/bench/culling.bench.ts > culling algorithms 1817ms
      name                                            hz     min     max    mean     p75     p99    p995    p999     rme  samples
-   · selection-box intersection scan          15,688.74  0.0571  0.3520  0.0637  0.0625  0.1232  0.1537  0.2003  ±0.45%     7845
-   · visible screen area projection scan       1,457.00  0.5712  2.3460  0.6863  0.6775  1.6003  1.7883  2.3460  ±2.05%      729
-   · center weighting for visible candidates   2,007.75  0.4278  1.0679  0.4981  0.5114  0.7255  0.8246  0.9837  ±0.82%     1005
+   · selection-box intersection scan          17,431.55  0.0528  0.2390  0.0574  0.0576  0.0955  0.1155  0.1660  ±0.34%     8716
+   · visible screen area projection scan       1,609.14  0.5122  4.8972  0.6214  0.6022  1.5042  1.6397  4.8972  ±2.51%      805
+   · center weighting for visible candidates   2,087.10  0.3826  2.1790  0.4791  0.4787  1.0168  1.0496  1.1959  ±1.50%     1044
+
+ ✓ src/bench/culling.bench.ts > culling algorithms 1817ms
+     name                                            hz     min     max    mean     p75     p99    p995    p999     rme  samples
+   · selection-box intersection scan          17,431.55  0.0528  0.2390  0.0574  0.0576  0.0955  0.1155  0.1660  ±0.34%     8716
+   · visible screen area projection scan       1,609.14  0.5122  4.8972  0.6214  0.6022  1.5042  1.6397  4.8972  ±2.51%      805
+   · center weighting for visible candidates   2,087.10  0.3826  2.1790  0.4791  0.4787  1.0168  1.0496  1.1959  ±1.50%     1044
 
  BENCH  Summary
 
   selection-box intersection scan - src/bench/culling.bench.ts > culling algorithms
-    7.81x faster than center weighting for visible candidates
-    10.77x faster than visible screen area projection scan
+    8.35x faster than center weighting for visible candidates
+    10.83x faster than visible screen area projection scan
+
+  native_video_get_profile mocked round-trip - src/bench/ipcLatency.bench.ts > ipc latency (mocked invoke)
+    8.73x faster than probe_images mocked round-trip
+    12.23x faster than native_video_update_manifest mocked round-trip
 
   grid index rect query - src/bench/spatialIndex.bench.ts > spatial indexing
-    20.34x faster than brute-force rect query
-    479.41x faster than grid index build
+    32.12x faster than brute-force rect query
+    695.27x faster than grid index build
 
   applyZoomAtPoint for pointer-centered zooming - src/bench/viewportMath.bench.ts > viewport math
-    1.25x faster than applyPanDelta for repeated trackpad pans
-    4.29x faster than getNextZoom clamp path
+    1.47x faster than applyPanDelta for repeated trackpad pans
+    4.71x faster than getNextZoom clamp path
 
 
  BENCH  Summary
 
   selection-box intersection scan - src/bench/culling.bench.ts > culling algorithms
-    7.81x faster than center weighting for visible candidates
-    10.77x faster than visible screen area projection scan
+    8.35x faster than center weighting for visible candidates
+    10.83x faster than visible screen area projection scan
+
+  native_video_get_profile mocked round-trip - src/bench/ipcLatency.bench.ts > ipc latency (mocked invoke)
+    8.73x faster than probe_images mocked round-trip
+    12.23x faster than native_video_update_manifest mocked round-trip
 
   grid index rect query - src/bench/spatialIndex.bench.ts > spatial indexing
-    20.34x faster than brute-force rect query
-    479.41x faster than grid index build
+    32.12x faster than brute-force rect query
+    695.27x faster than grid index build
 
   applyZoomAtPoint for pointer-centered zooming - src/bench/viewportMath.bench.ts > viewport math
-    1.25x faster than applyPanDelta for repeated trackpad pans
-    4.29x faster than getNextZoom clamp path
+    1.47x faster than applyPanDelta for repeated trackpad pans
+    4.71x faster than getNextZoom clamp path
 
 Benchmark report written to /Users/david/centrum/work/sigma/benchmarks/vitest-bench-baseline.json
 Benchmark report written to /Users/david/centrum/work/sigma/benchmarks/vitest-bench-baseline.json

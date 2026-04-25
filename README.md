@@ -84,6 +84,11 @@ Refresh the committed benchmark baseline after an intentional performance change
 pnpm bench:update
 ```
 
+Run the Rust-side IPC dispatch benchmark with Tauri's test harness and Criterion:
+```bash
+pnpm bench:ipc:rust
+```
+
 ## Roadmap & Tiers
 This Studio edition provides the core visualization capability. A planned **SIGMA Render Lab** offers advanced features for power users and lab applications:
 
