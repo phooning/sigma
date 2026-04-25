@@ -1,19 +1,48 @@
-strategy:
-  fail-fast: false
-  matrix:
-    platform: [macos-latest, ubuntu-22.04, windows-latest]
+name: Release
 
-runs-on: ${{ matrix.platform }}
-steps:
-  - uses: actions/checkout@v4
-  - name: setup node
-    uses: actions/setup-node@v4
-  - name: install Rust
-    uses: dtolnay/rust-toolchain@stable
-  - name: build app
-    uses: tauri-apps/tauri-action@v0
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    with:
-      tagName: app-v__VERSION__ # version is pulled from tauri.conf.json
-      releaseName: "App v__VERSION__"
+on:
+  push:
+    tags:
+      - "app-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest, ubuntu-22.04, windows-latest]
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and publish Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: app-v__VERSION__
+          releaseName: "App v__VERSION__"
