@@ -28,7 +28,9 @@ test('persists the selected canvas background pattern across reloads', async ({
 
   await expect(page.locator('.canvas-background.grid')).toBeVisible();
 
-  await page.reload({ waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.getByText('SIGMA Media Canvas')).toBeVisible();
+  await expect(page.getByText('0 items')).toBeVisible();
 
   await expect(page.locator('.canvas-background.grid')).toBeVisible();
   await openSettings(page);
