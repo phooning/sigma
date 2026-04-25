@@ -1,5 +1,12 @@
-import { clamp, CROP_HANDLES, MIN_MEDIA_SIZE } from "../utils/media";
+import {
+  clamp,
+  CROP_HANDLES,
+  getCropBoxStyle,
+  MIN_MEDIA_SIZE,
+} from "../utils/media";
+import { useEffect } from "react";
 import { CropHandle, CropInsets, MediaItem } from "../utils/media.types";
+import { getImageLod, type ImageLod } from "../utils/videoUtils";
 
 export type TCropStart = {
   x: number;
@@ -143,8 +150,35 @@ export const handleImageCrop = ({
     return { ...item, x, y, width, height, crop };
   });
 
-export const resetImageSize = (e: React.MouseEvent) => {
+const getImagePreviewUrl = (item: MediaItem, lod: ImageLod) => {
+  if (lod === "preview256") {
+    return item.imagePreview256Url ?? item.imagePreview1024Url ?? item.url;
+  }
+
+  if (lod === "preview1024") {
+    return item.imagePreview1024Url ?? item.imagePreview256Url ?? item.url;
+  }
+
+  return item.url;
+};
+
+export const resetImageSize = (
+  e: React.MouseEvent,
+  item?: MediaItem,
+) => {
   e.stopPropagation();
+
+  if (
+    item?.type === "image" &&
+    typeof item.sourceWidth === "number" &&
+    typeof item.sourceHeight === "number"
+  ) {
+    return {
+      intrinsicWidth: item.sourceWidth,
+      intrinsicHeight: item.sourceHeight,
+    };
+  }
+
   const target = e.currentTarget as HTMLElement;
   const mediaEl = target.parentElement?.querySelector("img, video") as
     | HTMLImageElement
@@ -167,35 +201,65 @@ export const resetImageSize = (e: React.MouseEvent) => {
 
 export function ImageActions({
   id,
-  url,
   crop,
   item,
-  editingCropItem,
+  isCropEditing,
+  isDragging,
+  isCropping,
+  isResizing,
+  useNativeImageSurface,
   handleItemPointerDown,
+  requestImagePreview,
+  zoom,
 }: {
   id: string;
-  url: string;
   crop: CropInsets;
   item: MediaItem;
-  editingCropItem: string | null;
+  isCropEditing: boolean;
+  isDragging: boolean;
+  isCropping: boolean;
+  isResizing: boolean;
+  useNativeImageSurface: boolean;
   handleItemPointerDown: (id: string, e: React.PointerEvent) => void;
+  requestImagePreview: (item: MediaItem, maxDimension: 256 | 1024) => void;
+  zoom: number;
 }) {
+  const lod = getImageLod(zoom, item);
+  const displayUrl = getImagePreviewUrl(item, lod);
+  const shouldUseDomImage =
+    !useNativeImageSurface ||
+    isDragging ||
+    isResizing ||
+    isCropping ||
+    isCropEditing;
+
+  useEffect(() => {
+    if (!shouldUseDomImage) return;
+
+    if (lod === "preview256") {
+      requestImagePreview(item, 256);
+    } else if (lod === "preview1024") {
+      requestImagePreview(item, 1024);
+    }
+  }, [item, lod, requestImagePreview, shouldUseDomImage]);
+
   return (
     <>
-      <img
-        className="media-content"
-        src={url}
-        alt="canvas item"
-        draggable={false}
-        onDragStart={(e) => e.preventDefault()}
-        style={{
-          left: -crop.left,
-          top: -crop.top,
-          width: item.width + crop.left + crop.right,
-          height: item.height + crop.top + crop.bottom,
-        }}
-      />
-      {editingCropItem === id && (
+      {!shouldUseDomImage ? null : (
+        <div className="media-crop-box" style={getCropBoxStyle(item, crop)}>
+          <img
+            className={[
+              "media-content",
+              lod === "full" ? "image-lod-full" : "image-lod-preview",
+            ].join(" ")}
+            src={displayUrl}
+            alt="canvas item"
+            draggable={false}
+            onDragStart={(e) => e.preventDefault()}
+          />
+        </div>
+      )}
+      {isCropEditing && (
         <div className="crop-overlay" aria-hidden="true">
           {CROP_HANDLES.map((handle) => (
             <div

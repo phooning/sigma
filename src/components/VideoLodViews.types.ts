@@ -1,14 +1,14 @@
 import type { CSSProperties } from "react";
 
-export type VideoLodMediaStyle = CSSProperties;
+export type VideoCropBoxStyle = CSSProperties;
 
 export type VideoLoadProxyProps = {
-  mediaStyle: VideoLodMediaStyle;
+  cropBoxStyle: VideoCropBoxStyle;
   onLoadRequested: () => void;
   thumbnailUrl?: string;
 };
 
 export type VideoThumbnailProps = {
-  mediaStyle: VideoLodMediaStyle;
+  cropBoxStyle: VideoCropBoxStyle;
   thumbnailUrl: string;
 };

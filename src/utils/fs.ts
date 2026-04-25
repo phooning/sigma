@@ -205,6 +205,12 @@ const serializeItemForStorage = (
     : {}),
   ...(item.deferVideoLoad ? { deferVideoLoad: item.deferVideoLoad } : {}),
   ...(item.thumbnailPath ? { thumbnailPath: item.thumbnailPath } : {}),
+  ...(item.imagePreview256Path
+    ? { imagePreview256Path: item.imagePreview256Path }
+    : {}),
+  ...(item.imagePreview1024Path
+    ? { imagePreview1024Path: item.imagePreview1024Path }
+    : {}),
   ...(item.crop ? { crop: item.crop } : {}),
 });
 

@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
   dropFiles,
   getCanvasContainer,
+  getDropListenerRegistrationCount,
   getMediaItem,
   getMediaVideo,
   getMediaVideos,
@@ -115,6 +116,104 @@ describe('InfiniteCanvas media loading', () => {
     });
     expect(getMediaVideo()).toHaveAttribute('src', `asset://${heavyVideoPath}`);
     expect(HTMLMediaElement.prototype.play).toHaveBeenCalled();
+  });
+
+  it('drops images through native probe batches instead of browser Image probes', async () => {
+    renderCanvas();
+    await dropFiles(['/path/to/test.png', '/path/to/portrait.webp']);
+
+    await waitFor(() => {
+      expect(document.querySelector('.item-count')?.textContent).toContain('2 items');
+      expect(screen.getByAltText('canvas item')).toBeInTheDocument();
+    });
+
+    expect(invoke).toHaveBeenCalledWith('probe_images', {
+      paths: ['/path/to/test.png', '/path/to/portrait.webp']
+    });
+    expect(invoke).not.toHaveBeenCalledWith('probe_media', {
+      path: '/path/to/test.png'
+    });
+    expect(invoke).not.toHaveBeenCalledWith('probe_media', {
+      path: '/path/to/portrait.webp'
+    });
+  });
+
+  it('keeps a single native drop listener across rerenders', async () => {
+    renderCanvas();
+
+    await act(async () => {
+      setViewportSize({ width: 1400, height: 900 });
+      window.dispatchEvent(new Event('resize'));
+      setViewportSize({ width: 1600, height: 1000 });
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    expect(getDropListenerRegistrationCount()).toBe(1);
+  });
+
+  it('splits large image drops into bounded native probe batches', async () => {
+    const imagePaths = Array.from({ length: 9 }, (_, index) => `/path/to/gallery-${index}.png`);
+
+    renderCanvas();
+    await dropFiles(imagePaths);
+
+    await waitFor(() => {
+      expect(document.querySelector('.item-count')?.textContent).toContain('9 items');
+    });
+
+    const probeImageCalls = vi
+      .mocked(invoke)
+      .mock.calls.filter(([command]) => command === 'probe_images');
+
+    expect(probeImageCalls).toHaveLength(2);
+    expect(probeImageCalls[0][1]).toEqual({
+      paths: imagePaths.slice(0, 8)
+    });
+    expect(probeImageCalls[1][1]).toEqual({
+      paths: imagePaths.slice(8)
+    });
+  });
+
+  it('renders images from the full asset at default canvas scale', async () => {
+    renderCanvas();
+    await dropFiles(['/path/to/test.png']);
+
+    expect(invoke).not.toHaveBeenCalledWith('generate_image_preview', {
+      path: '/path/to/test.png',
+      maxDimension: 1024
+    });
+
+    await waitFor(() => {
+      expect(screen.getByAltText('canvas item')).toHaveAttribute(
+        'src',
+        'asset:///path/to/test.png'
+      );
+    });
+  });
+
+  it('requests a 256 preview when an image shrinks into the small-preview LOD', async () => {
+    renderCanvas();
+    await dropFiles(['/path/to/test.png']);
+    await screen.findByAltText('canvas item');
+
+    const container = getCanvasContainer();
+    mockCanvasRect(container);
+
+    await act(async () => {
+      fireEvent.wheel(container, {
+        ctrlKey: true,
+        deltaY: 900,
+        clientX: 10,
+        clientY: 10
+      });
+    });
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('generate_image_preview', {
+        path: '/path/to/test.png',
+        maxDimension: 256
+      });
+    });
   });
 });
 
@@ -285,6 +384,7 @@ describe('InfiniteCanvas media item interactions', () => {
   it('crops an image in place from side and corner handles', async () => {
     const mediaItem = getMediaItem();
     const image = screen.getByAltText('canvas item') as HTMLImageElement;
+    const cropBox = image.parentElement as HTMLDivElement;
     const cropBtn = document.querySelector('.crop-btn') as HTMLElement;
 
     expect(cropBtn).toBeInTheDocument();
@@ -321,8 +421,8 @@ describe('InfiniteCanvas media item interactions', () => {
 
     expect(mediaItem.style.left).toBe(`${startLeft + 120}px`);
     expect(mediaItem.style.width).toBe('1160px');
-    expect(image.style.left).toBe('-120px');
-    expect(image.style.width).toBe('1280px');
+    expect(cropBox.style.left).toBe('-120px');
+    expect(cropBox.style.width).toBe('1280px');
 
     const northWestHandle = document.querySelector('.crop-handle-nw') as HTMLElement;
 
@@ -350,7 +450,94 @@ describe('InfiniteCanvas media item interactions', () => {
     expect(mediaItem.style.top).toBe(`${startTop + 80}px`);
     expect(mediaItem.style.width).toBe('1210px');
     expect(mediaItem.style.height).toBe('880px');
-    expect(image.style.left).toBe('-70px');
-    expect(image.style.top).toBe('-80px');
+    expect(cropBox.style.left).toBe('-70px');
+    expect(cropBox.style.top).toBe('-80px');
+  });
+
+  it('keeps the crop box stable while cropping a resized frame', async () => {
+    const mediaItem = getMediaItem();
+    const image = screen.getByAltText('canvas item') as HTMLImageElement;
+    const cropBox = image.parentElement as HTMLDivElement;
+    const resizeHandle = document.querySelector('.resize-handle') as HTMLElement;
+
+    await act(async () => {
+      fireEvent.pointerDown(resizeHandle, {
+        clientX: 0,
+        clientY: 0,
+        pointerId: 13,
+        button: 0
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerMove(mediaItem, {
+        clientX: 100,
+        clientY: 200,
+        pointerId: 13,
+        button: 0
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerUp(mediaItem, { pointerId: 13, button: 0 });
+    });
+
+    const cropBtn = document.querySelector('.crop-btn') as HTMLElement;
+    await act(async () => {
+      fireEvent.click(cropBtn);
+    });
+
+    expect(cropBox.style.left).toBe('0px');
+    expect(cropBox.style.width).toBe('1380px');
+
+    const eastHandle = document.querySelector('.crop-handle-e') as HTMLElement;
+    await act(async () => {
+      fireEvent.pointerDown(eastHandle, {
+        clientX: 0,
+        clientY: 0,
+        pointerId: 14,
+        button: 0
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerMove(mediaItem, {
+        clientX: -120,
+        clientY: 0,
+        pointerId: 14,
+        button: 0
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerUp(mediaItem, { pointerId: 14, button: 0 });
+    });
+
+    expect(mediaItem.style.width).toBe('1260px');
+    expect(cropBox.style.left).toBe('0px');
+    expect(cropBox.style.width).toBe('1380px');
+
+    const startLeft = parseFloat(mediaItem.style.left);
+    const westHandle = document.querySelector('.crop-handle-w') as HTMLElement;
+    await act(async () => {
+      fireEvent.pointerDown(westHandle, {
+        clientX: 0,
+        clientY: 0,
+        pointerId: 15,
+        button: 0
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerMove(mediaItem, {
+        clientX: 120,
+        clientY: 0,
+        pointerId: 15,
+        button: 0
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerUp(mediaItem, { pointerId: 15, button: 0 });
+    });
+
+    expect(mediaItem.style.left).toBe(`${startLeft + 120}px`);
+    expect(mediaItem.style.width).toBe('1140px');
+    expect(cropBox.style.left).toBe('-120px');
+    expect(cropBox.style.width).toBe('1380px');
   });
 });
