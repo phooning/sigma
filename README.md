@@ -1,10 +1,10 @@
-# SIGMA Media Canvas
+# SIGMA Studio
 
-**SIGMA Media Canvas** is a high-performance, local-first infinite canvas designed for organizing, visualizing, and cutting up media assets. 
+**SIGMA Studio** is a high-performance, local-first infinite canvas designed for organizing, visualizing, and cutting up media assets. 
 
 <img alt="Image" src="https://github.com/user-attachments/assets/443eaeea-3534-4c63-94c9-78b86dd00630" />
 
-Built with Tauri, Rust, and React with the help of multi-agents, it offers a lightweight OS-native alternative to heavy electron-based media tools, specifically optimized for creative workflows and high performance viewing.
+I built this with Tauri on Rust and React with the help of multi-agent reviews. It offers a lightweight OS-native alternative to heavy electron-based media tools, specifically optimized for creative workflows and high performance viewing.
 
 <div align="center">
   <video src="https://github.com/user-attachments/assets/1b56a101-d80d-46a1-a4df-2c7f6ced73f8" 
@@ -17,7 +17,7 @@ Built with Tauri, Rust, and React with the help of multi-agents, it offers a lig
   </video>
 </div>
 
-> *Film edit planning, ML/dataset triage, moodboarding with massive clips, evidence intel boards: just throw a bunch of media down and think about it spatially.*
+> *Film edit planning, ML/dataset triage, moodboarding with massive clips, evidence intel boards: just drop a bunch of media down and think about it spatially.*
 
 ## Key Features
 
@@ -75,12 +75,13 @@ pnpm test
 ```
 
 ## Roadmap & Tiers
-This Community Edition provides the core visualization engine. A planned **SIGMA Pro** offers advanced features for power users and lab applications:
+This Studio edition provides the core visualization capability. A planned **SIGMA Render Lab** offers advanced features for power users and lab applications:
 
-| Feature | Community | Pro |
+| Feature | Studio | Render Lab |
 | :--- | :--- | :--- |
 | **Canvas** | Single Infinite Canvas | Multiple/Project-based Workspaces |
-| **Exports** | 1080p H.264 | 4K+, ProRes, Hardware Accelerated |
+| **Engine** | Natively WebView through Tauri | `wgpu` accelerated, direct render pipeline |
+| **Exports** | 1080p H.264 | 4K+, ProRes, Wide Gamut, Live Asset Streaming |
 | **Automation** | ComfyUI Browser & Execution (WIP) | Cloud Compute & Folder Watching |
 | **Asset Support** | Standard (JPG/MP4) | RAW, 3D (OBJ/STL), EXR |
 
