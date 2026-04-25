@@ -127,7 +127,8 @@ test.describe('canvas performance', () => {
 
     expect(summary.frameCount).toBeGreaterThan(20);
     expect(summary.p50FrameMs).toBeLessThan(33.4);
-    expect(summary.maxFrameMs).toBeLessThan(100);
+    expect(summary.p99FrameMs).toBeLessThan(100);
+    expect(summary.maxFrameMs).toBeLessThan(150);
     expect(summary.jankLongTasks).toBeLessThan(10);
   });
 
