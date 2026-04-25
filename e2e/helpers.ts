@@ -1,6 +1,6 @@
-import { expect, type Locator, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from "@playwright/test";
 
-export type CanvasSeedKind = 'image' | 'deferredVideo';
+export type CanvasSeedKind = "image" | "deferredVideo";
 
 export type FrameSamplerResult = {
   frameDeltas: number[];
@@ -89,7 +89,9 @@ export async function installTauriMocks(page: Page) {
 
       const waitForAnimationFrames = async (count = 1) => {
         for (let index = 0; index < count; index += 1) {
-          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          await new Promise<void>((resolve) =>
+            requestAnimationFrame(() => resolve()),
+          );
         }
       };
 
@@ -109,20 +111,20 @@ export async function installTauriMocks(page: Page) {
       };
 
       const getExtension = (path: string) =>
-        path.split('.').pop()?.toLowerCase() ?? '';
+        path.split(".").pop()?.toLowerCase() ?? "";
 
       const getCallbackId = (handler: unknown) => {
-        if (typeof handler === 'number') return handler;
+        if (typeof handler === "number") return handler;
 
-        if (typeof handler === 'string' && handler.startsWith('__CHANNEL__:')) {
-          return Number(handler.slice('__CHANNEL__:'.length));
+        if (typeof handler === "string" && handler.startsWith("__CHANNEL__:")) {
+          return Number(handler.slice("__CHANNEL__:".length));
         }
 
         if (
-          typeof handler === 'object' &&
+          typeof handler === "object" &&
           handler !== null &&
-          'id' in handler &&
-          typeof (handler as { id: unknown }).id === 'number'
+          "id" in handler &&
+          typeof (handler as { id: unknown }).id === "number"
         ) {
           return (handler as { id: number }).id;
         }
@@ -138,8 +140,8 @@ export async function installTauriMocks(page: Page) {
 
       tauriWindow.__TAURI_INTERNALS__ = {
         metadata: {
-          currentWindow: { label: 'main' },
-          currentWebview: { label: 'main' },
+          currentWindow: { label: "main" },
+          currentWebview: { label: "main" },
         },
         transformCallback: (callback: Callback) => {
           const callbackId = nextCallbackId++;
@@ -151,11 +153,11 @@ export async function installTauriMocks(page: Page) {
         },
         convertFileSrc: (filePath: string) => {
           const extension = getExtension(filePath);
-          if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(extension)) {
+          if (["png", "jpg", "jpeg", "gif", "webp"].includes(extension)) {
             return mockImageDataUrl;
           }
 
-          return '';
+          return "";
         },
         invoke: async (
           cmd: string,
@@ -165,7 +167,7 @@ export async function installTauriMocks(page: Page) {
           const objectArgs = args instanceof Uint8Array ? {} : args;
 
           switch (cmd) {
-            case 'plugin:event|listen': {
+            case "plugin:event|listen": {
               const eventId = nextEventId++;
               listeners.set(eventId, {
                 event: String(objectArgs.event),
@@ -174,23 +176,25 @@ export async function installTauriMocks(page: Page) {
               return eventId;
             }
 
-            case 'plugin:event|unlisten': {
+            case "plugin:event|unlisten": {
               listeners.delete(Number(objectArgs.eventId));
               return null;
             }
 
-            case 'plugin:event|emit':
-            case 'plugin:event|emit_to':
+            case "plugin:event|emit":
+            case "plugin:event|emit_to":
               return null;
 
-            case 'plugin:dialog|open':
+            case "plugin:dialog|open":
               return openDialogResult;
 
-            case 'plugin:dialog|save':
+            case "plugin:dialog|save":
               return saveDialogResult;
 
-            case 'plugin:fs|write_text_file': {
-              const path = decodeURIComponent(String(options?.headers?.path ?? ''));
+            case "plugin:fs|write_text_file": {
+              const path = decodeURIComponent(
+                String(options?.headers?.path ?? ""),
+              );
               const bytes =
                 args instanceof Uint8Array
                   ? args
@@ -202,54 +206,54 @@ export async function installTauriMocks(page: Page) {
               return null;
             }
 
-            case 'plugin:fs|read_text_file': {
-              const path = String(objectArgs.path ?? '');
-              const contents = mockFiles.get(path) ?? '';
+            case "plugin:fs|read_text_file": {
+              const path = String(objectArgs.path ?? "");
+              const contents = mockFiles.get(path) ?? "";
               return Array.from(textEncoder.encode(contents));
             }
 
-            case 'plugin:fs|read':
+            case "plugin:fs|read":
               return null;
 
-            case 'plugin:opener|reveal_item_in_dir':
+            case "plugin:opener|reveal_item_in_dir":
               return null;
 
-            case 'plugin:shell|execute': {
-              if (objectArgs.program === 'gpu-info') {
+            case "plugin:shell|execute": {
+              if (objectArgs.program === "gpu-info") {
                 return {
                   code: 0,
                   signal: null,
                   stdout: JSON.stringify({
                     SPDisplaysDataType: [
                       {
-                        sppci_model: 'Playwright Test GPU',
-                        spdisplays_vram: '8 GB',
+                        sppci_model: "Playwright Test GPU",
+                        spdisplays_vram: "8 GB",
                       },
                     ],
                   }),
-                  stderr: '',
+                  stderr: "",
                 };
               }
 
-              if (objectArgs.program === 'gpu-usage') {
+              if (objectArgs.program === "gpu-usage") {
                 return {
                   code: 0,
                   signal: null,
                   stdout: '"GPU Utilization" = 37\n"VRAM Used" = 104857600\n',
-                  stderr: '',
+                  stderr: "",
                 };
               }
 
               return {
                 code: 0,
                 signal: null,
-                stdout: '',
-                stderr: '',
+                stdout: "",
+                stderr: "",
               };
             }
 
-            case 'probe_media': {
-              const path = String(objectArgs.path ?? '');
+            case "probe_media": {
+              const path = String(objectArgs.path ?? "");
               const isVideo = /\.(mp4|webm|mov|mkv)$/i.test(path);
 
               return isVideo
@@ -262,14 +266,16 @@ export async function installTauriMocks(page: Page) {
                 : {};
             }
 
-            case 'generate_video_thumbnail':
-              return '/tmp/playwright-thumbnail.png';
+            case "generate_video_thumbnail":
+              return "/tmp/playwright-thumbnail.png";
 
-            case 'save_media_screenshot':
-              return '/tmp/playwright-screenshot.png';
+            case "save_media_screenshot":
+              return "/tmp/playwright-screenshot.png";
 
-            case 'export_video':
-              return String(objectArgs.outputPath ?? '/tmp/playwright-export.mp4');
+            case "export_video":
+              return String(
+                objectArgs.outputPath ?? "/tmp/playwright-export.mp4",
+              );
 
             default:
               return null;
@@ -279,7 +285,7 @@ export async function installTauriMocks(page: Page) {
 
       tauriWindow.__SIGMA_E2E__ = {
         dropFiles: async (paths: string[]) => {
-          await dispatchTauriEvent('tauri://drag-drop', {
+          await dispatchTauriEvent("tauri://drag-drop", {
             paths,
             position: {
               x: Math.round(window.innerWidth / 2),
@@ -313,16 +319,16 @@ export async function installTauriMocks(page: Page) {
           };
 
           if (
-            'PerformanceObserver' in window &&
+            "PerformanceObserver" in window &&
             Array.isArray(PerformanceObserver.supportedEntryTypes) &&
-            PerformanceObserver.supportedEntryTypes.includes('longtask')
+            PerformanceObserver.supportedEntryTypes.includes("longtask")
           ) {
             state.observer = new PerformanceObserver((list) => {
               for (const entry of list.getEntries()) {
                 state.longTasks.push(entry.duration);
               }
             });
-            state.observer.observe({ type: 'longtask', buffered: true });
+            state.observer.observe({ type: "longtask", buffered: true });
           }
 
           const sampleFrame = (timestamp: number) => {
@@ -364,9 +370,9 @@ export async function installTauriMocks(page: Page) {
 
 export async function gotoApp(page: Page) {
   await installTauriMocks(page);
-  await page.goto('/', { waitUntil: 'networkidle' });
-  await expect(page.getByText('SIGMA Media Canvas')).toBeVisible();
-  await expect(page.getByText('0 items')).toBeVisible();
+  await page.goto("/");
+  await expect(page.getByText("SIGMA Media Canvas")).toBeVisible();
+  await expect(page.getByText("0 items")).toBeVisible();
 }
 
 export async function dropFiles(page: Page, paths: string[]) {
@@ -396,11 +402,7 @@ export async function setSaveDialogResult(page: Page, value: string | null) {
   }, value);
 }
 
-export async function setMockFileText(
-  page: Page,
-  path: string,
-  text: string,
-) {
+export async function setMockFileText(page: Page, path: string, text: string) {
   await page.evaluate(
     ({ filePath, fileText }) => {
       const handle = (
@@ -437,12 +439,12 @@ export async function stopFrameSampler(page: Page) {
 }
 
 export async function openSettings(page: Page) {
-  await page.getByRole('button', { name: /open settings/i }).click();
-  await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible();
+  await page.getByRole("button", { name: /open settings/i }).click();
+  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
 }
 
 const TOOLBAR_LOAD_BUTTON_NAME = /^Load$/;
-const DEFAULT_CONFIG_PATH = '/tmp/playwright-canvas.json';
+const DEFAULT_CONFIG_PATH = "/tmp/playwright-canvas.json";
 
 const buildSeedItem = (index: number, kind: CanvasSeedKind) => {
   const width = 320;
@@ -452,10 +454,10 @@ const buildSeedItem = (index: number, kind: CanvasSeedKind) => {
   const x = (index % columns) * (width + gap);
   const y = Math.floor(index / columns) * (height + gap);
 
-  if (kind === 'deferredVideo') {
+  if (kind === "deferredVideo") {
     return {
       id: `seed-video-${index}`,
-      type: 'video',
+      type: "video",
       filePath: `/tmp/e2e/seed-video-${index}.mp4`,
       thumbnailPath: `/tmp/e2e/seed-video-${index}.png`,
       fileSize: 150 * 1024 * 1024,
@@ -472,7 +474,7 @@ const buildSeedItem = (index: number, kind: CanvasSeedKind) => {
 
   return {
     id: `seed-image-${index}`,
-    type: 'image',
+    type: "image",
     filePath: `/tmp/e2e/seed-image-${index}.png`,
     sourceWidth: 1920,
     sourceHeight: 1080,
@@ -485,14 +487,17 @@ const buildSeedItem = (index: number, kind: CanvasSeedKind) => {
 
 export async function loadCanvasConfig(
   page: Page,
-  config: { items: unknown[]; viewport: { x: number; y: number; zoom: number } },
+  config: {
+    items: unknown[];
+    viewport: { x: number; y: number; zoom: number };
+  },
   path = DEFAULT_CONFIG_PATH,
 ) {
   await setMockFileText(page, path, JSON.stringify(config));
   await setOpenDialogResult(page, path);
 
   const loadStartedAt = await page.evaluate(() => performance.now());
-  await page.getByRole('button', { name: TOOLBAR_LOAD_BUTTON_NAME }).click();
+  await page.getByRole("button", { name: TOOLBAR_LOAD_BUTTON_NAME }).click();
   await expect(page.getByText(`${config.items.length} items`)).toBeVisible();
   await waitForAnimationFrames(page, 2);
   const loadCompletedAt = await page.evaluate(() => performance.now());
@@ -505,7 +510,7 @@ export async function loadCanvasConfig(
 export async function seedCanvasItems(
   page: Page,
   count: number,
-  kind: CanvasSeedKind = 'image',
+  kind: CanvasSeedKind = "image",
 ) {
   const items = Array.from({ length: count }, (_, index) =>
     buildSeedItem(index, kind),
@@ -524,17 +529,19 @@ export async function seedCanvasItems(
   };
 }
 
-const selectAllShortcut = process.platform === 'darwin' ? 'Meta+A' : 'Control+A';
+const selectAllShortcut =
+  process.platform === "darwin" ? "Meta+A" : "Control+A";
 
 export async function deleteAllItems(page: Page) {
-  const itemCountText = (await page.locator('.item-count').textContent()) ?? '';
-  if (itemCountText.trim() === '0 items') return;
+  const itemCountText = (await page.locator(".item-count").textContent()) ?? "";
+  if (itemCountText.trim() === "0 items") return;
 
   await page.keyboard.press(selectAllShortcut);
-  await page.keyboard.press('Delete');
-  await expect(page.getByText('0 items')).toBeVisible();
+  await page.keyboard.press("Delete");
+  await expect(page.getByText("0 items")).toBeVisible();
   await waitForAnimationFrames(page, 2);
 }
 
-export const mediaItems = (page: Page): Locator => page.locator('.media-item');
-export const canvasWorld = (page: Page): Locator => page.locator('.canvas-world');
+export const mediaItems = (page: Page): Locator => page.locator(".media-item");
+export const canvasWorld = (page: Page): Locator =>
+  page.locator(".canvas-world");
