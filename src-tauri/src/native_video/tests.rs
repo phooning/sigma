@@ -1,4 +1,9 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
+
+use tauri::ipc::{Channel, InvokeResponseBody};
 
 use super::{
     constants::{FRAME_PACKET_HEADER_LEN, FRAME_PACKET_MAGIC, PIXEL_FORMAT_YUV420},
@@ -7,6 +12,7 @@ use super::{
     profile::PerformanceProfile,
     telemetry::TelemetrySnapshot,
     types::{CanvasManifest, StreamState, VisibleAsset},
+    worker::FramePool,
 };
 
 fn profile_with_budget(budget: u64, validated: bool) -> PerformanceProfile {
@@ -108,4 +114,66 @@ fn packet_header_is_little_endian_and_binary() {
         packet.len(),
         FRAME_PACKET_HEADER_LEN + yuv420_payload_len(128, 72)
     );
+}
+
+#[tokio::test]
+async fn frame_pool_recycles_buffer_after_successful_ipc_dispatch() {
+    let pool = FramePool::new(0, 16);
+    let mut first_packet = pool.try_borrow().expect("first pooled packet");
+    let second_packet = pool.try_borrow().expect("second pooled packet");
+    assert!(pool.try_borrow().is_none());
+    assert_eq!(pool.exhaustion_count(), 1);
+
+    let bytes = first_packet
+        .bytes_mut()
+        .expect("unique pooled packet bytes");
+    bytes[..5].copy_from_slice(b"frame");
+    first_packet.set_len(5);
+
+    let captured_frame = Arc::new(Mutex::new(None));
+    let captured_frame_for_channel = captured_frame.clone();
+    let on_frame = Channel::<InvokeResponseBody>::new(move |body| {
+        if let InvokeResponseBody::Raw(bytes) = body {
+            *captured_frame_for_channel.lock().unwrap() = Some(bytes);
+        }
+        Ok(())
+    });
+
+    assert!(pool.dispatch(first_packet, &on_frame).await);
+    assert_eq!(
+        captured_frame.lock().unwrap().as_deref(),
+        Some(&b"frame"[..])
+    );
+    assert!(pool.try_borrow().is_some());
+    assert_eq!(pool.exhaustion_count(), 1);
+
+    drop(second_packet);
+}
+
+#[tokio::test]
+async fn frame_pool_dispatch_continues_past_98_frames_without_exhaustion() {
+    let pool = FramePool::new(0, 16);
+    let received_frames = Arc::new(Mutex::new(0_u64));
+    let received_frames_for_channel = received_frames.clone();
+    let on_frame = Channel::<InvokeResponseBody>::new(move |body| {
+        if matches!(body, InvokeResponseBody::Raw(_)) {
+            let mut count = received_frames_for_channel.lock().unwrap();
+            *count = count.saturating_add(1);
+        }
+        Ok(())
+    });
+
+    for sequence in 0..120_u8 {
+        let mut packet = pool
+            .try_borrow()
+            .unwrap_or_else(|| panic!("pooled packet for frame {sequence}"));
+        let bytes = packet.bytes_mut().expect("unique pooled packet bytes");
+        bytes[0] = sequence;
+        packet.set_len(1);
+
+        assert!(pool.dispatch(packet, &on_frame).await);
+    }
+
+    assert_eq!(*received_frames.lock().unwrap(), 120);
+    assert_eq!(pool.exhaustion_count(), 0);
 }

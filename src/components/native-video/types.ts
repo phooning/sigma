@@ -22,6 +22,15 @@ export type NativeVisibleAsset = {
   targetFps: number;
 };
 
+export type NativeVideoGeometryBounds = Pick<
+  NativeVisibleAsset,
+  | "screenX"
+  | "screenY"
+  | "renderedWidthPx"
+  | "renderedHeightPx"
+  | "visibleAreaPx"
+>;
+
 export type NativeVideoProfile = {
   baseCaseValidated: boolean;
   safeBudgetBytesPerSec: number;

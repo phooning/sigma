@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { MediaItem, Viewport } from "../../utils/media.types";
-import type { NativeVideoManifest } from "./types";
+import type { NativeVideoGeometryBounds, NativeVideoManifest } from "./types";
 
 const TARGET_PRESENTATION_FPS = 60;
 
@@ -14,6 +14,43 @@ type UseNativeVideoManifestOptions = {
   selectedItems: Set<string>;
   activeAudioItemId: string | null;
 };
+
+type CanvasSize = {
+  width: number;
+  height: number;
+};
+
+export function computeNativeVideoBounds(
+  item: MediaItem,
+  viewport: Viewport,
+  canvasSize: CanvasSize,
+): NativeVideoGeometryBounds | null {
+  if (item.type !== "video") return null;
+
+  const canvasWidth = Math.max(1, Math.round(canvasSize.width));
+  const canvasHeight = Math.max(1, Math.round(canvasSize.height));
+  const screenX = (item.x + viewport.x) * viewport.zoom;
+  const screenY = (item.y + viewport.y) * viewport.zoom;
+  const renderedWidthPx = item.width * viewport.zoom;
+  const renderedHeightPx = item.height * viewport.zoom;
+  const visibleLeft = Math.max(0, screenX);
+  const visibleTop = Math.max(0, screenY);
+  const visibleRight = Math.min(canvasWidth, screenX + renderedWidthPx);
+  const visibleBottom = Math.min(canvasHeight, screenY + renderedHeightPx);
+  const visibleWidth = Math.max(0, visibleRight - visibleLeft);
+  const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+  const visibleAreaPx = visibleWidth * visibleHeight;
+
+  if (visibleAreaPx <= 0) return null;
+
+  return {
+    screenX,
+    screenY,
+    renderedWidthPx,
+    renderedHeightPx,
+    visibleAreaPx,
+  };
+}
 
 export function useNativeVideoManifest({
   items,
@@ -34,24 +71,11 @@ export function useNativeVideoManifest({
       canvasHeight,
       viewportZoom: viewport.zoom,
       assets: items.flatMap((item) => {
-        if (item.type !== "video") return [];
+        const bounds = computeNativeVideoBounds(item, viewport, canvasSize);
+        if (!bounds) return [];
 
-        const screenX = (item.x + viewport.x) * viewport.zoom;
-        const screenY = (item.y + viewport.y) * viewport.zoom;
-        const renderedWidthPx = item.width * viewport.zoom;
-        const renderedHeightPx = item.height * viewport.zoom;
-        const visibleLeft = Math.max(0, screenX);
-        const visibleTop = Math.max(0, screenY);
-        const visibleRight = Math.min(canvasWidth, screenX + renderedWidthPx);
-        const visibleBottom = Math.min(canvasHeight, screenY + renderedHeightPx);
-        const visibleWidth = Math.max(0, visibleRight - visibleLeft);
-        const visibleHeight = Math.max(0, visibleBottom - visibleTop);
-        const visibleAreaPx = visibleWidth * visibleHeight;
-
-        if (visibleAreaPx <= 0) return [];
-
-        const itemCenterX = screenX + renderedWidthPx / 2;
-        const itemCenterY = screenY + renderedHeightPx / 2;
+        const itemCenterX = bounds.screenX + bounds.renderedWidthPx / 2;
+        const itemCenterY = bounds.screenY + bounds.renderedHeightPx / 2;
         const centerDistance = Math.hypot(
           itemCenterX - canvasCenterX,
           itemCenterY - canvasCenterY,
@@ -75,11 +99,7 @@ export function useNativeVideoManifest({
               1,
               Math.round(item.sourceHeight ?? item.height),
             ),
-            screenX,
-            screenY,
-            renderedWidthPx,
-            renderedHeightPx,
-            visibleAreaPx,
+            ...bounds,
             focusWeight,
             centerWeight,
             targetFps: TARGET_PRESENTATION_FPS,

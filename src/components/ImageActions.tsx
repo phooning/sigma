@@ -21,6 +21,9 @@ export type TResizeStart = Map<
   { width: number; height: number; crop: CropInsets }
 >;
 
+const IMAGE_PLACEHOLDER_URL =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%231f2937'/%3E%3C/svg%3E";
+
 export const handleImageResize = ({
   dx,
   dy,
@@ -151,12 +154,15 @@ export const handleImageCrop = ({
   });
 
 const getImagePreviewUrl = (item: MediaItem, lod: ImageLod) => {
+  const fallbackUrl =
+    item.thumbnailUrl ?? item.lowResProxyUrl ?? IMAGE_PLACEHOLDER_URL;
+
   if (lod === "preview256") {
-    return item.imagePreview256Url ?? item.imagePreview1024Url ?? item.url;
+    return item.imagePreview256Url ?? item.imagePreview1024Url ?? fallbackUrl;
   }
 
   if (lod === "preview1024") {
-    return item.imagePreview1024Url ?? item.imagePreview256Url ?? item.url;
+    return item.imagePreview1024Url ?? item.imagePreview256Url ?? fallbackUrl;
   }
 
   return item.url;

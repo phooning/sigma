@@ -3,10 +3,13 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useState,
   type RefObject,
 } from "react";
 import type { CanvasBackgroundPattern } from "@/stores/useSettingsStore";
 import type { Viewport } from "@/utils/media.types";
+import { advanceViewportGeneration } from "@/utils/media";
+import { markPerformance } from "@/utils/performance";
 import { useCanvasSessionStore } from "@/stores/useCanvasSessionStore";
 import { drawCanvasBackground } from "./CanvasBackground";
 import { useBackgroundCanvas } from "./useBackgroundCanvas";
@@ -25,10 +28,15 @@ export const useCanvasViewport = ({
   canvasSize,
   canvasBackgroundPattern,
 }: UseCanvasViewportParams) => {
-  const viewport = useCanvasSessionStore((state) => state.viewport);
+  const persistedViewport = useCanvasSessionStore((state) => state.viewport);
   const setViewport = useCanvasSessionStore((state) => state.setViewport);
+  const [viewport, setRenderViewport] = useState(persistedViewport);
+  const hotViewportRef = useRef(persistedViewport);
+  const lastStoredViewportRef = useRef(persistedViewport);
   const pendingViewportRef = useRef<Viewport | null>(null);
   const viewportFrameRef = useRef<number | null>(null);
+  const viewportPersistenceTimeoutRef = useRef<number | null>(null);
+  const didApplyInitialViewportRef = useRef(false);
   const canvasSizeRef = useRef(canvasSize);
   const canvasBackgroundPatternRef = useRef(canvasBackgroundPattern);
 
@@ -57,67 +65,129 @@ export const useCanvasViewport = ({
     [redrawBackgroundCanvas, worldRef],
   );
 
+  const clearViewportPersistenceTimeout = useCallback(() => {
+    if (viewportPersistenceTimeoutRef.current === null) return;
+
+    window.clearTimeout(viewportPersistenceTimeoutRef.current);
+    viewportPersistenceTimeoutRef.current = null;
+  }, []);
+
+  const flushViewportToStore = useCallback(
+    (nextViewport: Viewport = hotViewportRef.current) => {
+      clearViewportPersistenceTimeout();
+      lastStoredViewportRef.current = nextViewport;
+      setViewport(nextViewport);
+    },
+    [clearViewportPersistenceTimeout, setViewport],
+  );
+
+  const scheduleViewportPersistence = useCallback(() => {
+    clearViewportPersistenceTimeout();
+
+    viewportPersistenceTimeoutRef.current = window.setTimeout(() => {
+      viewportPersistenceTimeoutRef.current = null;
+      flushViewportToStore();
+    }, 180);
+  }, [clearViewportPersistenceTimeout, flushViewportToStore]);
+
+  const getViewport = useCallback(() => hotViewportRef.current, []);
+
   const commitViewport = useCallback(
     (
       nextViewport: Viewport,
       options: { flushDomNow?: boolean; syncReact?: boolean } = {},
     ) => {
-      setViewport(nextViewport);
+      markPerformance("sigma:commitViewport:start");
+      advanceViewportGeneration();
       pendingViewportRef.current = nextViewport;
+      hotViewportRef.current = nextViewport;
 
-      if (options.flushDomNow) {
-        if (viewportFrameRef.current !== null) {
-          window.cancelAnimationFrame(viewportFrameRef.current);
-          viewportFrameRef.current = null;
+      try {
+        if (options.flushDomNow) {
+          if (viewportFrameRef.current !== null) {
+            window.cancelAnimationFrame(viewportFrameRef.current);
+            viewportFrameRef.current = null;
+          }
+
+          applyViewportToDom(nextViewport);
+          setRenderViewport(nextViewport);
+
+          if (options.syncReact) {
+            flushViewportToStore(nextViewport);
+          } else {
+            scheduleViewportPersistence();
+          }
+
+          return;
         }
 
-        applyViewportToDom(nextViewport);
-        return;
+        if (options.syncReact) {
+          flushViewportToStore(nextViewport);
+        } else {
+          scheduleViewportPersistence();
+        }
+
+        if (viewportFrameRef.current !== null) {
+          return;
+        }
+
+        viewportFrameRef.current = window.requestAnimationFrame(() => {
+          viewportFrameRef.current = null;
+
+          const pendingViewport = pendingViewportRef.current;
+          if (!pendingViewport) return;
+
+          applyViewportToDom(pendingViewport);
+          setRenderViewport(pendingViewport);
+        });
+      } finally {
+        markPerformance("sigma:commitViewport:end");
       }
-
-      if (viewportFrameRef.current !== null) {
-        return;
-      }
-
-      viewportFrameRef.current = window.requestAnimationFrame(() => {
-        viewportFrameRef.current = null;
-
-        const pendingViewport = pendingViewportRef.current;
-        if (!pendingViewport) return;
-
-        applyViewportToDom(pendingViewport);
-      });
     },
-    [applyViewportToDom, setViewport],
+    [applyViewportToDom, flushViewportToStore, scheduleViewportPersistence],
   );
 
   const { cancelViewportAnimation, panViewportTo } = useViewportAnimation({
     commitViewport,
-    getViewport: () => useCanvasSessionStore.getState().viewport,
+    getViewport,
   });
 
   useBackgroundCanvas(
     backgroundCanvasRef,
     canvasSize,
     canvasBackgroundPattern,
-    viewport,
+    getViewport,
   );
 
   useLayoutEffect(() => {
-    applyViewportToDom(viewport);
-  }, [applyViewportToDom, viewport]);
+    const isLocalStoreFlush = persistedViewport === lastStoredViewportRef.current;
+
+    if (didApplyInitialViewportRef.current && isLocalStoreFlush) return;
+
+    didApplyInitialViewportRef.current = true;
+    hotViewportRef.current = persistedViewport;
+    pendingViewportRef.current = persistedViewport;
+    setRenderViewport(persistedViewport);
+    applyViewportToDom(persistedViewport);
+  }, [applyViewportToDom, persistedViewport]);
 
   useEffect(
     () => () => {
       if (viewportFrameRef.current !== null) {
         window.cancelAnimationFrame(viewportFrameRef.current);
       }
+
+      if (viewportPersistenceTimeoutRef.current !== null) {
+        window.clearTimeout(viewportPersistenceTimeoutRef.current);
+        flushViewportToStore();
+      }
     },
-    [],
+    [flushViewportToStore],
   );
 
   return {
     viewport,
+    getViewport,
     commitViewport,
     cancelViewportAnimation,
     panViewportTo,

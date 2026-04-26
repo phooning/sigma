@@ -33,6 +33,7 @@ type WorkerMessage =
       height: number;
       devicePixelRatio: number;
     }
+  | { type: "geometry"; itemId: string; bounds: Layout | null }
   | { type: "layout"; manifest: NativeVideoManifest }
   | { type: "allocations"; allocations: NativeVideoAllocation[] }
   | { type: "frame"; packet: ArrayBuffer };
@@ -55,7 +56,6 @@ type Frame = {
   yPlane: Uint8Array | null;
   uPlane: Uint8Array | null;
   vPlane: Uint8Array | null;
-  releaseBuffer: (buffer: ArrayBuffer) => void;
   presented: boolean;
 };
 
@@ -72,8 +72,6 @@ type Metrics = {
 const FRAME_PACKET_HEADER_LEN = 64;
 const FRAME_PACKET_MAGIC = "SVF1";
 const PIXEL_FORMAT_YUV420 = 2;
-const MAX_FRAME_BYTES = FRAME_PACKET_HEADER_LEN + 3840 * 2160 * 1.5;
-const WORKER_BUFFER_POOL_SIZE = 8;
 
 const metricsWindow = {
   uploadLatencyMs: [] as number[],
@@ -98,55 +96,6 @@ interface Renderer {
   render(frames: Map<string, Frame>, layouts: Map<string, Layout>): void;
 }
 
-// Worker-owned ArrayBuffers are pooled and reused after upload.
-class BufferPool {
-  private readonly freeList: ArrayBuffer[] = [];
-
-  constructor(
-    private readonly poolSize: number,
-    private readonly maxFrameBytes: number,
-  ) {
-    for (let index = 0; index < poolSize; index += 1) {
-      this.freeList.push(new ArrayBuffer(maxFrameBytes));
-    }
-  }
-
-  acquire(requiredBytes: number) {
-    const pooled = this.freeList.pop();
-    if (pooled && pooled.byteLength >= requiredBytes) {
-      return pooled;
-    }
-
-    if (pooled) {
-      this.freeList.push(pooled);
-    }
-
-    console.warn(
-      `native-video: worker buffer pool exhausted; allocating fallback ${requiredBytes} byte buffer`,
-    );
-    return new ArrayBuffer(requiredBytes);
-  }
-
-  release(buffer: ArrayBuffer) {
-    if (
-      buffer.byteLength === this.maxFrameBytes &&
-      this.freeList.length < this.poolSize
-    ) {
-      this.freeList.push(buffer);
-    }
-  }
-}
-
-let bufferPool: BufferPool | null = null;
-
-function getBufferPool() {
-  if (!bufferPool) {
-    bufferPool = new BufferPool(WORKER_BUFFER_POOL_SIZE, MAX_FRAME_BYTES);
-  }
-
-  return bufferPool;
-}
-
 self.onmessage = (event: MessageEvent<WorkerMessage>) => {
   const message = event.data;
 
@@ -160,6 +109,11 @@ self.onmessage = (event: MessageEvent<WorkerMessage>) => {
     canvasHeight = Math.max(1, Math.round(message.height));
     devicePixelRatio = Math.max(1, message.devicePixelRatio || 1);
     renderer?.resize(canvasWidth, canvasHeight, devicePixelRatio);
+    return;
+  }
+
+  if (message.type === "geometry") {
+    applyGeometry(message.itemId, message.bounds);
     return;
   }
 
@@ -209,17 +163,8 @@ async function initialize(message: InitMessage) {
 }
 
 function ingestFrame(packet: ArrayBuffer) {
-  const pool = getBufferPool();
-  const pooledPacket = pool.acquire(packet.byteLength);
-  new Uint8Array(pooledPacket, 0, packet.byteLength).set(
-    new Uint8Array(packet),
-  );
-
-  const parsed = parseFramePacket(pooledPacket, packet.byteLength, (buffer) =>
-    pool.release(buffer),
-  );
+  const parsed = parseFramePacket(packet, packet.byteLength);
   if (!parsed) {
-    pool.release(pooledPacket);
     return;
   }
 
@@ -243,6 +188,25 @@ function renderLoop() {
 
   maybePostMetrics();
   requestAnimationFrame(renderLoop);
+}
+
+function applyGeometry(itemId: string, bounds: Layout | null) {
+  const streamId = stableStreamId(itemId);
+
+  if (!bounds) {
+    layouts.delete(streamId);
+    return;
+  }
+
+  const previous = layouts.get(streamId);
+  if (previous && layoutsEqual(previous, bounds)) return;
+
+  layouts.set(streamId, {
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+  });
 }
 
 function applyLayoutManifest(manifest: NativeVideoManifest) {
@@ -283,7 +247,6 @@ function layoutManifestUnchanged(manifest: NativeVideoManifest) {
 function parseFramePacket(
   packet: ArrayBuffer,
   packetLength: number,
-  releaseBuffer: (buffer: ArrayBuffer) => void,
 ): Frame | null {
   if (packetLength < FRAME_PACKET_HEADER_LEN) return null;
 
@@ -334,16 +297,11 @@ function parseFramePacket(
     yPlane: new Uint8Array(packet, headerLength, yLength),
     uPlane: new Uint8Array(packet, uOffset, chromaLength),
     vPlane: new Uint8Array(packet, vOffset, chromaLength),
-    releaseBuffer,
     presented: false,
   };
 }
 
 function releaseFrameBuffer(frame: Frame) {
-  if (frame.packetBuffer) {
-    frame.releaseBuffer(frame.packetBuffer);
-  }
-
   frame.packetBuffer = null;
   frame.yPlane = null;
   frame.uPlane = null;

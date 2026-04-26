@@ -1,11 +1,16 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Channel, invoke } from "@tauri-apps/api/core";
-import { useNativeVideoManifest } from "./useNativeVideoManifest";
+import {
+  computeNativeVideoBounds,
+  useNativeVideoManifest,
+} from "./useNativeVideoManifest";
 import type {
   NativeControllerSnapshot,
+  NativeVideoManifest,
   NativeVideoProfile,
   NativeVideoSurfaceProps,
 } from "./types";
+import type { MediaItem, Viewport } from "../../utils/media.types";
 
 const MANIFEST_DEBOUNCE_MS = 120;
 const FORCE_NATIVE_KEY = "sigma.nativeVideo.enabled";
@@ -31,6 +36,52 @@ const shouldRunBaseProbe = () => {
     return false;
   }
 };
+
+function debounce<T>(callback: (value: T) => void, delayMs: number) {
+  let timeoutId: number | null = null;
+
+  const debounced = (value: T) => {
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId);
+    }
+
+    timeoutId = window.setTimeout(() => {
+      timeoutId = null;
+      callback(value);
+    }, delayMs);
+  };
+
+  debounced.cancel = () => {
+    if (timeoutId === null) return;
+    window.clearTimeout(timeoutId);
+    timeoutId = null;
+  };
+
+  return debounced;
+}
+
+function updateVideoGeometryImmediate(
+  worker: Worker,
+  item: MediaItem,
+  viewport: Viewport,
+  canvasSize: NativeVideoSurfaceProps["canvasSize"],
+) {
+  if (item.type !== "video") return;
+
+  const bounds = computeNativeVideoBounds(item, viewport, canvasSize);
+  worker.postMessage({
+    type: "geometry",
+    itemId: item.id,
+    bounds: bounds
+      ? {
+          x: bounds.screenX,
+          y: bounds.screenY,
+          width: bounds.renderedWidthPx,
+          height: bounds.renderedHeightPx,
+        }
+      : null,
+  });
+}
 
 const toTransferableBuffer = (message: unknown): ArrayBuffer | null => {
   if (message instanceof ArrayBuffer) return message;
@@ -67,7 +118,9 @@ export function NativeVideoSurface({
   const lastMetricsAtRef = useRef(0);
   const isBaseValidatedRef = useRef(false);
   const baseProbeStartedRef = useRef(false);
+  const geometryItemIdsRef = useRef<Set<string>>(new Set());
   const [isEnabled, setIsEnabled] = useState(false);
+  const [workerGeneration, setWorkerGeneration] = useState(0);
   const manifest = useNativeVideoManifest({
     items,
     viewport,
@@ -75,6 +128,50 @@ export function NativeVideoSurface({
     selectedItems,
     activeAudioItemId,
   });
+  const debouncedRustManifest = useMemo(
+    () =>
+      debounce((nextManifest: NativeVideoManifest) => {
+        void invoke<NativeControllerSnapshot>("native_video_update_manifest", {
+          manifest: nextManifest,
+        })
+          .then((snapshot) => {
+            isBaseValidatedRef.current = snapshot.profile.baseCaseValidated;
+            workerRef.current?.postMessage({
+              type: "allocations",
+              allocations: snapshot.allocations,
+            });
+            const firstAsset = nextManifest.assets[0];
+            if (
+              firstAsset &&
+              frameChannelRef.current &&
+              shouldRunBaseProbe() &&
+              !isBaseValidatedRef.current &&
+              !baseProbeStartedRef.current
+            ) {
+              baseProbeStartedRef.current = true;
+              void invoke("native_video_run_base_case_probe", {
+                config: {
+                  sourcePath: firstAsset.path,
+                  width: 3840,
+                  height: 2160,
+                  fps: 60,
+                  frames: 180,
+                },
+                onFrame: frameChannelRef.current,
+              }).catch(() => {
+                baseProbeStartedRef.current = false;
+              });
+            }
+          })
+          .catch(() => {
+            workerRef.current?.postMessage({
+              type: "allocations",
+              allocations: [],
+            });
+          });
+      }, MANIFEST_DEBOUNCE_MS),
+    [],
+  );
 
   useEffect(() => {
     if (!supportsNativeCanvas()) return;
@@ -112,6 +209,7 @@ export function NativeVideoSurface({
       { type: "module" },
     );
     workerRef.current = worker;
+    setWorkerGeneration((generation) => generation + 1);
 
     worker.onmessage = (event: MessageEvent) => {
       const message = event.data as
@@ -170,6 +268,7 @@ export function NativeVideoSurface({
       worker.terminate();
       workerRef.current = null;
       frameChannelRef.current = null;
+      geometryItemIdsRef.current.clear();
       void invoke("native_video_stop_all").catch(() => {});
     };
   }, [canvasSize.height, canvasSize.width, isEnabled]);
@@ -185,53 +284,41 @@ export function NativeVideoSurface({
     });
   }, [canvasSize.height, canvasSize.width, isEnabled]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isEnabled) return;
 
-    const timeoutId = window.setTimeout(() => {
-      workerRef.current?.postMessage({ type: "layout", manifest });
-      void invoke<NativeControllerSnapshot>("native_video_update_manifest", {
-        manifest,
-      })
-        .then((snapshot) => {
-          isBaseValidatedRef.current = snapshot.profile.baseCaseValidated;
-          workerRef.current?.postMessage({
-            type: "allocations",
-            allocations: snapshot.allocations,
-          });
-          const firstAsset = manifest.assets[0];
-          if (
-            firstAsset &&
-            frameChannelRef.current &&
-            shouldRunBaseProbe() &&
-            !isBaseValidatedRef.current &&
-            !baseProbeStartedRef.current
-          ) {
-            baseProbeStartedRef.current = true;
-            void invoke("native_video_run_base_case_probe", {
-              config: {
-                sourcePath: firstAsset.path,
-                width: 3840,
-                height: 2160,
-                fps: 60,
-                frames: 180,
-              },
-              onFrame: frameChannelRef.current,
-            }).catch(() => {
-              baseProbeStartedRef.current = false;
-            });
-          }
-        })
-        .catch(() => {
-          workerRef.current?.postMessage({
-            type: "allocations",
-            allocations: [],
-          });
-        });
-    }, MANIFEST_DEBOUNCE_MS);
+    const worker = workerRef.current;
+    if (!worker) return;
 
-    return () => window.clearTimeout(timeoutId);
-  }, [isEnabled, manifest]);
+    const nextItemIds = new Set<string>();
+    for (const item of items) {
+      if (item.type !== "video") continue;
+      nextItemIds.add(item.id);
+      updateVideoGeometryImmediate(worker, item, viewport, canvasSize);
+    }
+
+    for (const itemId of geometryItemIdsRef.current) {
+      if (nextItemIds.has(itemId)) continue;
+      worker.postMessage({ type: "geometry", itemId, bounds: null });
+    }
+    geometryItemIdsRef.current = nextItemIds;
+  }, [canvasSize, isEnabled, items, viewport, workerGeneration]);
+
+  useEffect(() => {
+    if (!isEnabled) {
+      debouncedRustManifest.cancel();
+      return;
+    }
+
+    debouncedRustManifest(manifest);
+  }, [debouncedRustManifest, isEnabled, manifest]);
+
+  useEffect(
+    () => () => {
+      debouncedRustManifest.cancel();
+    },
+    [debouncedRustManifest],
+  );
 
   if (!isEnabled) return null;
 

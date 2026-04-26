@@ -122,7 +122,7 @@ export const CanvasMediaItem = memo(function CanvasMediaItem({
         isSelected && "selected",
         isCropEditing && "crop-editing",
         item.type === "image" && useNativeImageSurface && "native-image-item",
-        (isDragging || isResizing) && "is-transforming",
+        (isDragging || isResizing || isCropping) && "is-transforming",
       ]
         .filter(Boolean)
         .join(" ")}
