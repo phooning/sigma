@@ -22,8 +22,6 @@ use super::{
 
 pub(crate) type FrameSubscribers = Arc<Mutex<Vec<Channel<InvokeResponseBody>>>>;
 
-const DISPATCH_UNWRAP_RETRIES: usize = 8;
-
 #[derive(Clone, Debug)]
 pub(crate) enum WorkerAssignment {
     Active {
@@ -56,10 +54,9 @@ pub(crate) struct DecodedFrame {
 ///   `PooledFramePacket` to the broker.
 /// - If a packet is dropped before IPC dispatch, `Drop` returns the original `Arc<Vec<u8>>` to the
 ///   recycle queue with `try_send`; no `Mutex<Vec<_>>` free list is used.
-/// - `FramePool::dispatch` is the sole IPC handoff point. It takes the `Arc<Vec<u8>>` out of the
-///   drop wrapper and uses `Arc::try_unwrap()` so `InvokeResponseBody::Raw` receives the owned
-///   `Vec<u8>` directly. On successful unwrap the wrapper is consumed and does not recycle the
-///   buffer because IPC now owns it. On unwrap timeout or send failure, `Drop` recycles the buffer.
+/// - `FramePool::dispatch` is the sole IPC handoff point. It copies the valid packet bytes into a
+///   fresh IPC payload, then immediately returns the original `Arc<Vec<u8>>` to the pool so native
+///   decode never waits on frontend or IPC ownership lifetimes.
 pub(crate) struct FramePool {
     recycle_tx: mpsc::Sender<Arc<Vec<u8>>>,
     recycle_rx: Mutex<mpsc::Receiver<Arc<Vec<u8>>>>,
@@ -144,32 +141,18 @@ impl FramePool {
         mut packet: PooledFramePacket,
         on_frame: &Channel<InvokeResponseBody>,
     ) -> bool {
-        // FIX: VIOLATION 2 — IPC receives the owned pool buffer without `Arc<[u8]>::to_vec()`.
-        for attempt in 0..=DISPATCH_UNWRAP_RETRIES {
-            let Some(buffer) = packet.buffer.take() else {
-                return false;
-            };
+        let Some(buffer) = packet.buffer.take() else {
+            return false;
+        };
 
-            match Arc::try_unwrap(buffer) {
-                Ok(mut vec) => {
-                    vec.truncate(packet.len);
-                    packet.len = 0;
-                    return on_frame.send(InvokeResponseBody::Raw(vec)).is_ok();
-                }
-                Err(buffer) => {
-                    packet.buffer = Some(buffer);
-                    if attempt == DISPATCH_UNWRAP_RETRIES {
-                        eprintln!(
-                            "native-video: dropping frame after Arc::try_unwrap timeout at IPC boundary"
-                        );
-                        return false;
-                    }
-                    task::yield_now().await;
-                }
-            }
-        }
-
-        false
+        let len = packet.len.min(buffer.len());
+        let fresh_for_ipc = buffer[..len].to_vec();
+        packet.len = 0;
+        let sent = on_frame
+            .send(InvokeResponseBody::Raw(fresh_for_ipc))
+            .is_ok();
+        self.recycle(buffer);
+        sent
     }
 }
 

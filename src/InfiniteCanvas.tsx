@@ -17,8 +17,7 @@ import {
   getCrop,
   getCropBoxStyle,
   saveMediaScreenshot,
-  useImagePreviewQueue,
-  useThumbnailQueue,
+  useDecodeArbiterFeeder,
 } from "./utils/media";
 import { CropHandle, CropInsets, MediaItem } from "./utils/media.types";
 import {
@@ -38,7 +37,7 @@ import {
 } from "./components/CanvasActions";
 import { useTauriDrop as useUploadDrop } from "./utils/drag";
 import { useCanvasHotkeys } from "./utils/keyboard";
-import { useGetSettingsStore } from "./stores/useSettingsStore";
+import { useSettingsStore } from "./stores/useSettingsStore";
 import { useAudioPlayback } from "./stores/useAudioPlaybackStore";
 import {
   getStoredVideoLoop,
@@ -48,7 +47,7 @@ import { useActiveAudioSelection } from "./components/useActiveAudioSelection";
 import { useCanvasViewport } from "./components/useCanvasViewport";
 import { getExportDefaultPath } from "./utils/exportPaths";
 import { getViewBounds } from "./utils/viewport";
-import { getLoopRange } from "./utils/videoUtils";
+import { getImageLod, getLoopRange, getVideoLod } from "./utils/videoUtils";
 import { notify } from "./utils/notifications";
 import { ACTION_SELECTORS } from "./utils/press";
 import { NativeVideoSurface } from "./components/native-video/NativeVideoSurface";
@@ -90,39 +89,33 @@ export default function InfiniteCanvas() {
     height: window.innerHeight,
   }));
 
-  const {
-    draggingItem,
-    resizingItem,
-    editingCropItem,
-    croppingItem,
-    selectionBox,
-    startDragging,
-    startResizing,
-    startCropping,
-    startPanning: startInteractionPanning,
-    startSelecting,
-    setSelectionBox,
-    clearSelectionBox,
-    stopPanning,
-    clearItemInteraction,
-    setEditingCropItem,
-    toggleEditingCropItem,
-  } = useInteractionStore();
+  const draggingItem = useInteractionStore((s) => s.draggingItem);
+  const resizingItem = useInteractionStore((s) => s.resizingItem);
+  const editingCropItem = useInteractionStore((s) => s.editingCropItem);
+  const croppingItem = useInteractionStore((s) => s.croppingItem);
+  const selectionBox = useInteractionStore((s) => s.selectionBox);
+  const startDragging = useInteractionStore((s) => s.startDragging);
+  const startResizing = useInteractionStore((s) => s.startResizing);
+  const startCropping = useInteractionStore((s) => s.startCropping);
+  const startInteractionPanning = useInteractionStore((s) => s.startPanning);
+  const startSelecting = useInteractionStore((s) => s.startSelecting);
+  const setSelectionBox = useInteractionStore((s) => s.setSelectionBox);
+  const clearSelectionBox = useInteractionStore((s) => s.clearSelectionBox);
+  const stopPanning = useInteractionStore((s) => s.stopPanning);
+  const clearItemInteraction = useInteractionStore((s) => s.clearItemInteraction);
+  const setEditingCropItem = useInteractionStore((s) => s.setEditingCropItem);
+  const toggleEditingCropItem = useInteractionStore((s) => s.toggleEditingCropItem);
 
-  const {
-    screenshotDirectory,
-    setScreenshotDirectory,
-    canvasBackgroundPattern,
-  } = useGetSettingsStore();
+  const screenshotDirectory = useSettingsStore((s) => s.screenshotDirectory);
+  const setScreenshotDirectory = useSettingsStore((s) => s.setScreenshotDirectory);
+  const canvasBackgroundPattern = useSettingsStore((s) => s.canvasBackgroundPattern);
   const { toggleAudioItem, clearAudioItem, activeAudioItemId } =
     useAudioPlayback();
 
-  const {
-    exportingItemId,
-    setExportingItemId,
-    clearItemState: clearVideoExportItemState,
-    clearAllItemState: clearAllVideoExportState,
-  } = useVideoExportStore();
+  const exportingItemId = useVideoExportStore((s) => s.exportingItemId);
+  const setExportingItemId = useVideoExportStore((s) => s.setExportingItemId);
+  const clearVideoExportItemState = useVideoExportStore((s) => s.clearItemState);
+  const clearAllVideoExportState = useVideoExportStore((s) => s.clearAllItemState);
 
   // Refs mirrored for async callbacks and global pointer gestures.
   const worldRef = useRef<HTMLDivElement>(null);
@@ -171,8 +164,12 @@ export default function InfiniteCanvas() {
   });
 
   // Canvas integrations.
-  const { requestImagePreview } = useImagePreviewQueue(setItems);
-  const { requestThumbnail } = useThumbnailQueue(setItems);
+  const { requestImagePreview, requestThumbnail } = useDecodeArbiterFeeder({
+    items,
+    getViewport,
+    canvasSize,
+    setItems,
+  });
 
   const getMediaItemElement = useCallback((id: string) => {
     const mediaItems = containerRef.current?.querySelectorAll<HTMLElement>(
@@ -838,6 +835,32 @@ export default function InfiniteCanvas() {
   );
   const isNativeImageSurfaceEnabled =
     isNativeImageSurfaceSupported && isNativeImageSurfaceReady;
+
+  useEffect(() => {
+    let changed = false;
+    const nextItems = items.map((item) => {
+      if (item.type === "image") {
+        const imageLod = getImageLod(viewport.zoom, item, item.imageLod);
+        if (item.imageLod === imageLod) return item;
+        changed = true;
+        return { ...item, imageLod };
+      }
+
+      const videoLod = getVideoLod(
+        viewport.zoom,
+        !!item.thumbnailUrl,
+        item,
+        item.videoLod,
+      );
+      if (item.videoLod === videoLod) return item;
+      changed = true;
+      return { ...item, videoLod };
+    });
+
+    if (changed) {
+      setItems(nextItems);
+    }
+  }, [items, setItems, viewport.zoom]);
 
   return (
     <div

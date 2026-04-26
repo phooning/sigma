@@ -38,8 +38,8 @@ describe('InfiniteCanvas media loading', () => {
     expect(document.querySelector('.video-lod-thumbnail')).not.toBeInTheDocument();
     expect(document.querySelector('.video-lod-proxy')).not.toBeInTheDocument();
     expect(invoke).not.toHaveBeenCalledWith(
-      'generate_video_thumbnail',
-      expect.anything()
+      'request_decode',
+      expect.objectContaining({ path: expect.stringMatching(/\.(mp4|webm|mov|mkv)$/i) })
     );
   });
 
@@ -99,9 +99,15 @@ describe('InfiniteCanvas media loading', () => {
     });
 
     await waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith('generate_video_thumbnail', {
-        path: heavyVideoPath
-      });
+      expect(invoke).toHaveBeenCalledWith(
+        'request_decode',
+        expect.objectContaining({
+          itemId: expect.any(String),
+          path: heavyVideoPath,
+          lod: 256,
+          priority: 'visible'
+        })
+      );
       expect(document.querySelector('.video-load-thumbnail')).toHaveAttribute(
         'src',
         'asset:///tmp/heavy-thumb.jpg'
@@ -179,10 +185,13 @@ describe('InfiniteCanvas media loading', () => {
     renderCanvas();
     await dropFiles(['/path/to/test.png']);
 
-    expect(invoke).not.toHaveBeenCalledWith('generate_image_preview', {
-      path: '/path/to/test.png',
-      maxDimension: 1024
-    });
+    expect(invoke).not.toHaveBeenCalledWith(
+      'request_decode',
+      expect.objectContaining({
+        path: '/path/to/test.png',
+        lod: 1024
+      })
+    );
 
     await waitFor(() => {
       expect(screen.getByAltText('canvas item')).toHaveAttribute(
@@ -210,10 +219,15 @@ describe('InfiniteCanvas media loading', () => {
     });
 
     await waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith('generate_image_preview', {
-        path: '/path/to/test.png',
-        maxDimension: 256
-      });
+      expect(invoke).toHaveBeenCalledWith(
+        'request_decode',
+        expect.objectContaining({
+          itemId: expect.any(String),
+          path: '/path/to/test.png',
+          lod: 256,
+          priority: 'visible'
+        })
+      );
     });
   });
 });

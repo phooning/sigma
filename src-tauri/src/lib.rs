@@ -10,6 +10,7 @@ use std::{
 
 use tauri::Manager;
 
+mod decode_arbiter;
 mod native_video;
 
 #[derive(serde::Serialize)]
@@ -163,7 +164,7 @@ async fn generate_video_thumbnail(
         .map_err(|err| format!("Failed to generate video thumbnail: {err}"))?
 }
 
-fn generate_video_thumbnail_blocking(
+pub(crate) fn generate_video_thumbnail_blocking(
     app: tauri::AppHandle,
     path: String,
 ) -> Result<Option<String>, String> {
@@ -233,7 +234,7 @@ async fn generate_image_preview(
     .map_err(|err| format!("Failed to generate image preview: {err}"))?
 }
 
-fn generate_image_preview_blocking(
+pub(crate) fn generate_image_preview_blocking(
     app: tauri::AppHandle,
     path: String,
     max_dimension: u32,
@@ -284,6 +285,21 @@ fn generate_image_preview_blocking(
         .map_err(|err| format!("Failed to save image preview: {err}"))?;
 
     Ok(Some(preview_path.to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
+async fn request_decode(
+    arbiter: tauri::State<'_, decode_arbiter::DecodeArbiter>,
+    item_id: String,
+    path: String,
+    lod: u32,
+    generation: u64,
+    priority: decode_arbiter::DecodePriority,
+) -> Result<Option<String>, String> {
+    arbiter
+        .request_decode(item_id, PathBuf::from(path), lod, generation, priority)
+        .await
+        .map(|path| path.map(|path| path.to_string_lossy().into_owned()))
 }
 
 #[tauri::command]
@@ -585,6 +601,13 @@ pub fn run() {
         .setup(|app| {
             let app_handle = app.handle().clone();
             app.manage(native_video::NativeVideoState::new(&app_handle));
+            let max_parallel = std::thread::available_parallelism()
+                .map(|threads| threads.get().saturating_sub(1).clamp(1, 4))
+                .unwrap_or(2);
+            app.manage(decode_arbiter::DecodeArbiter::spawn(
+                app_handle,
+                max_parallel,
+            ));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -592,6 +615,7 @@ pub fn run() {
             probe_images,
             generate_video_thumbnail,
             generate_image_preview,
+            request_decode,
             save_media_screenshot,
             export_video,
             native_video::commands::native_video_get_profile,

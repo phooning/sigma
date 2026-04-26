@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { CanvasBackgroundPattern } from "@/stores/useSettingsStore";
 import type { Viewport } from "@/utils/media.types";
+import { advanceViewportGeneration } from "@/utils/media";
 import { markPerformance } from "@/utils/performance";
 import { useCanvasSessionStore } from "@/stores/useCanvasSessionStore";
 import { drawCanvasBackground } from "./CanvasBackground";
@@ -97,6 +98,7 @@ export const useCanvasViewport = ({
       options: { flushDomNow?: boolean; syncReact?: boolean } = {},
     ) => {
       markPerformance("sigma:commitViewport:start");
+      advanceViewportGeneration();
       pendingViewportRef.current = nextViewport;
       hotViewportRef.current = nextViewport;
 

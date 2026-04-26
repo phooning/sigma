@@ -61,7 +61,15 @@ const attachMediaUrls = (item: MediaItem) => {
   };
 };
 
-const normalizeItems = (items: MediaItem[]) => items.map(attachMediaUrls);
+const normalizeItems = (items: MediaItem[]) => {
+  let changed = false;
+  const nextItems = items.map((item) => {
+    const nextItem = attachMediaUrls(item);
+    if (nextItem !== item) changed = true;
+    return nextItem;
+  });
+  return changed ? nextItems : items;
+};
 
 const createMeasuredLocalStorage = () => ({
   getItem: (name: string) => localStorage.getItem(name),
