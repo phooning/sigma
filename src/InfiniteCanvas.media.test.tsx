@@ -14,6 +14,7 @@ import {
   revealItemInDirMock,
   setViewportSize
 } from './test/infiniteCanvasHarness';
+import { useCanvasSessionStore } from './stores/useCanvasSessionStore';
 
 describe('InfiniteCanvas media loading', () => {
   it('drops multiple videos as playable video elements without eager thumbnail work', async () => {
@@ -222,6 +223,77 @@ describe('InfiniteCanvas media item interactions', () => {
     renderCanvas();
     await dropFiles(['/path/to/test.png']);
     await screen.findByAltText('canvas item');
+  });
+
+  it('moves an item transiently during drag and commits it once on pointer up', async () => {
+    const mediaItem = getMediaItem();
+    const startItem = useCanvasSessionStore.getState().items[0];
+
+    await act(async () => {
+      fireEvent.pointerDown(mediaItem, {
+        button: 0,
+        clientX: 0,
+        clientY: 0,
+        pointerId: 16
+      });
+    });
+    vi.mocked(localStorage.setItem).mockClear();
+
+    await act(async () => {
+      fireEvent.pointerMove(mediaItem, {
+        clientX: 100,
+        clientY: 200,
+        pointerId: 16,
+        button: 0
+      });
+    });
+
+    expect(useCanvasSessionStore.getState().items[0]).toBe(startItem);
+    expect(mediaItem.style.left).toBe(`${startItem.x}px`);
+    expect(mediaItem.style.top).toBe(`${startItem.y}px`);
+    expect(mediaItem.style.getPropertyValue('--media-transient-x')).toBe('100px');
+    expect(mediaItem.style.getPropertyValue('--media-transient-y')).toBe('200px');
+    expect(localStorage.setItem).not.toHaveBeenCalledWith(
+      'sigma:canvas-session',
+      expect.any(String)
+    );
+
+    await act(async () => {
+      fireEvent.pointerUp(mediaItem, { pointerId: 16, button: 0 });
+    });
+
+    const endItem = useCanvasSessionStore.getState().items[0];
+    expect(endItem.x).toBe(startItem.x + 100);
+    expect(endItem.y).toBe(startItem.y + 200);
+    expect(mediaItem.style.left).toBe(`${startItem.x + 100}px`);
+    expect(mediaItem.style.top).toBe(`${startItem.y + 200}px`);
+    expect(mediaItem.style.getPropertyValue('--media-transient-x')).toBe('');
+    expect(localStorage.setItem).toHaveBeenCalledWith(
+      'sigma:canvas-session',
+      expect.stringContaining(`"x":${startItem.x + 100}`)
+    );
+  });
+
+  it('preserves unchanged item identities while normalizing media urls', () => {
+    const firstItem = useCanvasSessionStore.getState().items[0];
+    const secondItem = {
+      ...firstItem,
+      id: 'second-image',
+      filePath: '/path/to/second.png',
+      url: 'asset:///path/to/second.png',
+      x: firstItem.x + 40
+    };
+
+    useCanvasSessionStore.getState().setItems([firstItem, secondItem]);
+    const unchangedItem = useCanvasSessionStore.getState().items[1];
+
+    useCanvasSessionStore.getState().setItems((prev) =>
+      prev.map((item) =>
+        item.id === firstItem.id ? { ...item, x: item.x + 10 } : item
+      )
+    );
+
+    expect(useCanvasSessionStore.getState().items[1]).toBe(unchangedItem);
   });
 
   it('resizes the image back to correct aspect ratio on rescale button click', async () => {

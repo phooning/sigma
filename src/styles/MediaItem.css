@@ -1,4 +1,8 @@
 .media-item {
+    --media-active-scale: 1;
+    --media-transient-x: 0px;
+    --media-transient-y: 0px;
+
     position: absolute;
     border-radius: var(--radius-md-app);
     overflow: hidden;
@@ -8,6 +12,7 @@
     transition:
         box-shadow var(--duration-medium) ease,
         transform var(--duration-medium) ease;
+    transform: translate3d(var(--media-transient-x), var(--media-transient-y), 0) scale(var(--media-active-scale));
     user-select: none;
     -webkit-user-select: none;
     -webkit-user-drag: none;
@@ -15,6 +20,7 @@
 
 .media-item.is-transforming {
     will-change: transform;
+    transition: box-shadow var(--duration-medium) ease;
 }
 
 .media-item.crop-editing {
@@ -26,16 +32,18 @@
 }
 
 .media-item:active {
+    --media-active-scale: 1.02;
+
     cursor: grabbing;
     box-shadow:
         var(--shadow-media-active),
         0 0 0 var(--border-width-strong) rgba(139, 92, 246, 0.5);
-    transform: scale(1.02);
 }
 
 .media-item.crop-editing:active {
+    --media-active-scale: 1;
+
     cursor: default;
-    transform: none;
 }
 
 .media-content {
