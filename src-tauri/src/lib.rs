@@ -155,8 +155,8 @@ fn parse_duration_string(duration: &str) -> Option<f64> {
 }
 
 #[tauri::command]
-async fn generate_video_thumbnail(
-    app: tauri::AppHandle,
+async fn generate_video_thumbnail<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     path: String,
 ) -> Result<Option<String>, String> {
     tauri::async_runtime::spawn_blocking(move || generate_video_thumbnail_blocking(app, path))
@@ -164,8 +164,8 @@ async fn generate_video_thumbnail(
         .map_err(|err| format!("Failed to generate video thumbnail: {err}"))?
 }
 
-pub(crate) fn generate_video_thumbnail_blocking(
-    app: tauri::AppHandle,
+pub(crate) fn generate_video_thumbnail_blocking<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     path: String,
 ) -> Result<Option<String>, String> {
     let cache_dir = app
@@ -222,8 +222,8 @@ pub(crate) fn generate_video_thumbnail_blocking(
 }
 
 #[tauri::command]
-async fn generate_image_preview(
-    app: tauri::AppHandle,
+async fn generate_image_preview<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     path: String,
     max_dimension: u32,
 ) -> Result<Option<String>, String> {
@@ -234,8 +234,8 @@ async fn generate_image_preview(
     .map_err(|err| format!("Failed to generate image preview: {err}"))?
 }
 
-pub(crate) fn generate_image_preview_blocking(
-    app: tauri::AppHandle,
+pub(crate) fn generate_image_preview_blocking<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     path: String,
     max_dimension: u32,
 ) -> Result<Option<String>, String> {
@@ -590,14 +590,15 @@ fn screenshot_filename(path: &str) -> Result<String, String> {
     Ok(format!("{sanitized_stem}-screenshot-{timestamp}.png"))
 }
 
+pub fn manage_native_video_state<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    if app.try_state::<native_video::NativeVideoState>().is_none() {
+        app.manage(native_video::NativeVideoState::new(app));
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_os::init())
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_opener::init())
+pub fn configure_tauri_builder<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
+    builder
         .setup(|app| {
             let app_handle = app.handle().clone();
             app.manage(native_video::NativeVideoState::new(&app_handle));
@@ -627,8 +628,20 @@ pub fn run() {
             native_video::commands::native_video_reset_profile,
             native_video::commands::native_video_run_base_case_probe
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    configure_tauri_builder(
+        tauri::Builder::default()
+            .plugin(tauri_plugin_os::init())
+            .plugin(tauri_plugin_dialog::init())
+            .plugin(tauri_plugin_fs::init())
+            .plugin(tauri_plugin_shell::init())
+            .plugin(tauri_plugin_opener::init()),
+    )
+    .run(tauri::generate_context!())
+    .expect("error while running tauri application");
 }
 
 #[cfg(test)]

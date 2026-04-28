@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { MediaItem, Viewport } from "../../utils/media.types";
+import { getCenterWeight, projectItemToScreen } from "../../utils/spatial";
 import type { NativeVideoGeometryBounds, NativeVideoManifest } from "./types";
 
 const TARGET_PRESENTATION_FPS = 60;
@@ -23,7 +24,7 @@ type CanvasSize = {
 export function computeNativeVideoBounds(
   item: MediaItem,
   viewport: Viewport,
-  canvasSize: CanvasSize,
+  canvasSize: CanvasSize
 ): NativeVideoGeometryBounds | null {
   if (item.type !== "video") return null;
 
@@ -48,7 +49,7 @@ export function computeNativeVideoBounds(
     screenY,
     renderedWidthPx,
     renderedHeightPx,
-    visibleAreaPx,
+    visibleAreaPx
   };
 }
 
@@ -57,14 +58,11 @@ export function useNativeVideoManifest({
   viewport,
   canvasSize,
   selectedItems,
-  activeAudioItemId,
+  activeAudioItemId
 }: UseNativeVideoManifestOptions): NativeVideoManifest {
   return useMemo(() => {
     const canvasWidth = Math.max(1, Math.round(canvasSize.width));
     const canvasHeight = Math.max(1, Math.round(canvasSize.height));
-    const canvasCenterX = canvasWidth / 2;
-    const canvasCenterY = canvasHeight / 2;
-    const canvasDiagonal = Math.hypot(canvasWidth, canvasHeight) || 1;
 
     return {
       canvasWidth,
@@ -74,13 +72,18 @@ export function useNativeVideoManifest({
         const bounds = computeNativeVideoBounds(item, viewport, canvasSize);
         if (!bounds) return [];
 
-        const itemCenterX = bounds.screenX + bounds.renderedWidthPx / 2;
-        const itemCenterY = bounds.screenY + bounds.renderedHeightPx / 2;
-        const centerDistance = Math.hypot(
-          itemCenterX - canvasCenterX,
-          itemCenterY - canvasCenterY,
-        );
-        const centerWeight = 1 - Math.min(1, centerDistance / canvasDiagonal);
+        const screenRect = projectItemToScreen(item, viewport, {
+          width: canvasWidth,
+          height: canvasHeight
+        });
+        const visibleAreaPx = screenRect.visibleAreaPx;
+
+        if (visibleAreaPx <= 0) return [];
+
+        const centerWeight = getCenterWeight(screenRect, {
+          width: canvasWidth,
+          height: canvasHeight
+        });
         const focusWeight = selectedItems.has(item.id)
           ? 2.5
           : activeAudioItemId === item.id
@@ -93,19 +96,23 @@ export function useNativeVideoManifest({
             path: item.filePath,
             sourceWidth: Math.max(
               1,
-              Math.round(item.sourceWidth ?? item.width),
+              Math.round(item.sourceWidth ?? item.width)
             ),
             sourceHeight: Math.max(
               1,
-              Math.round(item.sourceHeight ?? item.height),
+              Math.round(item.sourceHeight ?? item.height)
             ),
-            ...bounds,
+            screenX: screenRect.x,
+            screenY: screenRect.y,
+            renderedWidthPx: screenRect.width,
+            renderedHeightPx: screenRect.height,
+            visibleAreaPx,
             focusWeight,
             centerWeight,
-            targetFps: TARGET_PRESENTATION_FPS,
-          },
+            targetFps: TARGET_PRESENTATION_FPS
+          }
         ];
-      }),
+      })
     };
   }, [activeAudioItemId, canvasSize, items, selectedItems, viewport]);
 }

@@ -8,6 +8,10 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "bench": "node ./scripts/run-vitest-benchmarks.mjs",
+    "bench:update": "node ./scripts/run-vitest-benchmarks.mjs --update-baseline",
+    "bench:check": "pnpm bench && node ./scripts/check-vitest-bench-baseline.mjs",
+    "bench:ipc:rust": "cargo bench --manifest-path src-tauri/Cargo.toml --bench ipc_latency",
     "test:e2e": "playwright test",
     "tauri": "tauri"
   },

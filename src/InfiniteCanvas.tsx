@@ -531,20 +531,21 @@ export default function InfiniteCanvas() {
         resizeStartRef.current = null;
       } else if (isResize) {
         mode = "resize";
-        activeIds = new Set(nextSelection);
-        resizeStart = new Map(
-          reorderedItems
-            .filter((item) => activeIds.has(item.id))
-            .map((item) => [
-              item.id,
-              {
+        const resizeIds = selectedItemsRef.current.has(id)
+          ? selectedItemsRef.current
+          : new Set([id]);
+        resizeStart = useCanvasSessionStore
+          .getState()
+          .items.reduce((map, item) => {
+            if (resizeIds.has(item.id)) {
+              map.set(item.id, {
                 width: item.width,
                 height: item.height,
                 crop: { ...getCrop(item) }
-              }
-            ])
-        );
-
+              });
+            }
+            return map;
+          }, new Map());
         startResizing(id);
         resizeStartRef.current = resizeStart;
       } else {

@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use tauri::AppHandle;
+use tauri::{AppHandle, Runtime};
 use tokio::sync::{mpsc, watch};
 
 use super::{
@@ -27,7 +27,7 @@ pub struct NativeVideoState {
 }
 
 impl NativeVideoState {
-    pub fn new(app: &AppHandle) -> Self {
+    pub fn new<R: Runtime>(app: &AppHandle<R>) -> Self {
         let profile_path = profile_path(app);
         let profile_snapshot =
             load_profile(&profile_path).unwrap_or_else(PerformanceProfile::uncalibrated);

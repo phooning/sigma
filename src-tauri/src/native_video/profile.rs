@@ -5,7 +5,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, Runtime};
 
 use super::{
     constants::{BROKER_QUEUE_CAPACITY, SAFE_BUDGET_FACTOR},
@@ -147,7 +147,7 @@ pub(crate) fn measure_ram_bandwidth() -> f64 {
     samples[1]
 }
 
-pub(crate) fn profile_path(app: &AppHandle) -> PathBuf {
+pub(crate) fn profile_path<R: Runtime>(app: &AppHandle<R>) -> PathBuf {
     app.path()
         .app_data_dir()
         .unwrap_or_else(|_| std::env::temp_dir().join("sigma"))
