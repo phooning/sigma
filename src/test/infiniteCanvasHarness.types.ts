@@ -1,6 +1,6 @@
 export type DropEventPayload = {
   payload: {
-    type: 'drop';
+    type: "drop";
     paths: string[];
   };
 };

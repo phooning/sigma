@@ -23,7 +23,7 @@ export function HudToolbar({
   selectedVideoExportCount,
   isExportingSelectedVideo,
   onSelectActiveAudioItem,
-  onExportSelectedVideo
+  onExportSelectedVideo,
 }: HudToolbarProps) {
   const activeAudioItemId = useAudioPlaybackStore((s) => s.activeItemId);
 
@@ -31,7 +31,7 @@ export function HudToolbar({
     activeAudioItemId === null
       ? null
       : (items.find(
-          (item) => item.id === activeAudioItemId && item.type === "video"
+          (item) => item.id === activeAudioItemId && item.type === "video",
         ) ?? null);
   const activeAudioName = activeAudioItem
     ? getMediaFileName(activeAudioItem.filePath)

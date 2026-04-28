@@ -1,10 +1,10 @@
 import { bench, describe } from "vitest";
-import { createBenchItems } from "./fixtures";
 import {
   createSpatialGridIndex,
   getIntersectingItemIds,
   querySpatialGridIndex,
 } from "../utils/spatial";
+import { createBenchItems } from "./fixtures";
 
 const items = createBenchItems(20_000);
 const queryRect = {

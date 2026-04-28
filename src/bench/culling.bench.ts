@@ -1,10 +1,14 @@
 import { bench, describe } from "vitest";
-import { BENCH_CANVAS_SIZE, BENCH_VIEWPORT, createBenchItems } from "./fixtures";
 import {
   getCenterWeight,
   getIntersectingItemIds,
   projectItemToScreen,
 } from "../utils/spatial";
+import {
+  BENCH_CANVAS_SIZE,
+  BENCH_VIEWPORT,
+  createBenchItems,
+} from "./fixtures";
 
 const selectionCandidates = createBenchItems(10_000);
 const visibleCandidates = createBenchItems(20_000);
@@ -23,7 +27,9 @@ describe("culling algorithms", () => {
 
   bench("visible screen area projection scan", () => {
     const visibleCount = visibleCandidates
-      .map((item) => projectItemToScreen(item, BENCH_VIEWPORT, BENCH_CANVAS_SIZE))
+      .map((item) =>
+        projectItemToScreen(item, BENCH_VIEWPORT, BENCH_CANVAS_SIZE),
+      )
       .filter((rect) => rect.visibleAreaPx > 0).length;
     void visibleCount;
   });
@@ -32,7 +38,11 @@ describe("culling algorithms", () => {
     let total = 0;
 
     visibleCandidates.forEach((item) => {
-      const screenRect = projectItemToScreen(item, BENCH_VIEWPORT, BENCH_CANVAS_SIZE);
+      const screenRect = projectItemToScreen(
+        item,
+        BENCH_VIEWPORT,
+        BENCH_CANVAS_SIZE,
+      );
 
       if (screenRect.visibleAreaPx > 0) {
         total += getCenterWeight(screenRect, BENCH_CANVAS_SIZE);

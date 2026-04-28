@@ -1,12 +1,11 @@
-import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { SettingsMenuItem } from "../HudActions";
+import { useState } from "react";
 import { useDevStore } from "../../stores/useDevStore";
 import {
-  useSettingsStore,
   type CanvasBackgroundPattern,
+  useSettingsStore,
 } from "../../stores/useSettingsStore";
-import { SETTINGS_PANEL_DESCRIPTIONS } from "./constants";
+import type { SettingsMenuItem } from "../HudActions";
 import {
   Card,
   CardContent,
@@ -24,6 +23,7 @@ import {
 import { ScrollArea } from "../ui/scroll-area";
 import { Separator } from "../ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import { SETTINGS_PANEL_DESCRIPTIONS } from "./constants";
 import { AboutSettings } from "./settings/AboutSettings";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { DebugSettings } from "./settings/DebugSettings";
@@ -94,10 +94,7 @@ export function SettingsDialog({
         return <HotkeysSettings />;
       case "Debug":
         return (
-          <DebugSettings
-            devMode={devMode}
-            onToggleDevMode={toggleDevMode}
-          />
+          <DebugSettings devMode={devMode} onToggleDevMode={toggleDevMode} />
         );
       case "About":
         return <AboutSettings />;
@@ -180,4 +177,3 @@ export function SettingsDialog({
     </Dialog>
   );
 }
-

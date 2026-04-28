@@ -1,16 +1,16 @@
-import { CROP_HANDLES, EMPTY_CROP } from "../utils/media";
-import { MediaItem } from "../utils/media.types";
 import { useAudioPlaybackStore } from "../stores/useAudioPlaybackStore";
+import { CROP_HANDLES, EMPTY_CROP } from "../utils/media";
+import type { MediaItem } from "../utils/media.types";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
-  TooltipTrigger
+  TooltipTrigger,
 } from "./ui/tooltip";
 
 function ActionTooltip({
   label,
-  children
+  children,
 }: {
   label: string;
   children: React.ReactNode;
@@ -27,7 +27,7 @@ function ActionTooltip({
 
 export function CropOverlay({
   id,
-  handleItemPointerDown
+  handleItemPointerDown,
 }: {
   id: string;
   handleItemPointerDown: (id: string, e: React.PointerEvent) => void;
@@ -50,7 +50,7 @@ export const resetFrameSize = ({
   id,
   prev,
   intrinsicWidth,
-  intrinsicHeight
+  intrinsicHeight,
 }: {
   id: string;
   prev: MediaItem[];
@@ -63,7 +63,7 @@ export const resetFrameSize = ({
   return prev.map((i) =>
     i.id === id
       ? { ...i, width: 1280, height: (h / w) * 1280, crop: { ...EMPTY_CROP } }
-      : i
+      : i,
   );
 };
 
@@ -75,7 +75,7 @@ export function MediaFrameActions({
   deleteItem,
   startCropEdit,
   toggleAudioPlayback,
-  isCropEditing
+  isCropEditing,
 }: {
   item: MediaItem;
   revealItem: (id: string, e: React.MouseEvent) => void;
@@ -87,7 +87,7 @@ export function MediaFrameActions({
   isCropEditing: boolean;
 }) {
   const isAudioActive = useAudioPlaybackStore(
-    (s) => s.activeItemId === item.id
+    (s) => s.activeItemId === item.id,
   );
   const audioLabel = isAudioActive
     ? "Disable audio playback"

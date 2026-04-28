@@ -1,10 +1,10 @@
 import { memo } from "react";
 import { getCrop } from "../utils/media";
 import { getImageLod } from "../utils/videoUtils";
+import type { CanvasMediaItemProps } from "./CanvasMediaItem.types";
 import { ImageActions } from "./ImageActions";
 import { CropOverlay, MediaFrameActions } from "./MediaFrameActions";
 import { VideoMedia } from "./Video";
-import type { CanvasMediaItemProps } from "./CanvasMediaItem.types";
 
 const CULL_MARGIN = 500;
 
@@ -106,11 +106,7 @@ export const CanvasMediaItem = memo(function CanvasMediaItem({
   }
 
   const zIndex =
-    isDragging ||
-    isResizing ||
-    isCropping ||
-    isCropEditing ||
-    isSelected
+    isDragging || isResizing || isCropping || isCropEditing || isSelected
       ? 100
       : 1;
 

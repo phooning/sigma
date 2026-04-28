@@ -23,10 +23,7 @@ const isReactManagedImage = (
     editingCropItemId,
   }: Pick<
     BuildNativeImageManifestOptions,
-    | "draggingItemId"
-    | "resizingItemId"
-    | "croppingItemId"
-    | "editingCropItemId"
+    "draggingItemId" | "resizingItemId" | "croppingItemId" | "editingCropItemId"
   >,
 ) =>
   item.id === draggingItemId ||

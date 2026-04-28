@@ -1,11 +1,16 @@
-import { MutableRefObject, RefObject, useCallback, useEffect } from "react";
-import { useRefState } from "./useRefState";
+import {
+  type MutableRefObject,
+  type RefObject,
+  useCallback,
+  useEffect,
+} from "react";
 import {
   clampVideoTime,
   getLoopRange,
   initialLoopState,
-  LoopState,
+  type LoopState,
 } from "../utils/videoUtils";
+import { useRefState } from "./useRefState";
 
 interface UseVideoLoopArgs {
   videoRef: RefObject<HTMLVideoElement | null>;

@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { LoopState } from "../utils/videoUtils";
 import type { MediaItem } from "../utils/media.types";
+import type { LoopState } from "../utils/videoUtils";
 import { useVideoTimeline } from "./useVideoTimeline";
 
 const videoItem: MediaItem = {

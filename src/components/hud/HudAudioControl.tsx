@@ -9,7 +9,7 @@ type HudAudioControlProps = {
 
 export function HudAudioControl({
   activeAudioName,
-  onSelectActiveAudioItem
+  onSelectActiveAudioItem,
 }: HudAudioControlProps) {
   const audioVolume = useAudioPlaybackStore((s) => s.volume);
   const isAudioMuted = useAudioPlaybackStore((s) => s.muted);

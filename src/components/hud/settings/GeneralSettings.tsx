@@ -24,7 +24,8 @@ export function GeneralSettings({
         <FieldContent>
           <FieldLabel>Screenshot Directory</FieldLabel>
           <FieldDescription className="truncate">
-            {screenshotDirectory || "Choose a folder before the first screenshot."}
+            {screenshotDirectory ||
+              "Choose a folder before the first screenshot."}
           </FieldDescription>
         </FieldContent>
         <div className="flex shrink-0 gap-2">
@@ -51,4 +52,3 @@ export function GeneralSettings({
     </FieldGroup>
   );
 }
-

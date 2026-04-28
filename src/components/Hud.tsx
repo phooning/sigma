@@ -35,4 +35,3 @@ function Hud({
 }
 
 export { Hud };
-

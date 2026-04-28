@@ -19,7 +19,7 @@ export const KINETIC_PAN_DURATION_MS = 900;
 export const MIN_KINETIC_PAN_DELTA = 0.5;
 
 const easeOutExpo = (progress: number) =>
-  progress >= 1 ? 1 : 1 - Math.pow(2, -10 * progress);
+  progress >= 1 ? 1 : 1 - 2 ** (-10 * progress);
 
 const lerp = (start: number, end: number, progress: number) =>
   start + (end - start) * progress;

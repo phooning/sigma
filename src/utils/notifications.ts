@@ -1,4 +1,4 @@
-import { toast, type ExternalToast } from "sonner";
+import { type ExternalToast, toast } from "sonner";
 
 type NotificationOptions = Omit<ExternalToast, "description"> & {
   description?: unknown;

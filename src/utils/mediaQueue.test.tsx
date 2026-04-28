@@ -1,12 +1,12 @@
+import { invoke } from "@tauri-apps/api/core";
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { MediaItem } from "./media.types";
 import {
   advanceViewportGeneration,
   useImagePreviewQueue,
   useThumbnailQueue,
 } from "./media";
-import { invoke } from "@tauri-apps/api/core";
+import type { MediaItem } from "./media.types";
 
 vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: (path: string) => `asset://${path}`,
@@ -115,7 +115,9 @@ describe("media preview queues", () => {
     });
 
     expect(setItems).toHaveBeenCalledTimes(1);
-    const updateItems = setItems.mock.calls[0][0] as (items: MediaItem[]) => MediaItem[];
+    const updateItems = setItems.mock.calls[0][0] as (
+      items: MediaItem[],
+    ) => MediaItem[];
     expect(updateItems([imageItem])[0]).toMatchObject({
       imagePreview256Path: "/tmp/preview-256.png",
       imagePreview256Url: "asset:///tmp/preview-256.png",

@@ -13,4 +13,3 @@ export type HudProps = {
   onSelectActiveAudioItem: () => void;
   onExportSelectedVideo: () => void;
 };
-

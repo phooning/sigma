@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildNativeImageManifest } from "./manifest";
 import type { MediaItem } from "../../utils/media.types";
+import { buildNativeImageManifest } from "./manifest";
 
 vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: (path: string) => `asset://${path}`,

@@ -1,7 +1,4 @@
-import type {
-  Dispatch,
-  SetStateAction,
-} from "react";
+import type { Dispatch, SetStateAction } from "react";
 import type { MediaItem, Viewport } from "../utils/media.types";
 import type { ViewportPanPosition } from "./useViewportAnimation.types";
 

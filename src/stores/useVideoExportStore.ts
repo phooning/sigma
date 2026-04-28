@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { initialLoopState, LoopState } from "../utils/videoUtils";
+import { initialLoopState, type LoopState } from "../utils/videoUtils";
 
 type VideoExportStore = {
   loopByItemId: Record<string, LoopState>;

@@ -1,16 +1,16 @@
 import {
+  type RefObject,
   useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
-  type RefObject,
 } from "react";
-import type { CanvasBackgroundPattern } from "@/stores/useSettingsStore";
-import type { Viewport } from "@/utils/media.types";
-import { advanceViewportGeneration } from "@/utils/media";
-import { markPerformance } from "@/utils/performance";
 import { useCanvasSessionStore } from "@/stores/useCanvasSessionStore";
+import type { CanvasBackgroundPattern } from "@/stores/useSettingsStore";
+import { advanceViewportGeneration } from "@/utils/media";
+import type { Viewport } from "@/utils/media.types";
+import { markPerformance } from "@/utils/performance";
 import { drawCanvasBackground } from "./CanvasBackground";
 import { useBackgroundCanvas } from "./useBackgroundCanvas";
 import { useViewportAnimation } from "./useViewportAnimation";
@@ -43,16 +43,19 @@ export const useCanvasViewport = ({
   canvasSizeRef.current = canvasSize;
   canvasBackgroundPatternRef.current = canvasBackgroundPattern;
 
-  const redrawBackgroundCanvas = useCallback((nextViewport: Viewport) => {
-    const canvas = backgroundCanvasRef.current;
-    if (!canvas) return;
+  const redrawBackgroundCanvas = useCallback(
+    (nextViewport: Viewport) => {
+      const canvas = backgroundCanvasRef.current;
+      if (!canvas) return;
 
-    drawCanvasBackground(canvas, {
-      canvasSize: canvasSizeRef.current,
-      pattern: canvasBackgroundPatternRef.current,
-      viewport: nextViewport,
-    });
-  }, [backgroundCanvasRef]);
+      drawCanvasBackground(canvas, {
+        canvasSize: canvasSizeRef.current,
+        pattern: canvasBackgroundPatternRef.current,
+        viewport: nextViewport,
+      });
+    },
+    [backgroundCanvasRef],
+  );
 
   const applyViewportToDom = useCallback(
     (nextViewport: Viewport) => {
@@ -160,7 +163,8 @@ export const useCanvasViewport = ({
   );
 
   useLayoutEffect(() => {
-    const isLocalStoreFlush = persistedViewport === lastStoredViewportRef.current;
+    const isLocalStoreFlush =
+      persistedViewport === lastStoredViewportRef.current;
 
     if (didApplyInitialViewportRef.current && isLocalStoreFlush) return;
 

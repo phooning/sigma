@@ -57,7 +57,12 @@ export const useViewportAnimation = ({
       });
       viewportAnimationRef.current = didComplete ? null : cancelPanAnimation;
     },
-    [applyViewportPanPosition, cancelViewportAnimation, commitViewport, getViewport],
+    [
+      applyViewportPanPosition,
+      cancelViewportAnimation,
+      commitViewport,
+      getViewport,
+    ],
   );
 
   useEffect(() => cancelViewportAnimation, [cancelViewportAnimation]);

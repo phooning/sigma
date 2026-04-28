@@ -1,14 +1,14 @@
-import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { expect, type Page, type TestInfo, test } from "@playwright/test";
 import {
   deleteAllItems,
   dropFiles,
+  type FrameSamplerResult,
   gotoApp,
   mediaItems,
   seedCanvasItems,
   startFrameSampler,
   stopFrameSampler,
   waitForAnimationFrames,
-  type FrameSamplerResult,
 } from "./helpers";
 
 const isCi = Boolean(process.env.CI);

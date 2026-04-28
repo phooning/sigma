@@ -1,5 +1,5 @@
-import InfiniteCanvas from "./InfiniteCanvas";
 import { Toaster } from "./components/ui/sonner";
+import InfiniteCanvas from "./InfiniteCanvas";
 
 function App() {
   return (

@@ -1,5 +1,6 @@
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { type CSSProperties, useCallback, useEffect, useRef } from "react";
-import {
+import type {
   CropHandle,
   CropInsets,
   ImageLodAssets,
@@ -8,10 +9,9 @@ import {
   SetItems,
   VideoLodAssets,
 } from "./media.types";
-import type { ViewBounds } from "./viewport.types";
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { getViewBounds } from "./viewport";
 import { getImageLod, shouldRequestVideoThumbnail } from "./videoUtils";
+import { getViewBounds } from "./viewport";
+import type { ViewBounds } from "./viewport.types";
 
 export const VIDEO_EXTENSIONS = ["mp4", "webm", "mov", "mkv"];
 export const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp"];
@@ -72,7 +72,9 @@ export const advanceViewportGeneration = () => {
 
 export const getViewportGeneration = () => viewportGeneration;
 
-const subscribeViewportGeneration = (listener: (generation: number) => void) => {
+const subscribeViewportGeneration = (
+  listener: (generation: number) => void,
+) => {
   viewportGenerationListeners.add(listener);
   return () => {
     viewportGenerationListeners.delete(listener);
@@ -89,7 +91,10 @@ export type MediaQueueOptions = {
 
 type DecodePriority = "visible" | "prefetch" | "background";
 
-const hasMatchingAssetSource = (currentItem: MediaItem, requestedItem: MediaItem) =>
+const hasMatchingAssetSource = (
+  currentItem: MediaItem,
+  requestedItem: MediaItem,
+) =>
   currentItem.id === requestedItem.id &&
   currentItem.type === requestedItem.type &&
   currentItem.filePath === requestedItem.filePath;
@@ -373,7 +378,8 @@ export function useThumbnailQueue(setItems: SetItems) {
       if (generation < currentGeneration) return;
 
       const priority = computeDecodePriority(item, options.viewBounds);
-      if (priority === "background" || requestedRef.current.has(item.id)) return;
+      if (priority === "background" || requestedRef.current.has(item.id))
+        return;
 
       requestedRef.current.set(item.id, generation);
       void decodePreview({
@@ -462,9 +468,10 @@ export function useDecodeArbiterFeeder({
     [getViewport, requestImagePreview, requestThumbnail],
   );
 
-  useEffect(() => subscribeViewportGeneration(feedViewportDecodeRequests), [
-    feedViewportDecodeRequests,
-  ]);
+  useEffect(
+    () => subscribeViewportGeneration(feedViewportDecodeRequests),
+    [feedViewportDecodeRequests],
+  );
 
   useEffect(() => {
     feedViewportDecodeRequests();

@@ -1,4 +1,4 @@
-import { TCropStart, TResizeStart } from "@/components/ImageActions";
+import type { TCropStart, TResizeStart } from "@/components/ImageActions";
 
 export interface CropInsets {
   top: number;

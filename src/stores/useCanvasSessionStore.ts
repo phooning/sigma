@@ -27,10 +27,8 @@ type CanvasSessionStore = CanvasSessionSnapshot & {
   loadSessionFromFile: () => Promise<boolean>;
 };
 
-const resolveStateUpdate = <T,>(
-  value: T | ((prevState: T) => T),
-  prev: T,
-): T => (typeof value === "function" ? (value as (prevState: T) => T)(prev) : value);
+const resolveStateUpdate = <T>(value: T | ((prevState: T) => T), prev: T): T =>
+  typeof value === "function" ? (value as (prevState: T) => T)(prev) : value;
 
 const attachMediaUrls = (item: MediaItem) => {
   const nextUrls = {

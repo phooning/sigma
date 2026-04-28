@@ -81,7 +81,10 @@ const getDesiredAssets = () => {
       Math.max(1, Math.round(asset.renderedHeightPx)) *
       4;
 
-    if (desired.length > 0 && estimatedBytes + predictedBytes > MAX_CACHE_BYTES) {
+    if (
+      desired.length > 0 &&
+      estimatedBytes + predictedBytes > MAX_CACHE_BYTES
+    ) {
       continue;
     }
 
@@ -212,7 +215,11 @@ async function loadAsset(asset: NativeImageManifestAsset) {
     const blob = await response.blob();
     const bitmap = await createImageBitmap(blob);
     const current = cache.get(asset.id);
-    if (!current || current.version !== version || current.path !== asset.path) {
+    if (
+      !current ||
+      current.version !== version ||
+      current.path !== asset.path
+    ) {
       bitmap.close();
       return;
     }

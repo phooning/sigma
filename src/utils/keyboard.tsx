@@ -1,6 +1,6 @@
-import { useEffect } from "react";
 import type { SetStateAction } from "react";
-import { MediaItem } from "./media.types";
+import { useEffect } from "react";
+import type { MediaItem } from "./media.types";
 
 type CanvasHotkeyConfig = {
   containerRef: React.RefObject<HTMLDivElement | null>;

@@ -2,26 +2,26 @@ import { useEffect, useRef, useState } from "react";
 import { useAudioPlaybackStore } from "../stores/useAudioPlaybackStore";
 import {
   getStoredVideoLoop,
-  useVideoExportStore
+  useVideoExportStore,
 } from "../stores/useVideoExportStore";
-import { useVideoLoop } from "./useVideoLoop";
-import { useVideoPlayback } from "./useVideoPlayback";
-import { useVideoTimeline } from "./useVideoTimeline";
+import { getCropBoxStyle } from "../utils/media";
 import {
   getVideoLod,
   initialLoopState,
-  shouldRequestVideoThumbnail
+  shouldRequestVideoThumbnail,
 } from "../utils/videoUtils";
-import { getCropBoxStyle } from "../utils/media";
+import { useVideoLoop } from "./useVideoLoop";
+import { useVideoPlayback } from "./useVideoPlayback";
+import { useVideoTimeline } from "./useVideoTimeline";
+import type { VideoMediaProps } from "./Video.types";
 import { VideoLoadProxy, VideoProxy, VideoThumbnail } from "./VideoLodViews";
 import { VideoTimeline } from "./VideoTimeline";
-import type { VideoMediaProps } from "./Video.types";
 import type { StopCanvasGestureHandler } from "./VideoTimeline.types";
 
 export {
   clampVideoTime,
   getVideoLod,
-  shouldRequestVideoThumbnail
+  shouldRequestVideoThumbnail,
 } from "../utils/videoUtils";
 
 export function VideoMedia({
@@ -30,7 +30,7 @@ export function VideoMedia({
   item,
   isInViewport,
   zoom,
-  onThumbnailNeeded
+  onThumbnailNeeded,
 }: VideoMediaProps) {
   const [isLoadRequested, setIsLoadRequested] = useState(false);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
@@ -77,12 +77,12 @@ export function VideoMedia({
     stopTimelineAnimation,
     syncPlaybackRate,
     syncTimelineFromVideo,
-    updateVideoMetadata
+    updateVideoMetadata,
   } = useVideoTimeline({
     videoRef,
     url,
     item,
-    loopRef: externalLoopRef
+    loopRef: externalLoopRef,
   });
 
   const { loop, setLoopPoint, toggleLoop, clearLoop } = useVideoLoop({
@@ -93,7 +93,7 @@ export function VideoMedia({
     initialLoop,
     duration,
     url,
-    syncTimelineFromVideo
+    syncTimelineFromVideo,
   });
 
   useEffect(() => {
@@ -108,7 +108,7 @@ export function VideoMedia({
       shouldDeferVideoLoad,
       onPause: stopTimelineAnimation,
       onPlay: startTimelineAnimation,
-      onPlaybackError: setPlaybackError
+      onPlaybackError: setPlaybackError,
     });
 
   useEffect(() => {
@@ -175,7 +175,7 @@ export function VideoMedia({
           onRateChange={(e) => {
             syncPlaybackRate(
               e.currentTarget.currentTime,
-              e.currentTarget.playbackRate
+              e.currentTarget.playbackRate,
             );
           }}
           onSeeked={(e) => {
@@ -189,7 +189,7 @@ export function VideoMedia({
           }}
           onError={() => {
             setPlaybackError(
-              "Playback failed. This file may need transcoding."
+              "Playback failed. This file may need transcoding.",
             );
           }}
           onDragStart={(e) => e.preventDefault()}

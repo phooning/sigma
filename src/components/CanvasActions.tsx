@@ -1,8 +1,8 @@
-import { RefObject, WheelEvent } from "react";
-import { MediaItem, Viewport } from "../utils/media.types";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import type { RefObject, WheelEvent } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { IMAGE_EXTENSIONS, VIDEO_EXTENSIONS } from "../utils/media";
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import type { MediaItem, Viewport } from "../utils/media.types";
 import { applyPanDelta, applyZoomAtPoint } from "../utils/viewportMath";
 
 export type WheelInputType = "trackpad-pan" | "zoom";
@@ -40,7 +40,7 @@ const probeMedia = async (path: string): Promise<MediaFileInfo> => {
   try {
     // Probe the media natively through Rust instead of metadata.
     const info = await invoke<MediaFileInfo | null>("probe_media", {
-      path
+      path,
     });
 
     return info ?? {};
@@ -50,7 +50,7 @@ const probeMedia = async (path: string): Promise<MediaFileInfo> => {
 };
 
 const probeImages = async (
-  paths: string[]
+  paths: string[],
 ): Promise<Map<string, ImageProbe>> => {
   if (paths.length === 0) return new Map();
 
@@ -74,7 +74,7 @@ const chunk = <T,>(values: T[], size: number) => {
 
 const runWithConcurrency = async (
   tasks: Array<() => Promise<void>>,
-  concurrency: number
+  concurrency: number,
 ) => {
   let nextTaskIndex = 0;
 
@@ -90,7 +90,7 @@ const runWithConcurrency = async (
 
         await task();
       }
-    })
+    }),
   );
 };
 
@@ -99,7 +99,7 @@ export const getWheelInputType = (e: WheelEvent): WheelInputType =>
 
 export const handlePanAction = ({
   e,
-  viewport
+  viewport,
 }: {
   e: WheelEvent;
   viewport: Viewport;
@@ -108,7 +108,7 @@ export const handlePanAction = ({
 export const handleZoomAction = ({
   e,
   viewport,
-  containerRef
+  containerRef,
 }: {
   e: WheelEvent;
   viewport: Viewport;
@@ -127,7 +127,7 @@ export const handleZoomAction = ({
 
 export const onDropMedia = async ({
   paths,
-  viewportRef
+  viewportRef,
 }: {
   paths: string[];
   viewportRef: RefObject<Viewport>;
@@ -145,10 +145,10 @@ export const onDropMedia = async ({
           filePath,
           index,
           type: isVideo ? "video" : "image",
-          url: convertFileSrc(filePath)
-        }
+          url: convertFileSrc(filePath),
+        },
       ];
-    }
+    },
   );
 
   if (supportedMedia.length === 0) {
@@ -164,7 +164,7 @@ export const onDropMedia = async ({
     media: SupportedDropMedia,
     width: number,
     height: number,
-    extra: Partial<MediaItem> = {}
+    extra: Partial<MediaItem> = {},
   ): MediaItem => ({
     id: uuidv4(),
     type: media.type,
@@ -176,7 +176,7 @@ export const onDropMedia = async ({
     height: width
       ? (height / width) * DEFAULT_MEDIA_WIDTH
       : DEFAULT_VIDEO_HEIGHT,
-    ...extra
+    ...extra,
   });
 
   const tasks: Array<() => Promise<void>> = [];
@@ -185,7 +185,7 @@ export const onDropMedia = async ({
   for (const imageBatch of chunk(imageMedia, IMAGE_PROBE_BATCH_SIZE)) {
     tasks.push(async () => {
       const probes = await probeImages(
-        imageBatch.map((media) => media.filePath)
+        imageBatch.map((media) => media.filePath),
       );
 
       imageBatch.forEach((media) => {
@@ -198,8 +198,8 @@ export const onDropMedia = async ({
           createItem(media, width, height, {
             fileSize: probe?.size,
             sourceWidth: width,
-            sourceHeight: height
-          })
+            sourceHeight: height,
+          }),
         );
       });
     });
@@ -210,7 +210,7 @@ export const onDropMedia = async ({
     .forEach((media) => {
       tasks.push(async () => {
         const { width, height, duration, size } = await probeMedia(
-          media.filePath
+          media.filePath,
         );
         const mediaWidth = width || DEFAULT_MEDIA_WIDTH;
         const mediaHeight = height || DEFAULT_VIDEO_HEIGHT;
@@ -224,8 +224,8 @@ export const onDropMedia = async ({
             sourceHeight: mediaHeight,
             deferVideoLoad:
               typeof size === "number" &&
-              size >= LARGE_VIDEO_LOAD_THRESHOLD_BYTES
-          })
+              size >= LARGE_VIDEO_LOAD_THRESHOLD_BYTES,
+          }),
         );
       });
     });

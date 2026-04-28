@@ -17,10 +17,7 @@ const imageItem: MediaItem = {
   sourceHeight: 4000,
 };
 
-const renderImageActions = (
-  item: MediaItem,
-  requestImagePreview = vi.fn(),
-) =>
+const renderImageActions = (item: MediaItem, requestImagePreview = vi.fn()) =>
   render(
     <ImageActions
       id={item.id}
@@ -44,7 +41,10 @@ describe("ImageActions LOD fallback", () => {
     renderImageActions(imageItem, requestImagePreview);
 
     const image = screen.getByAltText("canvas item");
-    expect(image).toHaveAttribute("src", expect.stringMatching(/^data:image\/svg\+xml/));
+    expect(image).toHaveAttribute(
+      "src",
+      expect.stringMatching(/^data:image\/svg\+xml/),
+    );
     expect(image).not.toHaveAttribute("src", "asset:///images/full-res.png");
     await waitFor(() => {
       expect(requestImagePreview).toHaveBeenCalledWith(imageItem, 1024);

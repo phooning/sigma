@@ -1,6 +1,6 @@
 import type {
-  MouseEvent as ReactMouseEvent,
   MutableRefObject,
+  MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
   RefObject,
 } from "react";

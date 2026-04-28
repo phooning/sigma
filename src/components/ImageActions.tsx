@@ -1,11 +1,11 @@
+import { useEffect } from "react";
 import {
-  clamp,
   CROP_HANDLES,
+  clamp,
   getCropBoxStyle,
   MIN_MEDIA_SIZE,
 } from "../utils/media";
-import { useEffect } from "react";
-import { CropHandle, CropInsets, MediaItem } from "../utils/media.types";
+import type { CropHandle, CropInsets, MediaItem } from "../utils/media.types";
 import { getImageLod, type ImageLod } from "../utils/videoUtils";
 
 export type TCropStart = {
@@ -168,10 +168,7 @@ const getImagePreviewUrl = (item: MediaItem, lod: ImageLod) => {
   return item.url;
 };
 
-export const resetImageSize = (
-  e: React.MouseEvent,
-  item?: MediaItem,
-) => {
+export const resetImageSize = (e: React.MouseEvent, item?: MediaItem) => {
   e.stopPropagation();
 
   if (

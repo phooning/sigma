@@ -1,4 +1,3 @@
-import { HOTKEY_ROWS } from "../constants";
 import {
   Field,
   FieldContent,
@@ -6,6 +5,7 @@ import {
   FieldGroup,
   FieldLabel,
 } from "../../ui/field";
+import { HOTKEY_ROWS } from "../constants";
 
 export function HotkeysSettings() {
   return (
