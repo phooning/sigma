@@ -19,7 +19,7 @@ export function VideoTimeline({
   stopTimelineAnimation,
   timelineRef,
   toggleLoop,
-  togglePlayback,
+  togglePlayback
 }: VideoTimelineProps) {
   const loopRange = getLoopRange(loop);
 
@@ -27,6 +27,7 @@ export function VideoTimeline({
     <>
       {duration > 0 && (
         <div
+          role="presentation"
           className={`video-timeline ${isScrubbing ? "is-scrubbing" : ""}`}
           onPointerDown={stopCanvasGesture}
           onPointerMove={stopCanvasGesture}
@@ -130,7 +131,7 @@ export function VideoTimeline({
           <div className="video-timeline-time">
             {formatVideoTime(currentTime)} / {formatVideoTime(duration)}
           </div>
-          <div className="video-loop-controls" aria-label="Loop controls">
+          <div className="video-loop-controls">
             <button
               type="button"
               className="video-loop-btn"

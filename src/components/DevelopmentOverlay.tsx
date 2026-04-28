@@ -28,29 +28,29 @@ const parseGpuInfo = (stdout: string) => {
     return {
       gpuName: display?.sppci_model ?? display?._name ?? UNKNOWN_VALUE,
       vramUsage:
-        display?.spdisplays_vram ?? display?.sppci_vram ?? "Unified memory",
+        display?.spdisplays_vram ?? display?.sppci_vram ?? "Unified memory"
     };
   } catch {
     return {
       gpuName: UNKNOWN_VALUE,
-      vramUsage: UNKNOWN_VALUE,
+      vramUsage: UNKNOWN_VALUE
     };
   }
 };
 
 const parseGpuUsage = (stdout: string) => {
   const utilizationMatch = stdout.match(
-    /"(?:Device Utilization %|GPU Utilization|GPU Usage)"\s*=\s*(\d+(?:\.\d+)?)/i,
+    /"(?:Device Utilization %|GPU Utilization|GPU Usage)"\s*=\s*(\d+(?:\.\d+)?)/i
   );
   const memoryMatch = stdout.match(
-    /"(?:In use system memory|VRAM Used|vramUsedBytes)"\s*=\s*(\d+)/i,
+    /"(?:In use system memory|VRAM Used|vramUsedBytes)"\s*=\s*(\d+)/i
   );
 
   return {
     gpuUsage: utilizationMatch ? `${utilizationMatch[1]}%` : UNKNOWN_VALUE,
     vramUsage: memoryMatch
       ? `${Math.round(Number(memoryMatch[1]) / 1024 / 1024)} MB`
-      : undefined,
+      : undefined
   };
 };
 
@@ -62,14 +62,14 @@ const pollGpuStats = async () => {
       "-w",
       "0",
       "-c",
-      "AGXStatistics",
-    ]).execute(),
+      "AGXStatistics"
+    ]).execute()
   ]);
 
   const nextStats = {
     gpuUsage: UNKNOWN_VALUE,
     gpuName: UNKNOWN_VALUE,
-    vramUsage: UNKNOWN_VALUE,
+    vramUsage: UNKNOWN_VALUE
   };
 
   if (gpuInfoOutput.status === "fulfilled") {
@@ -87,7 +87,7 @@ const pollGpuStats = async () => {
 
 const DevelopmentOverlay = ({
   canvasRef,
-  totalVideoCount,
+  totalVideoCount
 }: DevelopmentOverlayProps) => {
   const {
     devMode,
@@ -96,7 +96,7 @@ const DevelopmentOverlay = ({
     activeVideoCount,
     gpuUsage,
     gpuName,
-    vramUsage,
+    vramUsage
   } = useDevStore();
 
   useEffect(() => {
@@ -116,19 +116,19 @@ const DevelopmentOverlay = ({
       if (delta >= 500) {
         const videoElements =
           canvasRef.current?.querySelectorAll<HTMLVideoElement>(
-            "video.media-content",
+            "video.media-content"
           ) ?? [];
         const activeVideoCount = Array.from(videoElements).filter(
-          (video) => !video.paused && !video.ended && video.readyState > 2,
+          (video) => !video.paused && !video.ended && video.readyState > 2
         ).length;
 
         useDevStore.getState().setFrameStats({
           fps: Math.round((frames / delta) * 1000),
-          frameTimeMs: Number((delta / frames).toFixed(1)),
+          frameTimeMs: Number((delta / frames).toFixed(1))
         });
         useDevStore.getState().setVideoStats({
           activeVideoCount,
-          totalVideoCount,
+          totalVideoCount
         });
 
         frames = 0;
