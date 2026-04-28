@@ -12,7 +12,6 @@ const {
   dragDropState,
   invokeMock,
   openMock,
-  revealItemInDirMock,
   saveMock,
   toastMock,
   writeTextFileMock,
@@ -96,7 +95,6 @@ const {
     },
     invokeMock,
     openMock: vi.fn(),
-    revealItemInDirMock: vi.fn(),
     saveMock: vi.fn(),
     toastMock: {
       success: vi.fn(),
@@ -149,10 +147,6 @@ vi.mock("sonner", () => ({
   toast: toastMock,
 }));
 
-vi.mock("@tauri-apps/plugin-opener", () => ({
-  revealItemInDir: revealItemInDirMock,
-}));
-
 vi.mock("@tauri-apps/plugin-fs", () => ({
   writeTextFile: writeTextFileMock,
   readTextFile: vi.fn(),
@@ -165,6 +159,12 @@ vi.mock("@tauri-apps/plugin-shell", () => ({
     })),
   },
 }));
+
+const revealItemInDirMock = (
+  globalThis as typeof globalThis & {
+    __SIGMA_REVEAL_ITEM_IN_DIR_MOCK__: ReturnType<typeof vi.fn>;
+  }
+).__SIGMA_REVEAL_ITEM_IN_DIR_MOCK__;
 
 beforeAll(() => {
   defaultViewport = {

@@ -1,4 +1,16 @@
 import "@testing-library/jest-dom";
+import { vi } from "vitest";
+
+const revealItemInDirMock = vi.fn();
+
+Object.defineProperty(globalThis, "__SIGMA_REVEAL_ITEM_IN_DIR_MOCK__", {
+  configurable: true,
+  value: revealItemInDirMock,
+});
+
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  revealItemInDir: (...args: unknown[]) => revealItemInDirMock(...args),
+}));
 
 if (!Element.prototype.setPointerCapture) {
   Element.prototype.setPointerCapture = () => {};
