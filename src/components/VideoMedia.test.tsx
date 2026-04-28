@@ -50,6 +50,9 @@ describe("VideoMedia timeline", () => {
     );
 
     const video = document.querySelector("video");
+    if (!(video instanceof HTMLVideoElement)) {
+      throw new Error("Expected video element to be rendered");
+    }
     expect(video).toBeInTheDocument();
 
     Object.defineProperty(video, "duration", {
@@ -64,7 +67,7 @@ describe("VideoMedia timeline", () => {
       },
     });
 
-    fireEvent.loadedMetadata(video!);
+    fireEvent.loadedMetadata(video);
 
     const timeline = await screen.findByRole("slider", {
       name: /video timeline/i,
@@ -109,6 +112,9 @@ describe("VideoMedia timeline", () => {
     );
 
     const video = document.querySelector("video");
+    if (!(video instanceof HTMLVideoElement)) {
+      throw new Error("Expected video element to be rendered");
+    }
     expect(video).toBeInTheDocument();
 
     Object.defineProperty(video, "duration", {
@@ -123,17 +129,17 @@ describe("VideoMedia timeline", () => {
       },
     });
 
-    fireEvent.loadedMetadata(video!);
+    fireEvent.loadedMetadata(video);
     const timeline = await screen.findByRole("slider", {
       name: /video timeline/i,
     });
 
     currentTime = 5;
-    fireEvent.timeUpdate(video!);
+    fireEvent.timeUpdate(video);
     fireEvent.click(screen.getByRole("button", { name: /set loop a point/i }));
 
     currentTime = 15;
-    fireEvent.timeUpdate(video!);
+    fireEvent.timeUpdate(video);
     fireEvent.click(screen.getByRole("button", { name: /set loop b point/i }));
 
     const loopButton = screen.getByRole("button", {
@@ -163,6 +169,9 @@ describe("VideoMedia timeline", () => {
     );
 
     const video = document.querySelector("video");
+    if (!(video instanceof HTMLVideoElement)) {
+      throw new Error("Expected video element to be rendered");
+    }
     expect(video).toBeInTheDocument();
 
     Object.defineProperty(video, "duration", {
@@ -174,7 +183,7 @@ describe("VideoMedia timeline", () => {
       await screen.findByRole("slider", { name: /video timeline/i }),
     ).toHaveAttribute("aria-valuemax", "20");
 
-    fireEvent.durationChange(video!);
+    fireEvent.durationChange(video);
 
     expect(
       screen.getByRole("slider", { name: /video timeline/i }),
@@ -212,19 +221,19 @@ describe("VideoMedia timeline", () => {
       configurable: true,
       value: vi.fn(() => {
         paused = true;
-        fireEvent.pause(video!);
+        fireEvent.pause(video);
       }),
     });
     Object.defineProperty(video, "play", {
       configurable: true,
       value: vi.fn(() => {
         paused = false;
-        fireEvent.play(video!);
+        fireEvent.play(video);
         return Promise.resolve();
       }),
     });
 
-    fireEvent.loadedMetadata(video!);
+    fireEvent.loadedMetadata(video);
 
     const pauseButton = await screen.findByRole("button", {
       name: /pause video/i,
@@ -233,14 +242,14 @@ describe("VideoMedia timeline", () => {
     fireEvent.click(pauseButton);
 
     expect(parentPointerDown).not.toHaveBeenCalled();
-    expect(video!.pause).toHaveBeenCalled();
+    expect(video.pause).toHaveBeenCalled();
     expect(
       screen.getByRole("button", { name: /play video/i }),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /play video/i }));
 
-    expect(video!.play).toHaveBeenCalled();
+    expect(video.play).toHaveBeenCalled();
     expect(
       screen.getByRole("button", { name: /pause video/i }),
     ).toBeInTheDocument();

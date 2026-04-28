@@ -57,8 +57,11 @@ describe("InfiniteCanvas media loading", () => {
       const found = document.querySelector(
         "video.media-content",
       ) as HTMLVideoElement | null;
+      if (!found) {
+        throw new Error("Expected selected video element to be rendered");
+      }
       expect(found).toBeInTheDocument();
-      return found!;
+      return found;
     });
     const pause = vi.fn();
     Object.defineProperty(video, "paused", {

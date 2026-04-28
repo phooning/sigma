@@ -159,7 +159,7 @@ const DevelopmentOverlay = ({
   if (!devMode) return null;
 
   return (
-    <div className="development-stats" aria-label="Development stats">
+    <section className="development-stats" aria-label="Development stats">
       <div>
         <span>FPS</span>
         <strong>{fps}</strong>
@@ -182,7 +182,7 @@ const DevelopmentOverlay = ({
         <span>VRAM usage</span>
         <strong>{vramUsage}</strong>
       </div>
-    </div>
+    </section>
   );
 };
 

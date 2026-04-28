@@ -26,14 +26,7 @@ export function VideoTimeline({
   return (
     <>
       {duration > 0 && (
-        <div
-          role="presentation"
-          className={`video-timeline ${isScrubbing ? "is-scrubbing" : ""}`}
-          onPointerDown={stopCanvasGesture}
-          onPointerMove={stopCanvasGesture}
-          onPointerUp={stopCanvasGesture}
-          onClick={stopCanvasGesture}
-        >
+        <div className={`video-timeline ${isScrubbing ? "is-scrubbing" : ""}`}>
           <button
             type="button"
             className="video-playback-btn"
