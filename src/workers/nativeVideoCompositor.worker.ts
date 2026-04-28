@@ -1,3 +1,5 @@
+/// <reference types="@webgpu/types" />
+
 type NativeVisibleAsset = {
   id: string;
   screenX: number;
@@ -457,35 +459,23 @@ class Canvas2dRenderer implements Renderer {
 
 class WebGpuRenderer implements Renderer {
   readonly name = "webgpu";
-  private readonly context: any;
-  private readonly renderPipeline: any;
-  private readonly computePipeline: any;
-  private readonly sampler: any;
-  private readonly gpuFrames = new Map<
-    string,
-    {
-      width: number;
-      height: number;
-      yTexture: any;
-      uTexture: any;
-      vTexture: any;
-      rgbaTexture: any;
-      computeBindGroup: any;
-      renderBindGroup: any;
-      vertexBuffer: any;
-      layout: Layout | null;
-    }
-  >();
+  private readonly context: GPUCanvasContext;
+  private readonly renderPipeline: GPURenderPipeline;
+  private readonly computePipeline: GPUComputePipeline;
+  private readonly sampler: GPUSampler;
+  private readonly gpuFrames = new Map<string, WebGpuFrame>();
 
   constructor(
     private readonly canvas: OffscreenCanvas,
-    gpu: any,
-    private readonly device: any,
+    gpu: GPU,
+    private readonly device: GPUDevice,
     width: number,
     height: number,
     ratio: number,
   ) {
-    const context = canvas.getContext("webgpu" as OffscreenRenderingContextId);
+    const context = canvas.getContext(
+      "webgpu" as OffscreenRenderingContextId,
+    ) as GPUCanvasContext | null;
     if (!context) {
       throw new Error("WebGPU canvas context is unavailable.");
     }
@@ -560,7 +550,11 @@ class WebGpuRenderer implements Renderer {
     this.device.queue.submit([encoder.finish()]);
   }
 
-  private uploadYuvFrame(encoder: any, streamId: string, frame: Frame) {
+  private uploadYuvFrame(
+    encoder: GPUCommandEncoder,
+    streamId: string,
+    frame: Frame,
+  ) {
     const yPlane = frame.yPlane;
     const uPlane = frame.uPlane;
     const vPlane = frame.vPlane;
@@ -571,23 +565,23 @@ class WebGpuRenderer implements Renderer {
     const chromaWidth = frame.width / 2;
     const chromaHeight = frame.height / 2;
 
-    this.device.queue.writeTexture(
-      { texture: gpuFrame.yTexture },
+    this.writePlaneTexture(
+      gpuFrame.yTexture,
       yPlane,
-      { bytesPerRow: frame.stride, rowsPerImage: frame.height },
-      { width: frame.width, height: frame.height },
+      frame.width,
+      frame.height,
     );
-    this.device.queue.writeTexture(
-      { texture: gpuFrame.uTexture },
+    this.writePlaneTexture(
+      gpuFrame.uTexture,
       uPlane,
-      { bytesPerRow: chromaWidth, rowsPerImage: chromaHeight },
-      { width: chromaWidth, height: chromaHeight },
+      chromaWidth,
+      chromaHeight,
     );
-    this.device.queue.writeTexture(
-      { texture: gpuFrame.vTexture },
+    this.writePlaneTexture(
+      gpuFrame.vTexture,
       vPlane,
-      { bytesPerRow: chromaWidth, rowsPerImage: chromaHeight },
-      { width: chromaWidth, height: chromaHeight },
+      chromaWidth,
+      chromaHeight,
     );
 
     const computePass = encoder.beginComputePass();
@@ -604,6 +598,26 @@ class WebGpuRenderer implements Renderer {
     metricsWindow.uploadLatencyMs.push(performance.now() - uploadStarted);
   }
 
+  private writePlaneTexture(
+    texture: GPUTexture,
+    plane: Uint8Array,
+    width: number,
+    height: number,
+  ) {
+    const bytesPerRow = alignTo(width, 256);
+    const source =
+      bytesPerRow === width
+        ? plane
+        : padPlaneRows(plane, width, height, bytesPerRow);
+
+    this.device.queue.writeTexture(
+      { texture },
+      source,
+      { bytesPerRow, rowsPerImage: height },
+      { width, height },
+    );
+  }
+
   private prepareFrame(streamId: string, frame: Frame) {
     const existing = this.gpuFrames.get(streamId);
     if (
@@ -614,31 +628,25 @@ class WebGpuRenderer implements Renderer {
       return existing;
     }
 
-    const usage = (globalThis as any).GPUTextureUsage;
-    const bufferUsage = (globalThis as any).GPUBufferUsage;
     const yTexture = this.device.createTexture({
       size: [frame.width, frame.height, 1],
       format: "r8unorm",
-      usage: usage.TEXTURE_BINDING | usage.COPY_DST,
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
     });
     const uTexture = this.device.createTexture({
       size: [frame.width / 2, frame.height / 2, 1],
       format: "r8unorm",
-      usage: usage.TEXTURE_BINDING | usage.COPY_DST,
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
     });
     const vTexture = this.device.createTexture({
       size: [frame.width / 2, frame.height / 2, 1],
       format: "r8unorm",
-      usage: usage.TEXTURE_BINDING | usage.COPY_DST,
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
     });
     const rgbaTexture = this.device.createTexture({
       size: [frame.width, frame.height, 1],
       format: "rgba8unorm",
-      usage:
-        usage.TEXTURE_BINDING |
-        usage.STORAGE_BINDING |
-        usage.COPY_DST |
-        usage.RENDER_ATTACHMENT,
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING,
     });
     const computeBindGroup = this.device.createBindGroup({
       layout: this.computePipeline.getBindGroupLayout(0),
@@ -658,7 +666,7 @@ class WebGpuRenderer implements Renderer {
     });
     const vertexBuffer = this.device.createBuffer({
       size: 6 * 4 * Float32Array.BYTES_PER_ELEMENT,
-      usage: bufferUsage.VERTEX | bufferUsage.COPY_DST,
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
     });
     const gpuFrame = {
       width: frame.width,
@@ -676,10 +684,7 @@ class WebGpuRenderer implements Renderer {
     return gpuFrame;
   }
 
-  private updateVertexBufferIfNeeded(
-    gpuFrame: { vertexBuffer: any; layout: Layout | null },
-    layout: Layout,
-  ) {
+  private updateVertexBufferIfNeeded(gpuFrame: WebGpuFrame, layout: Layout) {
     if (layoutsEqual(gpuFrame.layout, layout)) return;
 
     this.device.queue.writeBuffer(
@@ -727,7 +732,7 @@ fn yuv420ToRgba(@builtin(global_invocation_id) id: vec3u) {
     });
   }
 
-  private createRenderPipeline(format: string) {
+  private createRenderPipeline(format: GPUTextureFormat) {
     const shader = this.device.createShaderModule({
       code: `
 struct VertexOut {
@@ -782,13 +787,26 @@ fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
   }
 }
 
+type WebGpuFrame = {
+  width: number;
+  height: number;
+  yTexture: GPUTexture;
+  uTexture: GPUTexture;
+  vTexture: GPUTexture;
+  rgbaTexture: GPUTexture;
+  computeBindGroup: GPUBindGroup;
+  renderBindGroup: GPUBindGroup;
+  vertexBuffer: GPUBuffer;
+  layout: Layout | null;
+};
+
 async function createWebGpuRenderer(
   canvas: OffscreenCanvas,
   width: number,
   height: number,
   ratio: number,
 ) {
-  const gpu = (navigator as unknown as { gpu?: any }).gpu;
+  const gpu = (navigator as unknown as { gpu?: GPU }).gpu;
   if (!gpu) return null;
 
   const adapter = await gpu.requestAdapter();
@@ -944,6 +962,27 @@ function stableStreamId(value: string) {
   }
 
   return hash.toString();
+}
+
+function alignTo(value: number, alignment: number) {
+  return Math.ceil(value / alignment) * alignment;
+}
+
+function padPlaneRows(
+  plane: Uint8Array,
+  rowBytes: number,
+  rowCount: number,
+  paddedRowBytes: number,
+) {
+  const padded = new Uint8Array(paddedRowBytes * rowCount);
+  for (let row = 0; row < rowCount; row += 1) {
+    const sourceOffset = row * rowBytes;
+    padded.set(
+      plane.subarray(sourceOffset, sourceOffset + rowBytes),
+      row * paddedRowBytes,
+    );
+  }
+  return padded;
 }
 
 export {};
