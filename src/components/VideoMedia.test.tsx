@@ -11,25 +11,25 @@ const videoItem: MediaItem = {
   x: 0,
   y: 0,
   width: 1280,
-  height: 720
+  height: 720,
 };
 
 const crop = {
   left: 0,
   top: 0,
   right: 0,
-  bottom: 0
+  bottom: 0,
 };
 
 describe("VideoMedia timeline", () => {
   beforeEach(() => {
     Object.defineProperty(globalThis.HTMLMediaElement.prototype, "play", {
       configurable: true,
-      value: vi.fn(() => Promise.resolve())
+      value: vi.fn(() => Promise.resolve()),
     });
     Object.defineProperty(globalThis.HTMLMediaElement.prototype, "pause", {
       configurable: true,
-      value: vi.fn()
+      value: vi.fn(),
     });
   });
 
@@ -46,7 +46,7 @@ describe("VideoMedia timeline", () => {
           isInViewport
           zoom={1}
         />
-      </div>
+      </div>,
     );
 
     const video = document.querySelector("video");
@@ -57,20 +57,20 @@ describe("VideoMedia timeline", () => {
 
     Object.defineProperty(video, "duration", {
       configurable: true,
-      get: () => 20
+      get: () => 20,
     });
     Object.defineProperty(video, "currentTime", {
       configurable: true,
       get: () => currentTime,
       set: (value) => {
         currentTime = value;
-      }
+      },
     });
 
     fireEvent.loadedMetadata(video);
 
     const timeline = await screen.findByRole("slider", {
-      name: /video timeline/i
+      name: /video timeline/i,
     });
     Object.defineProperty(timeline, "getBoundingClientRect", {
       configurable: true,
@@ -83,13 +83,13 @@ describe("VideoMedia timeline", () => {
         height: 18,
         x: 10,
         y: 0,
-        toJSON: () => {}
-      })
+        toJSON: () => {},
+      }),
     });
 
     fireEvent.pointerDown(timeline, {
       clientX: 110,
-      pointerId: 1
+      pointerId: 1,
     });
 
     expect(parentPointerDown).not.toHaveBeenCalled();
@@ -108,7 +108,7 @@ describe("VideoMedia timeline", () => {
         item={videoItem}
         isInViewport
         zoom={1}
-      />
+      />,
     );
 
     const video = document.querySelector("video");
@@ -119,19 +119,19 @@ describe("VideoMedia timeline", () => {
 
     Object.defineProperty(video, "duration", {
       configurable: true,
-      get: () => 20
+      get: () => 20,
     });
     Object.defineProperty(video, "currentTime", {
       configurable: true,
       get: () => currentTime,
       set: (value) => {
         currentTime = value;
-      }
+      },
     });
 
     fireEvent.loadedMetadata(video);
     const timeline = await screen.findByRole("slider", {
-      name: /video timeline/i
+      name: /video timeline/i,
     });
 
     currentTime = 5;
@@ -143,7 +143,7 @@ describe("VideoMedia timeline", () => {
     fireEvent.click(screen.getByRole("button", { name: /set loop b point/i }));
 
     const loopButton = screen.getByRole("button", {
-      name: /toggle a\/b loop/i
+      name: /toggle a\/b loop/i,
     });
     fireEvent.click(loopButton);
 
@@ -165,7 +165,7 @@ describe("VideoMedia timeline", () => {
         item={{ ...videoItem, duration: 20 }}
         isInViewport
         zoom={1}
-      />
+      />,
     );
 
     const video = document.querySelector("video");
@@ -176,17 +176,17 @@ describe("VideoMedia timeline", () => {
 
     Object.defineProperty(video, "duration", {
       configurable: true,
-      get: () => duration
+      get: () => duration,
     });
 
     expect(
-      await screen.findByRole("slider", { name: /video timeline/i })
+      await screen.findByRole("slider", { name: /video timeline/i }),
     ).toHaveAttribute("aria-valuemax", "20");
 
     fireEvent.durationChange(video);
 
     expect(
-      screen.getByRole("slider", { name: /video timeline/i })
+      screen.getByRole("slider", { name: /video timeline/i }),
     ).toHaveAttribute("aria-valuemax", "20");
   });
 
@@ -203,7 +203,7 @@ describe("VideoMedia timeline", () => {
           isInViewport
           zoom={1}
         />
-      </div>
+      </div>,
     );
 
     const video = document.querySelector("video");
@@ -215,18 +215,18 @@ describe("VideoMedia timeline", () => {
 
     Object.defineProperty(video, "duration", {
       configurable: true,
-      get: () => 20
+      get: () => 20,
     });
     Object.defineProperty(video, "paused", {
       configurable: true,
-      get: () => paused
+      get: () => paused,
     });
     Object.defineProperty(video, "pause", {
       configurable: true,
       value: vi.fn(() => {
         paused = true;
         fireEvent.pause(video);
-      })
+      }),
     });
     Object.defineProperty(video, "play", {
       configurable: true,
@@ -234,13 +234,13 @@ describe("VideoMedia timeline", () => {
         paused = false;
         fireEvent.play(video);
         return Promise.resolve();
-      })
+      }),
     });
 
     fireEvent.loadedMetadata(video);
 
     const pauseButton = await screen.findByRole("button", {
-      name: /pause video/i
+      name: /pause video/i,
     });
     fireEvent.pointerDown(pauseButton, { pointerId: 1 });
     fireEvent.click(pauseButton);
@@ -248,14 +248,14 @@ describe("VideoMedia timeline", () => {
     expect(parentPointerDown).not.toHaveBeenCalled();
     expect(video.pause).toHaveBeenCalled();
     expect(
-      screen.getByRole("button", { name: /play video/i })
+      screen.getByRole("button", { name: /play video/i }),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /play video/i }));
 
     expect(video.play).toHaveBeenCalled();
     expect(
-      screen.getByRole("button", { name: /pause video/i })
+      screen.getByRole("button", { name: /pause video/i }),
     ).toBeInTheDocument();
   });
 });
