@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/a11y/noAriaHiddenOnFocusable: <Disable for main canvas.> */
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   type WheelEvent as ReactWheelEvent,
@@ -44,7 +45,6 @@ import {
 import { useTauriDrop as useUploadDrop } from "./utils/drag";
 import { getExportDefaultPath } from "./utils/exportPaths";
 import { revealItem } from "./utils/fs";
-import { filterBy } from "./utils/helpers";
 import { useCanvasHotkeys } from "./utils/keyboard";
 import {
   exportMediaVideo,
@@ -869,6 +869,7 @@ export default function InfiniteCanvas() {
 
   return (
     <div
+      role="application"
       className="canvas-container"
       ref={containerRef}
       onPointerDown={handlePointerDown}
