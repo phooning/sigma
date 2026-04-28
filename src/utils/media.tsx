@@ -473,6 +473,7 @@ export function useDecodeArbiterFeeder({
     [feedViewportDecodeRequests],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: items and canvasSize intentionally retrigger decode feeding after their refs are refreshed.
   useEffect(() => {
     feedViewportDecodeRequests();
   }, [feedViewportDecodeRequests, items, canvasSize.width, canvasSize.height]);

@@ -10,7 +10,7 @@ const supportsNativeImageSurface = () =>
   "transferControlToOffscreen" in HTMLCanvasElement.prototype;
 
 const signatureForPreviewRequests = (
-  requests: Array<{ item: { id: string }; maxDimension: 256 | 1024 }>,
+  requests: Array<{ item: { id: string }; maxDimension: 256 | 1024 }>
 ) =>
   requests
     .map(({ item, maxDimension }) => `${item.id}:${maxDimension}`)
@@ -19,7 +19,7 @@ const signatureForPreviewRequests = (
 const signatureForViewport = ({
   x,
   y,
-  zoom,
+  zoom
 }: {
   x: number;
   y: number;
@@ -36,7 +36,7 @@ export function NativeImageSurface({
   croppingItemId,
   editingCropItemId,
   onReadyChange,
-  requestImagePreview,
+  requestImagePreview
 }: NativeImageSurfaceProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const workerRef = useRef<Worker | null>(null);
@@ -59,9 +59,9 @@ export function NativeImageSurface({
       worker = new Worker(
         new URL(
           "../../workers/nativeImageCompositor.worker.ts",
-          import.meta.url,
+          import.meta.url
         ),
-        { type: "module" },
+        { type: "module" }
       );
       workerRef.current = worker;
 
@@ -94,14 +94,14 @@ export function NativeImageSurface({
           canvas: offscreen,
           width: canvasSize.width,
           height: canvasSize.height,
-          devicePixelRatio: window.devicePixelRatio || 1,
+          devicePixelRatio: window.devicePixelRatio || 1
         },
-        [offscreen],
+        [offscreen]
       );
     } catch (error) {
       console.warn(
         "Native image surface unavailable; falling back to DOM image rendering.",
-        error,
+        error
       );
       onReadyChange?.(false);
       worker?.terminate();
@@ -123,7 +123,7 @@ export function NativeImageSurface({
       type: "resize",
       width: canvasSize.width,
       height: canvasSize.height,
-      devicePixelRatio: window.devicePixelRatio || 1,
+      devicePixelRatio: window.devicePixelRatio || 1
     });
   }, [canvasSize.height, canvasSize.width, isEnabled]);
 
@@ -167,15 +167,15 @@ export function NativeImageSurface({
           draggingItemId,
           resizingItemId,
           croppingItemId,
-          editingCropItemId,
+          editingCropItemId
         });
         const manifestSignature = [
           viewportSignature,
           manifest.assets.length,
           ...manifest.assets.map(
             (asset) =>
-              `${asset.id}:${asset.path}:${asset.drawOrder}:${asset.cropLeftRatio.toFixed(4)}:${asset.cropTopRatio.toFixed(4)}:${asset.cropWidthRatio.toFixed(4)}:${asset.cropHeightRatio.toFixed(4)}:${asset.screenX.toFixed(1)}:${asset.screenY.toFixed(1)}:${asset.renderedWidthPx.toFixed(1)}:${asset.renderedHeightPx.toFixed(1)}`,
-          ),
+              `${asset.id}:${asset.path}:${asset.drawOrder}:${asset.cropLeftRatio.toFixed(4)}:${asset.cropTopRatio.toFixed(4)}:${asset.cropWidthRatio.toFixed(4)}:${asset.cropHeightRatio.toFixed(4)}:${asset.screenX.toFixed(1)}:${asset.screenY.toFixed(1)}:${asset.renderedWidthPx.toFixed(1)}:${asset.renderedHeightPx.toFixed(1)}`
+          )
         ].join("|");
 
         if (manifestSignature !== manifestSignatureRef.current) {
@@ -189,11 +189,11 @@ export function NativeImageSurface({
           const viewBounds = getViewBounds(
             viewport,
             canvasSize.width,
-            canvasSize.height,
+            canvasSize.height
           );
           for (const request of previewRequests) {
             requestImagePreview(request.item, request.maxDimension, {
-              viewBounds,
+              viewBounds
             });
           }
         }
@@ -214,18 +214,12 @@ export function NativeImageSurface({
     requestImagePreview,
     resizingItemId,
     selectedItems,
-    viewport,
+    viewport
   ]);
 
   if (!isEnabled) return null;
 
-  return (
-    <canvas
-      ref={canvasRef}
-      className="native-image-surface"
-      aria-hidden="true"
-    />
-  );
+  return <canvas ref={canvasRef} className="native-image-surface" />;
 }
 
 export { supportsNativeImageSurface };

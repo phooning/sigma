@@ -11,7 +11,7 @@ const CULL_MARGIN = 500;
 const getViewportState = ({
   item,
   isActiveAudioItem,
-  viewBounds
+  viewBounds,
 }: Pick<CanvasMediaItemProps, "item" | "isActiveAudioItem" | "viewBounds">) => {
   const itemLeft = item.x;
   const itemTop = item.y;
@@ -32,13 +32,13 @@ const getViewportState = ({
 
   return {
     isCulled,
-    isInViewport: isVisuallyInViewport || isActiveAudioItem
+    isInViewport: isVisuallyInViewport || isActiveAudioItem,
   };
 };
 
 const areCanvasMediaItemPropsEqual = (
   prevProps: CanvasMediaItemProps,
-  nextProps: CanvasMediaItemProps
+  nextProps: CanvasMediaItemProps,
 ) => {
   if (prevProps.item !== nextProps.item) return false;
   if (prevProps.isActiveAudioItem !== nextProps.isActiveAudioItem) return false;
@@ -93,14 +93,14 @@ export const CanvasMediaItem = memo(function CanvasMediaItem({
   startCropEdit,
   toggleAudioPlayback,
   viewBounds,
-  zoom
+  zoom,
 }: CanvasMediaItemProps) {
   const { id, url } = item;
   const crop = getCrop(item);
   const { isCulled, isInViewport } = getViewportState({
     item,
     isActiveAudioItem,
-    viewBounds
+    viewBounds,
   });
 
   if (isCulled && !isActiveAudioItem) {
@@ -118,7 +118,7 @@ export const CanvasMediaItem = memo(function CanvasMediaItem({
         isSelected && "selected",
         isCropEditing && "crop-editing",
         item.type === "image" && useNativeImageSurface && "native-image-item",
-        isTransforming && "is-transforming"
+        isTransforming && "is-transforming",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -127,7 +127,7 @@ export const CanvasMediaItem = memo(function CanvasMediaItem({
         top: item.y,
         width: item.width,
         height: item.height,
-        zIndex
+        zIndex,
       }}
       onPointerDown={(e) => handleItemPointerDown(id, e)}
       onPointerMove={(e) => handleItemPointerMove(id, e)}

@@ -8,6 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "lint": "pnpm exec biome check",
+    "lint:apply": "pnpm exec biome check --fix",
     "bench": "node ./scripts/run-vitest-benchmarks.mjs",
     "bench:update": "node ./scripts/run-vitest-benchmarks.mjs --update-baseline",
     "bench:check": "pnpm bench && node ./scripts/check-vitest-bench-baseline.mjs",

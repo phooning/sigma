@@ -5,12 +5,12 @@ import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
-  TooltipTrigger,
+  TooltipTrigger
 } from "./ui/tooltip";
 
 function ActionTooltip({
   label,
-  children,
+  children
 }: {
   label: string;
   children: React.ReactNode;
@@ -27,7 +27,7 @@ function ActionTooltip({
 
 export function CropOverlay({
   id,
-  handleItemPointerDown,
+  handleItemPointerDown
 }: {
   id: string;
   handleItemPointerDown: (id: string, e: React.PointerEvent) => void;
@@ -50,7 +50,7 @@ export const resetFrameSize = ({
   id,
   prev,
   intrinsicWidth,
-  intrinsicHeight,
+  intrinsicHeight
 }: {
   id: string;
   prev: MediaItem[];
@@ -63,7 +63,7 @@ export const resetFrameSize = ({
   return prev.map((i) =>
     i.id === id
       ? { ...i, width: 1280, height: (h / w) * 1280, crop: { ...EMPTY_CROP } }
-      : i,
+      : i
   );
 };
 
@@ -75,7 +75,7 @@ export function MediaFrameActions({
   deleteItem,
   startCropEdit,
   toggleAudioPlayback,
-  isCropEditing,
+  isCropEditing
 }: {
   item: MediaItem;
   revealItem: (id: string, e: React.MouseEvent) => void;
@@ -87,7 +87,7 @@ export function MediaFrameActions({
   isCropEditing: boolean;
 }) {
   const isAudioActive = useAudioPlaybackStore(
-    (s) => s.activeItemId === item.id,
+    (s) => s.activeItemId === item.id
   );
   const audioLabel = isAudioActive
     ? "Disable audio playback"
@@ -97,6 +97,7 @@ export function MediaFrameActions({
     <TooltipProvider delayDuration={0} skipDelayDuration={0}>
       <ActionTooltip label="Crop">
         <button
+          type="button"
           className="crop-btn"
           onClick={(e) => startCropEdit(item.id, e)}
           aria-label="Crop"
@@ -107,6 +108,7 @@ export function MediaFrameActions({
       </ActionTooltip>
       <ActionTooltip label="Reset size">
         <button
+          type="button"
           className="reset-btn"
           onClick={(e) => resetSize(item.id, e)}
           aria-label="Reset size"
@@ -116,6 +118,7 @@ export function MediaFrameActions({
       </ActionTooltip>
       <ActionTooltip label="Show in folder">
         <button
+          type="button"
           className="reveal-btn"
           onClick={(e) => revealItem(item.id, e)}
           aria-label="Show in folder"
@@ -125,6 +128,7 @@ export function MediaFrameActions({
       </ActionTooltip>
       <ActionTooltip label="Save screenshot">
         <button
+          type="button"
           className="screenshot-btn"
           onClick={(e) => screenshotItem(item.id, e)}
           aria-label="Save screenshot"
@@ -135,6 +139,7 @@ export function MediaFrameActions({
       {item.type === "video" && (
         <ActionTooltip label={audioLabel}>
           <button
+            type="button"
             className="audio-btn"
             onClick={(e) => toggleAudioPlayback(item.id, e)}
             aria-label={audioLabel}
@@ -146,6 +151,7 @@ export function MediaFrameActions({
       )}
       <ActionTooltip label="Delete">
         <button
+          type="button"
           className="delete-btn"
           onClick={(e) => deleteItem(item.id, e)}
           aria-label="Delete"

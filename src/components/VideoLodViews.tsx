@@ -1,12 +1,12 @@
 import type {
   VideoLoadProxyProps,
-  VideoThumbnailProps
+  VideoThumbnailProps,
 } from "./VideoLodViews.types";
 
 export function VideoLoadProxy({
   cropBoxStyle,
   onLoadRequested,
-  thumbnailUrl
+  thumbnailUrl,
 }: VideoLoadProxyProps) {
   return (
     <button
@@ -38,7 +38,7 @@ export function VideoLoadProxy({
 
 export function VideoThumbnail({
   cropBoxStyle,
-  thumbnailUrl
+  thumbnailUrl,
 }: VideoThumbnailProps) {
   return (
     <div className="media-crop-box" style={cropBoxStyle}>

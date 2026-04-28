@@ -132,11 +132,13 @@ export function useVideoLoop({
     updateLoop(() => initialLoopState);
   }, [updateLoop]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: duration intentionally retriggers loop marker writes after ref-backed metadata changes.
   useEffect(() => {
     externalLoopRef.current = loop;
     writeLoopPosition(loop);
   }, [duration, externalLoopRef, loop, writeLoopPosition]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: url intentionally resets loop state when the video source changes without a remount.
   useEffect(() => {
     externalLoopRef.current = initialLoop;
     setLoop(initialLoop);

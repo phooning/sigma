@@ -1,5 +1,5 @@
 import type { SetStateAction } from "react";
-import { useEffect } from "react";
+import { useEffect, useEffectEvent } from "react";
 import type { MediaItem } from "./media.types";
 
 type CanvasHotkeyConfig = {
@@ -20,39 +20,41 @@ const isEditableTarget = (target: EventTarget | null) => {
   );
 };
 
-const loadCanvasHotkeys = ({
-  containerRef,
-  getItems,
-  onSave,
-  selectedItemsRef,
-  setItems,
-  setSelectedItems,
-  setEditingCropItem,
-}: CanvasHotkeyConfig) => {
-  const pauseSelectedVideos = () => {
-    const selected = selectedItemsRef.current;
-    if (selected.size === 0) return false;
+export function useCanvasHotkeys(config: CanvasHotkeyConfig) {
+  const handleKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    const {
+      containerRef,
+      getItems,
+      onSave,
+      selectedItemsRef,
+      setItems,
+      setSelectedItems,
+      setEditingCropItem,
+    } = config;
 
-    let hasSelectedVideo = false;
+    const pauseSelectedVideos = () => {
+      const selected = selectedItemsRef.current;
+      if (selected.size === 0) return false;
 
-    getItems()
-      .filter((item) => item.type === "video" && selected.has(item.id))
-      .forEach((item) => {
-        hasSelectedVideo = true;
-        const mediaElement = containerRef.current?.querySelector<HTMLElement>(
-          `[data-media-id="${item.id}"]`,
-        );
-        const video = mediaElement?.querySelector("video");
+      let hasSelectedVideo = false;
 
-        if (video && !video.paused) {
-          video.pause();
-        }
-      });
+      getItems()
+        .filter((item) => item.type === "video" && selected.has(item.id))
+        .forEach((item) => {
+          hasSelectedVideo = true;
+          const mediaElement = containerRef.current?.querySelector<HTMLElement>(
+            `[data-media-id="${item.id}"]`,
+          );
+          const video = mediaElement?.querySelector("video");
 
-    return hasSelectedVideo;
-  };
+          if (video && !video.paused) {
+            video.pause();
+          }
+        });
 
-  const handleKeyDown = (event: KeyboardEvent) => {
+      return hasSelectedVideo;
+    };
+
     if (isEditableTarget(event.target)) return;
 
     if (event.key === "Escape") {
@@ -97,15 +99,17 @@ const loadCanvasHotkeys = ({
       setSelectedItems(new Set(getItems().map((item) => item.id)));
       setEditingCropItem(null);
     }
-  };
+  });
 
-  window.addEventListener("keydown", handleKeyDown);
+  useEffect(() => {
+    const listener = (event: KeyboardEvent) => {
+      handleKeyDown(event);
+    };
 
-  return () => {
-    window.removeEventListener("keydown", handleKeyDown);
-  };
-};
+    window.addEventListener("keydown", listener);
 
-export function useCanvasHotkeys(config: CanvasHotkeyConfig) {
-  useEffect(() => loadCanvasHotkeys(config), []);
+    return () => {
+      window.removeEventListener("keydown", listener);
+    };
+  }, []);
 }

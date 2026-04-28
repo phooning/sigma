@@ -34,8 +34,9 @@ export function HudToolbarActions({
 
   return (
     <>
-      <button className="hud-btn" onClick={saveConfig}>
+      <button type="button" className="hud-btn" onClick={saveConfig}>
         <svg
+          aria-hidden="true"
           width="13"
           height="13"
           viewBox="0 0 24 24"
@@ -51,8 +52,9 @@ export function HudToolbarActions({
         </svg>{" "}
         Save
       </button>
-      <button className="hud-btn" onClick={loadConfig}>
+      <button type="button" className="hud-btn" onClick={loadConfig}>
         <svg
+          aria-hidden="true"
           width="13"
           height="13"
           viewBox="0 0 24 24"
@@ -68,6 +70,7 @@ export function HudToolbarActions({
       </button>
       {selectedVideoExportCount > 0 && (
         <button
+          type="button"
           className="hud-btn"
           onClick={onExportSelectedVideo}
           disabled={isExportDisabled}
@@ -93,6 +96,7 @@ export function HudToolbarActions({
         </button>
       )}
       <button
+        type="button"
         className="hud-btn hud-icon-btn"
         onClick={openSettings}
         aria-label="Open settings"

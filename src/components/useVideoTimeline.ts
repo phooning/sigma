@@ -224,10 +224,12 @@ export function useVideoTimeline({
     stopTimelineAnimation,
   ]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: url intentionally resets timeline state when the backing media source changes.
   useEffect(() => {
     resetTimeline();
   }, [resetTimeline, url]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: duration intentionally retriggers playhead CSS writes after metadata updates.
   useEffect(() => {
     writePlayheadPosition(currentTime);
   }, [currentTime, duration, writePlayheadPosition]);

@@ -284,6 +284,7 @@ export function NativeVideoSurface({
     });
   }, [canvasSize.height, canvasSize.width, isEnabled]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: workerGeneration ensures a freshly created worker receives geometry even when the scene is otherwise unchanged.
   useLayoutEffect(() => {
     if (!isEnabled) return;
 
@@ -322,11 +323,5 @@ export function NativeVideoSurface({
 
   if (!isEnabled) return null;
 
-  return (
-    <canvas
-      ref={canvasRef}
-      className="native-video-surface"
-      aria-hidden="true"
-    />
-  );
+  return <canvas ref={canvasRef} className="native-video-surface" />;
 }

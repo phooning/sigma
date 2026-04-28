@@ -14,7 +14,7 @@ const {
   openMock,
   saveMock,
   toastMock,
-  writeTextFileMock
+  writeTextFileMock,
 } = vi.hoisted(() => {
   const invokeMock = vi.fn(
     (
@@ -24,7 +24,7 @@ const {
         paths?: string[];
         maxDimension?: number;
         lod?: number;
-      }
+      },
     ) => {
       if (command === "probe_media") {
         return Promise.resolve({
@@ -33,7 +33,7 @@ const {
           duration: args?.path?.includes("heavy_video.mkv") ? 2400 : 8,
           size: args?.path?.includes("heavy_video.mkv")
             ? 373 * 1024 * 1024
-            : 838 * 1024
+            : 838 * 1024,
         });
       }
 
@@ -43,14 +43,14 @@ const {
             path,
             width: path.includes("portrait") ? 1200 : 640,
             height: path.includes("portrait") ? 1800 : 480,
-            size: path.includes("large") ? 12 * 1024 * 1024 : 256 * 1024
-          }))
+            size: path.includes("large") ? 12 * 1024 * 1024 : 256 * 1024,
+          })),
         );
       }
 
       if (command === "generate_video_thumbnail") {
         return Promise.resolve(
-          `/tmp/${args?.path?.includes("heavy_video.mkv") ? "heavy" : "video"}-thumb.jpg`
+          `/tmp/${args?.path?.includes("heavy_video.mkv") ? "heavy" : "video"}-thumb.jpg`,
         );
       }
 
@@ -58,21 +58,21 @@ const {
         return Promise.resolve(
           `/tmp/${
             args?.path?.includes("portrait") ? "portrait" : "image"
-          }-preview-${args?.maxDimension}.png`
+          }-preview-${args?.maxDimension}.png`,
         );
       }
 
       if (command === "request_decode") {
         if (args?.path?.match(/\.(mp4|webm|mov|mkv)$/i)) {
           return Promise.resolve(
-            `/tmp/${args?.path?.includes("heavy_video.mkv") ? "heavy" : "video"}-thumb.jpg`
+            `/tmp/${args?.path?.includes("heavy_video.mkv") ? "heavy" : "video"}-thumb.jpg`,
           );
         }
 
         return Promise.resolve(
           `/tmp/${
             args?.path?.includes("portrait") ? "portrait" : "image"
-          }-preview-${args?.lod}.png`
+          }-preview-${args?.lod}.png`,
         );
       }
 
@@ -85,13 +85,13 @@ const {
       }
 
       return Promise.resolve(null);
-    }
+    },
   );
 
   return {
     dragDropState: {
       callback: null as DropCallback | null,
-      registrationCount: 0
+      registrationCount: 0,
     },
     invokeMock,
     openMock: vi.fn(),
@@ -100,9 +100,9 @@ const {
       success: vi.fn(),
       info: vi.fn(),
       warning: vi.fn(),
-      error: vi.fn()
+      error: vi.fn(),
     },
-    writeTextFileMock: vi.fn()
+    writeTextFileMock: vi.fn(),
   };
 });
 
@@ -115,7 +115,7 @@ const DEFAULT_RECT = {
   height: 1000,
   x: 0,
   y: 0,
-  toJSON: () => {}
+  toJSON: () => {},
 };
 
 let defaultViewport: Required<ViewportSize>;
@@ -126,8 +126,8 @@ vi.mock("@tauri-apps/api/webview", () => ({
       dragDropState.registrationCount += 1;
       dragDropState.callback = cb;
       return Promise.resolve(vi.fn());
-    }
-  })
+    },
+  }),
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -135,29 +135,29 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: invokeMock,
   Channel: class MockChannel<T> {
     onmessage: ((message: T) => void) | null = null;
-  }
+  },
 }));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   save: saveMock,
-  open: openMock
+  open: openMock,
 }));
 
 vi.mock("sonner", () => ({
-  toast: toastMock
+  toast: toastMock,
 }));
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
   writeTextFile: writeTextFileMock,
-  readTextFile: vi.fn()
+  readTextFile: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/plugin-shell", () => ({
   Command: {
     create: vi.fn(() => ({
-      execute: vi.fn(() => Promise.resolve({ stdout: "" }))
-    }))
-  }
+      execute: vi.fn(() => Promise.resolve({ stdout: "" })),
+    })),
+  },
 }));
 
 const revealItemInDirMock = (
@@ -169,7 +169,7 @@ const revealItemInDirMock = (
 beforeAll(() => {
   defaultViewport = {
     width: window.innerWidth,
-    height: window.innerHeight
+    height: window.innerHeight,
   };
 
   const storage = new Map<string, string>();
@@ -185,27 +185,27 @@ beforeAll(() => {
       }),
       clear: vi.fn(() => {
         storage.clear();
-      })
-    }
+      }),
+    },
   });
   useCanvasSessionStore.persist.setOptions({
-    storage: createJSONStorage(() => localStorage)
+    storage: createJSONStorage(() => localStorage),
   });
   useCanvasSessionStore.persist.clearStorage();
   useCanvasSessionStore.setState(useCanvasSessionStore.getInitialState(), true);
   Object.defineProperty(globalThis.HTMLVideoElement.prototype, "videoWidth", {
-    get: () => 1920
+    get: () => 1920,
   });
   Object.defineProperty(globalThis.HTMLVideoElement.prototype, "videoHeight", {
-    get: () => 1080
+    get: () => 1080,
   });
   Object.defineProperty(globalThis.HTMLMediaElement.prototype, "play", {
     configurable: true,
-    value: vi.fn(() => Promise.resolve())
+    value: vi.fn(() => Promise.resolve()),
   });
   Object.defineProperty(globalThis.HTMLMediaElement.prototype, "pause", {
     configurable: true,
-    value: vi.fn()
+    value: vi.fn(),
   });
   Object.defineProperty(globalThis.HTMLMediaElement.prototype, "src", {
     configurable: true,
@@ -216,7 +216,7 @@ beforeAll(() => {
             this.onloadedmetadata(new Event("loadedmetadata"));
         }, 0);
       }
-    }
+    },
   });
 });
 
@@ -239,7 +239,7 @@ export {
   revealItemInDirMock,
   saveMock as save,
   toastMock as toast,
-  writeTextFileMock as writeTextFile
+  writeTextFileMock as writeTextFile,
 };
 
 export const renderCanvas = () => render(<InfiniteCanvas />);
@@ -248,15 +248,15 @@ export const dropFiles = async (paths: string[]) => {
   await act(async () => {
     if (!dragDropState.callback) {
       throw new Error(
-        "Drag/drop callback was not registered. Render InfiniteCanvas first."
+        "Drag/drop callback was not registered. Render InfiniteCanvas first.",
       );
     }
 
     dragDropState.callback({
       payload: {
         type: "drop",
-        paths
-      }
+        paths,
+      },
     });
   });
 };
@@ -269,7 +269,7 @@ export const setViewportSize = ({ width, height }: ViewportSize) => {
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
       writable: true,
-      value: width
+      value: width,
     });
   }
 
@@ -277,7 +277,7 @@ export const setViewportSize = ({ width, height }: ViewportSize) => {
     Object.defineProperty(window, "innerHeight", {
       configurable: true,
       writable: true,
-      value: height
+      value: height,
     });
   }
 };
@@ -300,5 +300,5 @@ export const getMediaVideo = () =>
 
 export const getMediaVideos = () =>
   Array.from(
-    document.querySelectorAll("video.media-content")
+    document.querySelectorAll("video.media-content"),
   ) as HTMLVideoElement[];

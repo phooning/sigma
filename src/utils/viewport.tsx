@@ -4,7 +4,7 @@ import type { ViewBounds } from "./viewport.types";
 export const getViewBounds = (
   viewport: Viewport,
   width: number,
-  height: number
+  height: number,
 ): ViewBounds => {
   const screenWidth = width / viewport.zoom;
   const screenHeight = height / viewport.zoom;
@@ -17,7 +17,7 @@ export const getViewBounds = (
     viewRight: viewLeft + screenWidth,
     viewBottom: viewTop + screenHeight,
     screenWidth,
-    screenHeight
+    screenHeight,
   };
 };
 
