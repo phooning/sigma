@@ -1,15 +1,16 @@
 import type {
   VideoLoadProxyProps,
-  VideoThumbnailProps,
+  VideoThumbnailProps
 } from "./VideoLodViews.types";
 
 export function VideoLoadProxy({
   cropBoxStyle,
   onLoadRequested,
-  thumbnailUrl,
+  thumbnailUrl
 }: VideoLoadProxyProps) {
   return (
     <button
+      type="button"
       className="video-lod-proxy video-load-proxy"
       aria-label="Load video"
       onPointerDown={(e) => e.stopPropagation()}
@@ -26,7 +27,6 @@ export function VideoLoadProxy({
             src={thumbnailUrl}
             alt=""
             draggable={false}
-            onDragStart={(e) => e.preventDefault()}
           />
         </div>
       )}
@@ -38,7 +38,7 @@ export function VideoLoadProxy({
 
 export function VideoThumbnail({
   cropBoxStyle,
-  thumbnailUrl,
+  thumbnailUrl
 }: VideoThumbnailProps) {
   return (
     <div className="media-crop-box" style={cropBoxStyle}>
@@ -55,7 +55,7 @@ export function VideoThumbnail({
 
 export function VideoProxy() {
   return (
-    <div className="video-lod-proxy" aria-label="video proxy">
+    <div className="video-lod-proxy">
       <span className="video-lod-icon" aria-hidden="true" />
     </div>
   );
