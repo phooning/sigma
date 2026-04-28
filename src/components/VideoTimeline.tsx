@@ -19,7 +19,7 @@ export function VideoTimeline({
   stopTimelineAnimation,
   timelineRef,
   toggleLoop,
-  togglePlayback
+  togglePlayback,
 }: VideoTimelineProps) {
   const loopRange = getLoopRange(loop);
 

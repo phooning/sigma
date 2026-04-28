@@ -5,11 +5,11 @@ import type {
   NativeControllerSnapshot,
   NativeVideoManifest,
   NativeVideoProfile,
-  NativeVideoSurfaceProps
+  NativeVideoSurfaceProps,
 } from "./types";
 import {
   computeNativeVideoBounds,
-  useNativeVideoManifest
+  useNativeVideoManifest,
 } from "./useNativeVideoManifest";
 
 const MANIFEST_DEBOUNCE_MS = 120;
@@ -64,7 +64,7 @@ function updateVideoGeometryImmediate(
   worker: Worker,
   item: MediaItem,
   viewport: Viewport,
-  canvasSize: NativeVideoSurfaceProps["canvasSize"]
+  canvasSize: NativeVideoSurfaceProps["canvasSize"],
 ) {
   if (item.type !== "video") return;
 
@@ -77,14 +77,14 @@ function updateVideoGeometryImmediate(
           x: bounds.screenX,
           y: bounds.screenY,
           width: bounds.renderedWidthPx,
-          height: bounds.renderedHeightPx
+          height: bounds.renderedHeightPx,
         }
-      : null
+      : null,
   });
 }
 
 const toTransferableBuffer = (
-  message: unknown
+  message: unknown,
 ): ArrayBuffer | SharedArrayBuffer | null => {
   if (message instanceof ArrayBuffer) return message;
 
@@ -100,7 +100,7 @@ const toTransferableBuffer = (
 
     return message.buffer.slice(
       message.byteOffset,
-      message.byteOffset + message.byteLength
+      message.byteOffset + message.byteLength,
     );
   }
 
@@ -112,7 +112,7 @@ export function NativeVideoSurface({
   viewport,
   canvasSize,
   selectedItems,
-  activeAudioItemId
+  activeAudioItemId,
 }: NativeVideoSurfaceProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const workerRef = useRef<Worker | null>(null);
@@ -128,19 +128,19 @@ export function NativeVideoSurface({
     viewport,
     canvasSize,
     selectedItems,
-    activeAudioItemId
+    activeAudioItemId,
   });
   const debouncedRustManifest = useMemo(
     () =>
       debounce((nextManifest: NativeVideoManifest) => {
         void invoke<NativeControllerSnapshot>("native_video_update_manifest", {
-          manifest: nextManifest
+          manifest: nextManifest,
         })
           .then((snapshot) => {
             isBaseValidatedRef.current = snapshot.profile.baseCaseValidated;
             workerRef.current?.postMessage({
               type: "allocations",
-              allocations: snapshot.allocations
+              allocations: snapshot.allocations,
             });
             const firstAsset = nextManifest.assets[0];
             if (
@@ -157,9 +157,9 @@ export function NativeVideoSurface({
                   width: 3840,
                   height: 2160,
                   fps: 60,
-                  frames: 180
+                  frames: 180,
                 },
-                onFrame: frameChannelRef.current
+                onFrame: frameChannelRef.current,
               }).catch(() => {
                 baseProbeStartedRef.current = false;
               });
@@ -168,11 +168,11 @@ export function NativeVideoSurface({
           .catch(() => {
             workerRef.current?.postMessage({
               type: "allocations",
-              allocations: []
+              allocations: [],
             });
           });
       }, MANIFEST_DEBOUNCE_MS),
-    []
+    [],
   );
 
   useEffect(() => {
@@ -185,7 +185,7 @@ export function NativeVideoSurface({
         if (!cancelled) {
           isBaseValidatedRef.current = profile.baseCaseValidated;
           setIsEnabled(
-            profile.baseCaseValidated || shouldForceNativePlayback()
+            profile.baseCaseValidated || shouldForceNativePlayback(),
           );
         }
       })
@@ -208,7 +208,7 @@ export function NativeVideoSurface({
 
     const worker = new Worker(
       new URL("../../workers/nativeVideoCompositor.worker.ts", import.meta.url),
-      { type: "module" }
+      { type: "module" },
     );
     workerRef.current = worker;
     setWorkerGeneration((generation) => generation + 1);
@@ -236,7 +236,7 @@ export function NativeVideoSurface({
       lastMetricsAtRef.current = now;
 
       void invoke("native_video_record_frontend_metrics", {
-        metrics: message.metrics
+        metrics: message.metrics,
       }).catch(() => {
         // Metrics are advisory; presentation should continue if persistence fails.
       });
@@ -249,9 +249,9 @@ export function NativeVideoSurface({
         canvas: offscreen,
         width: canvasSize.width,
         height: canvasSize.height,
-        devicePixelRatio: window.devicePixelRatio || 1
+        devicePixelRatio: window.devicePixelRatio || 1,
       },
-      [offscreen]
+      [offscreen],
     );
 
     const frameChannel = new Channel<ArrayBuffer>();
@@ -263,7 +263,7 @@ export function NativeVideoSurface({
     };
 
     void invoke("native_video_subscribe_frames", {
-      onFrame: frameChannel
+      onFrame: frameChannel,
     });
 
     return () => {
@@ -282,7 +282,7 @@ export function NativeVideoSurface({
       type: "resize",
       width: canvasSize.width,
       height: canvasSize.height,
-      devicePixelRatio: window.devicePixelRatio || 1
+      devicePixelRatio: window.devicePixelRatio || 1,
     });
   }, [canvasSize.height, canvasSize.width, isEnabled]);
 
@@ -320,7 +320,7 @@ export function NativeVideoSurface({
     () => () => {
       debouncedRustManifest.cancel();
     },
-    [debouncedRustManifest]
+    [debouncedRustManifest],
   );
 
   if (!isEnabled) return null;
