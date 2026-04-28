@@ -9,7 +9,7 @@ edition = "2021"
 
 [profile.release]
 lto = true
-codgen-units = 1
+codegen-units = 1
 panic = "abort"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -25,7 +25,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["protocol-asset"] }
+tauri = { version = "2", features = ["protocol-asset", "test"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -36,3 +36,10 @@ tauri-plugin-dialog = "2.6.0"
 tauri-plugin-os = "2.3.2"
 tauri-plugin-shell = "2.3.5"
 image = { version = "0.25", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
+
+[dev-dependencies]
+criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support", "html_reports"] }
+
+[[bench]]
+name = "ipc_latency"
+harness = false

@@ -6,7 +6,7 @@ use std::{
 };
 
 use serde::Deserialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, Runtime};
 use tokio::sync::{mpsc, oneshot, RwLock, Semaphore};
 
 use crate::{generate_image_preview_blocking, generate_video_thumbnail_blocking};
@@ -66,7 +66,7 @@ pub struct DecodeArbiter {
 }
 
 impl DecodeArbiter {
-    pub fn spawn(app: AppHandle, max_parallel: usize) -> Self {
+    pub fn spawn<R: Runtime>(app: AppHandle<R>, max_parallel: usize) -> Self {
         let (tx, mut rx) = mpsc::channel::<DecodeRequest>(256);
         let generations = Arc::new(RwLock::new(HashMap::new()));
         let worker_generations = Arc::clone(&generations);
@@ -183,7 +183,11 @@ impl DecodeArbiter {
     }
 }
 
-fn decode_preview_to_cache(app: AppHandle, path: PathBuf, lod: u32) -> DecodeResult {
+fn decode_preview_to_cache<R: Runtime>(
+    app: AppHandle<R>,
+    path: PathBuf,
+    lod: u32,
+) -> DecodeResult {
     let path_string = path.to_string_lossy().into_owned();
 
     if is_video_path(&path) {
