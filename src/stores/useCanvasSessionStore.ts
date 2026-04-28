@@ -4,6 +4,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { loadFromStorage, saveToStorage } from "../utils/fs";
 import type { MediaItem, Viewport } from "../utils/media.types";
 import { notify } from "../utils/notifications";
+import { markPerformance } from "../utils/performance";
 
 const SESSION_STORAGE_KEY = "sigma:canvas-session";
 
@@ -31,20 +32,58 @@ const resolveStateUpdate = <T,>(
   prev: T,
 ): T => (typeof value === "function" ? (value as (prevState: T) => T)(prev) : value);
 
-const attachMediaUrls = (items: MediaItem[]) =>
-  items.map((item) => ({
-    ...item,
+const attachMediaUrls = (item: MediaItem) => {
+  const nextUrls = {
     url: convertFileSrc(item.filePath),
-    thumbnailUrl: item.thumbnailPath ? convertFileSrc(item.thumbnailPath) : undefined,
+    thumbnailUrl: item.thumbnailPath
+      ? convertFileSrc(item.thumbnailPath)
+      : undefined,
     imagePreview256Url: item.imagePreview256Path
       ? convertFileSrc(item.imagePreview256Path)
       : undefined,
     imagePreview1024Url: item.imagePreview1024Path
       ? convertFileSrc(item.imagePreview1024Path)
       : undefined,
-  }));
+  };
 
-const normalizeItems = (items: MediaItem[]) => attachMediaUrls(items);
+  if (
+    item.url === nextUrls.url &&
+    item.thumbnailUrl === nextUrls.thumbnailUrl &&
+    item.imagePreview256Url === nextUrls.imagePreview256Url &&
+    item.imagePreview1024Url === nextUrls.imagePreview1024Url
+  ) {
+    return item;
+  }
+
+  return {
+    ...item,
+    ...nextUrls,
+  };
+};
+
+const normalizeItems = (items: MediaItem[]) => {
+  let changed = false;
+  const nextItems = items.map((item) => {
+    const nextItem = attachMediaUrls(item);
+    if (nextItem !== item) changed = true;
+    return nextItem;
+  });
+  return changed ? nextItems : items;
+};
+
+const createMeasuredLocalStorage = () => ({
+  getItem: (name: string) => localStorage.getItem(name),
+  removeItem: (name: string) => localStorage.removeItem(name),
+  setItem: (name: string, value: string) => {
+    markPerformance("sigma:canvas-session:localStorage:setItem:start");
+
+    try {
+      localStorage.setItem(name, value);
+    } finally {
+      markPerformance("sigma:canvas-session:localStorage:setItem:end");
+    }
+  },
+});
 
 export const useCanvasSessionStore = create<CanvasSessionStore>()(
   persist(
@@ -115,7 +154,7 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
     }),
     {
       name: SESSION_STORAGE_KEY,
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(createMeasuredLocalStorage),
       partialize: (state) => ({
         items: state.items,
         viewport: state.viewport,

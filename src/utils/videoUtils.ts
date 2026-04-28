@@ -1,11 +1,37 @@
-import { MediaItem } from "../utils/media.types";
+import type {
+  ImageLodState,
+  MediaItem,
+  VideoLodState,
+} from "../utils/media.types";
 
-const THUMBNAIL_MAX_SCREEN_WIDTH = 144;
-const PROXY_MAX_SCREEN_WIDTH = 96;
-const PROXY_MAX_SCREEN_HEIGHT = 72;
+const VIDEO_LOD = {
+  proxy: {
+    enter: (width: number, height: number) => width <= 96 || height <= 72,
+    exit: (width: number, height: number) => width > 120 && height > 88,
+  },
+  thumbnail: {
+    enter: (width: number) => width <= 144,
+    exit: (width: number) => width > 176,
+  },
+};
 
-export type VideoLod = "video" | "thumbnail" | "proxy";
-export type ImageLod = "proxy" | "preview256" | "preview1024" | "full";
+export const IMAGE_LOD = {
+  preview256: {
+    enter: (width: number, height: number) => width <= 256 || height <= 144,
+    exit: (width: number, height: number) => width > 320 && height > 176,
+  },
+  preview1024: {
+    enter: (longEdge: number) => longEdge <= 768,
+    exit: (longEdge: number) => longEdge > 1100,
+  },
+  full: {
+    enter: (longEdge: number) => longEdge > 1100,
+    exit: (longEdge: number) => longEdge < 768,
+  },
+};
+
+export type VideoLod = VideoLodState;
+export type ImageLod = ImageLodState;
 
 export interface LoopState {
   enabled: boolean;
@@ -44,32 +70,60 @@ export const getVideoLod = (
   zoom: number,
   hasThumbnail: boolean,
   item: MediaItem,
+  currentLod: VideoLod = item.videoLod ?? "video",
 ): VideoLod => {
   const screenWidth = item.width * zoom;
   const screenHeight = item.height * zoom;
 
   if (
-    screenWidth <= PROXY_MAX_SCREEN_WIDTH ||
-    screenHeight <= PROXY_MAX_SCREEN_HEIGHT
+    currentLod === "proxy" &&
+    !VIDEO_LOD.proxy.exit(screenWidth, screenHeight)
   ) {
     return "proxy";
   }
 
-  if (screenWidth <= THUMBNAIL_MAX_SCREEN_WIDTH) {
+  if (currentLod === "thumbnail") {
+    if (!hasThumbnail || VIDEO_LOD.proxy.enter(screenWidth, screenHeight)) {
+      return "proxy";
+    }
+
+    if (!VIDEO_LOD.thumbnail.exit(screenWidth)) {
+      return "thumbnail";
+    }
+
+    return "video";
+  }
+
+  if (
+    currentLod === "video" &&
+    !VIDEO_LOD.thumbnail.enter(screenWidth) &&
+    !VIDEO_LOD.proxy.enter(screenWidth, screenHeight)
+  ) {
+    return "video";
+  }
+
+  if (VIDEO_LOD.proxy.enter(screenWidth, screenHeight)) {
+    return "proxy";
+  }
+
+  if (VIDEO_LOD.thumbnail.enter(screenWidth)) {
     return hasThumbnail ? "thumbnail" : "proxy";
   }
 
   return "video";
 };
 
-export const shouldRequestVideoThumbnail = (zoom: number, item: MediaItem) => {
+export const shouldRequestVideoThumbnail = (
+  zoom: number,
+  item: MediaItem,
+) => {
   const screenWidth = item.width * zoom;
   const screenHeight = item.height * zoom;
 
   return (
-    screenWidth <= THUMBNAIL_MAX_SCREEN_WIDTH &&
-    screenWidth > PROXY_MAX_SCREEN_WIDTH &&
-    screenHeight > PROXY_MAX_SCREEN_HEIGHT
+    screenWidth <= 144 &&
+    screenWidth > 96 &&
+    screenHeight > 72
   );
 };
 
@@ -84,14 +138,45 @@ export const getLoopRange = (loop: LoopState) => {
   };
 };
 
-export const getImageLod = (zoom: number, item: MediaItem): ImageLod => {
+export const getImageLod = (
+  zoom: number,
+  item: MediaItem,
+  currentLod: ImageLod = item.imageLod ?? "full",
+): ImageLod => {
   const screenWidth = item.width * zoom;
   const screenHeight = item.height * zoom;
   const longEdge = Math.max(screenWidth, screenHeight);
-  const shortEdge = Math.min(screenWidth, screenHeight);
 
-  if (shortEdge <= 144) return "preview256";
-  if (longEdge <= 256) return "preview1024";
+  if (
+    currentLod === "preview256" &&
+    !IMAGE_LOD.preview256.exit(screenWidth, screenHeight)
+  ) {
+    return "preview256";
+  }
 
-  return "full";
+  if (currentLod === "preview1024") {
+    if (IMAGE_LOD.preview256.enter(screenWidth, screenHeight)) {
+      return "preview256";
+    }
+
+    if (!IMAGE_LOD.preview1024.exit(longEdge)) {
+      return "preview1024";
+    }
+
+    return "full";
+  }
+
+  if (currentLod === "full" && !IMAGE_LOD.full.exit(longEdge)) {
+    return "full";
+  }
+
+  if (IMAGE_LOD.preview256.enter(screenWidth, screenHeight)) {
+    return "preview256";
+  }
+
+  if (IMAGE_LOD.full.enter(longEdge)) {
+    return "full";
+  }
+
+  return "preview1024";
 };

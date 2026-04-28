@@ -1,27 +1,54 @@
-import { fireEvent } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, fireEvent } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import {
   getCanvasContainer,
   getCanvasWorld,
   mockCanvasRect,
   renderCanvas
 } from './test/infiniteCanvasHarness';
+import { useCanvasSessionStore } from './stores/useCanvasSessionStore';
 
 describe('InfiniteCanvas canvas interactions', () => {
   it('pans the canvas on middle click + drag', () => {
-    renderCanvas();
+    vi.useFakeTimers();
 
-    const containerEl = getCanvasContainer();
-    expect(containerEl).toBeInTheDocument();
+    try {
+      renderCanvas();
+      vi.mocked(localStorage.setItem).mockClear();
 
-    const world = getCanvasWorld();
-    expect(world.style.transform).toContain('translate(0px, 0px)');
+      const containerEl = getCanvasContainer();
+      expect(containerEl).toBeInTheDocument();
 
-    fireEvent.pointerDown(containerEl, { button: 1, clientX: 100, clientY: 100, pointerId: 1 });
-    fireEvent.pointerMove(containerEl, { clientX: 160, clientY: 180, pointerId: 1 });
-    fireEvent.pointerUp(containerEl, { pointerId: 1 });
+      const world = getCanvasWorld();
+      expect(world.style.transform).toContain('translate(0px, 0px)');
 
-    expect(world.style.transform).toContain('translate(60px, 80px)');
+      fireEvent.pointerDown(containerEl, { button: 1, clientX: 100, clientY: 100, pointerId: 1 });
+      fireEvent.pointerMove(containerEl, { clientX: 130, clientY: 140, pointerId: 1 });
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+      fireEvent.pointerMove(containerEl, { clientX: 160, clientY: 180, pointerId: 1 });
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+
+      expect(useCanvasSessionStore.getState().viewport).toEqual({ x: 0, y: 0, zoom: 1 });
+      expect(localStorage.setItem).not.toHaveBeenCalledWith(
+        'sigma:canvas-session',
+        expect.any(String)
+      );
+
+      fireEvent.pointerUp(containerEl, { pointerId: 1 });
+
+      expect(world.style.transform).toContain('translate(60px, 80px)');
+      expect(useCanvasSessionStore.getState().viewport).toEqual({ x: 60, y: 80, zoom: 1 });
+      expect(localStorage.setItem).toHaveBeenCalledWith(
+        'sigma:canvas-session',
+        expect.stringContaining('"viewport":{"x":60,"y":80,"zoom":1}')
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('creates and sizes a selection box on left click + drag', () => {

@@ -11,6 +11,8 @@ import type {
 } from "./types";
 
 const ACTIVE_IMAGE_Z_INDEX = 10_000;
+const IMAGE_PLACEHOLDER_URL =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%231f2937'/%3E%3C/svg%3E";
 
 const isReactManagedImage = (
   item: MediaItem,
@@ -34,17 +36,58 @@ const isReactManagedImage = (
 
 const getNativeImageSource = (item: MediaItem, zoom: number) => {
   const lod = getImageLod(zoom, item);
+  const fallbackUrl =
+    item.thumbnailUrl ?? item.lowResProxyUrl ?? IMAGE_PLACEHOLDER_URL;
 
   if (lod === "preview256") {
-    const path =
-      item.imagePreview256Path ?? item.imagePreview1024Path ?? item.filePath;
-    return { lod, path, url: convertFileSrc(path) };
+    if (!item.imagePreview256Path) {
+      const path = item.imagePreview1024Path ?? fallbackUrl;
+      return {
+        lod,
+        path,
+        url: item.imagePreview1024Path ? convertFileSrc(path) : fallbackUrl,
+      };
+    }
+
+    return {
+      lod,
+      path: item.imagePreview256Path,
+      url: convertFileSrc(item.imagePreview256Path),
+    };
   }
 
   if (lod === "preview1024") {
-    const path =
-      item.imagePreview1024Path ?? item.imagePreview256Path ?? item.filePath;
-    return { lod, path, url: convertFileSrc(path) };
+    if (!item.imagePreview1024Path) {
+      const path = item.imagePreview256Path ?? fallbackUrl;
+      return {
+        lod,
+        path,
+        url: item.imagePreview256Path ? convertFileSrc(path) : fallbackUrl,
+      };
+    }
+
+    return {
+      lod,
+      path: item.imagePreview1024Path,
+      url: convertFileSrc(item.imagePreview1024Path),
+    };
+  }
+
+  if (zoom < 1) {
+    if (item.imagePreview1024Path) {
+      return {
+        lod,
+        path: item.imagePreview1024Path,
+        url: convertFileSrc(item.imagePreview1024Path),
+      };
+    }
+
+    const path = item.imagePreview256Path ?? fallbackUrl;
+    return {
+      lod,
+      path,
+      url: item.imagePreview256Path ? convertFileSrc(path) : fallbackUrl,
+    };
   }
 
   return { lod, path: item.filePath, url: item.url };
@@ -95,7 +138,10 @@ export function buildNativeImageManifest({
     const source = getNativeImageSource(item, viewport.zoom);
     if (source.lod === "preview256" && !item.imagePreview256Path) {
       previewRequests.push({ item, maxDimension: 256 });
-    } else if (source.lod === "preview1024" && !item.imagePreview1024Path) {
+    } else if (
+      (source.lod === "preview1024" || viewport.zoom < 1) &&
+      !item.imagePreview1024Path
+    ) {
       previewRequests.push({ item, maxDimension: 1024 });
     }
 

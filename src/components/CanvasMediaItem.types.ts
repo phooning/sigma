@@ -1,4 +1,5 @@
 import type { MediaItem } from "../utils/media.types";
+import type { MediaQueueOptions } from "../utils/media";
 import type { ViewBounds } from "../utils/viewport.types";
 
 export type MediaPointerHandler = (
@@ -24,8 +25,12 @@ export type CanvasMediaItemProps = {
   useNativeImageSurface: boolean;
   isResizing: boolean;
   isSelected: boolean;
-  requestImagePreview: (item: MediaItem, maxDimension: 256 | 1024) => void;
-  requestThumbnail: (item: MediaItem) => void;
+  requestImagePreview: (
+    item: MediaItem,
+    maxDimension: 256 | 1024,
+    options?: MediaQueueOptions,
+  ) => void;
+  requestThumbnail: (item: MediaItem, options?: MediaQueueOptions) => void;
   resetSize: MediaActionHandler;
   revealItem: MediaActionHandler;
   screenshotItem: MediaActionHandler;

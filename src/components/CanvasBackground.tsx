@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import type { CanvasBackgroundPattern } from "@/stores/useSettingsStore";
 import { positiveModulo } from "@/utils/math";
 import type { Viewport } from "@/utils/media.types";
+import { markPerformance } from "@/utils/performance";
 
 // ─── Dot grid ────────────────────────────────────────────────────────────────
 const DOT_GRID_BASE_SIZE = 50;
@@ -340,45 +341,51 @@ export const drawCanvasBackground = (
   canvas: HTMLCanvasElement,
   { canvasSize, pattern, viewport }: CanvasBackgroundStyleOptions,
 ) => {
-  const { pixelRatio, width, height } = resizeBackgroundCanvas(
-    canvas,
-    canvasSize.width,
-    canvasSize.height,
-  );
-  let context: CanvasRenderingContext2D | null = null;
+  markPerformance("sigma:drawCanvasBackground:start");
 
   try {
-    context = canvas.getContext("2d", { alpha: true });
-  } catch {
-    return;
-  }
+    const { pixelRatio, width, height } = resizeBackgroundCanvas(
+      canvas,
+      canvasSize.width,
+      canvasSize.height,
+    );
+    let context: CanvasRenderingContext2D | null = null;
 
-  if (!canDrawCanvas(context)) return;
-
-  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-  context.clearRect(0, 0, width, height);
-
-  if (pattern === "dots") {
-    const zoom = Math.max(viewport.zoom, SAFE_MIN_ZOOM);
-    const dotScreenSpacing = DOT_GRID_BASE_SIZE * zoom;
-    const farGrid = getFarGridGeometry(zoom, dotScreenSpacing);
-
-    if (farGrid) {
-      drawGridLines(
-        context,
-        width,
-        height,
-        viewport,
-        farGrid.screenSize,
-        farGrid.alpha,
-      );
+    try {
+      context = canvas.getContext("2d", { alpha: true });
+    } catch {
+      return;
     }
 
-    drawDotGrid(context, width, height, viewport);
-    return;
-  }
+    if (!canDrawCanvas(context)) return;
 
-  drawLineGrid(context, width, height, viewport);
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    context.clearRect(0, 0, width, height);
+
+    if (pattern === "dots") {
+      const zoom = Math.max(viewport.zoom, SAFE_MIN_ZOOM);
+      const dotScreenSpacing = DOT_GRID_BASE_SIZE * zoom;
+      const farGrid = getFarGridGeometry(zoom, dotScreenSpacing);
+
+      if (farGrid) {
+        drawGridLines(
+          context,
+          width,
+          height,
+          viewport,
+          farGrid.screenSize,
+          farGrid.alpha,
+        );
+      }
+
+      drawDotGrid(context, width, height, viewport);
+      return;
+    }
+
+    drawLineGrid(context, width, height, viewport);
+  } finally {
+    markPerformance("sigma:drawCanvasBackground:end");
+  }
 };
 
 // ─── Main export ──────────────────────────────────────────────────────────────

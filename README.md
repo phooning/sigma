@@ -4,6 +4,8 @@
 
 <img alt="Image" src="https://github.com/user-attachments/assets/443eaeea-3534-4c63-94c9-78b86dd00630" />
 
+[![License](https://img.shields.io/github/license/phooning/sigma)](LICENSE)&nbsp;
+
 I built this with Tauri on Rust and React with the help of multi-agent reviews. It offers a lightweight OS-native alternative to heavy electron-based media tools, specifically optimized for creative workflows and high performance viewing.
 
 <div align="center">

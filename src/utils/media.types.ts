@@ -13,6 +13,8 @@ export interface Viewport {
 
 export type MediaItemType = "image" | "video";
 export type ImagePreviewDimension = 256 | 1024;
+export type VideoLodState = "video" | "thumbnail" | "proxy";
+export type ImageLodState = "full" | "preview1024" | "preview256";
 
 export interface MediaItem {
   id: string;
@@ -26,10 +28,13 @@ export interface MediaItem {
   deferVideoLoad?: boolean;
   thumbnailPath?: string;
   thumbnailUrl?: string;
+  lowResProxyUrl?: string;
   imagePreview256Path?: string;
   imagePreview256Url?: string;
   imagePreview1024Path?: string;
   imagePreview1024Url?: string;
+  imageLod?: ImageLodState;
+  videoLod?: VideoLodState;
   x: number;
   y: number;
   width: number;

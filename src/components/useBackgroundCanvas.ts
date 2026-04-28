@@ -7,7 +7,7 @@ export const useBackgroundCanvas = (
   backgroundCanvasRef: RefObject<HTMLCanvasElement | null>,
   canvasSize: { width: number; height: number },
   canvasBackgroundPattern: CanvasBackgroundPattern,
-  viewport: Viewport,
+  getViewport: () => Viewport,
 ) => {
   // Viewport motion redraws from input and animation handlers. This hook covers
   // mount, resize, and background-pattern changes without a second paint after
@@ -19,7 +19,7 @@ export const useBackgroundCanvas = (
     drawCanvasBackground(canvas, {
       canvasSize,
       pattern: canvasBackgroundPattern,
-      viewport,
+      viewport: getViewport(),
     });
-  }, [backgroundCanvasRef, canvasBackgroundPattern, canvasSize, viewport]);
+  }, [backgroundCanvasRef, canvasBackgroundPattern, canvasSize, getViewport]);
 };

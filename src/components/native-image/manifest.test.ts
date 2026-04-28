@@ -44,14 +44,60 @@ describe("buildNativeImageManifest", () => {
 
     expect(manifest.assets).toHaveLength(1);
     expect(manifest.assets[0]).toMatchObject({
-      path: "/images/example.png",
-      url: "asset:///images/example.png",
+      path: expect.stringMatching(/^data:image\/svg\+xml/),
+      url: expect.stringMatching(/^data:image\/svg\+xml/),
       cropLeftRatio: 20 / 460,
       cropTopRatio: 30 / 380,
       cropWidthRatio: 400 / 460,
       cropHeightRatio: 300 / 380,
     });
-    expect(previewRequests).toEqual([{ item, maxDimension: 1024 }]);
+    expect(previewRequests).toEqual([{ item, maxDimension: 256 }]);
+  });
+
+  it("uses a preview or placeholder instead of full-res below 1x zoom", () => {
+    const missingPreview = baseImage({
+      width: 6000,
+      height: 4000,
+      sourceWidth: 6000,
+      sourceHeight: 4000,
+    });
+    const withPreview = baseImage({
+      id: "with-preview",
+      width: 6000,
+      height: 4000,
+      sourceWidth: 6000,
+      sourceHeight: 4000,
+      imagePreview1024Path: "/images/example-1024.png",
+      imagePreview1024Url: "asset:///images/example-1024.png",
+    });
+
+    const { manifest, previewRequests } = buildNativeImageManifest({
+      items: [missingPreview, withPreview],
+      viewport: { x: 0, y: 0, zoom: 0.1 },
+      canvasSize: { width: 1200, height: 800 },
+      selectedItems: new Set<string>(),
+      draggingItemId: null,
+      resizingItemId: null,
+      croppingItemId: null,
+      editingCropItemId: null,
+    });
+
+    expect(manifest.assets[0]).toMatchObject({
+      id: "image-1",
+      path: expect.stringMatching(/^data:image\/svg\+xml/),
+      url: expect.stringMatching(/^data:image\/svg\+xml/),
+    });
+    expect(manifest.assets[1]).toMatchObject({
+      id: "with-preview",
+      path: "/images/example-1024.png",
+      url: "asset:///images/example-1024.png",
+    });
+    expect(manifest.assets.map((asset) => asset.path)).not.toContain(
+      "/images/example.png",
+    );
+    expect(previewRequests).toEqual([
+      { item: missingPreview, maxDimension: 1024 },
+    ]);
   });
 
   it("skips images currently managed by React and boosts selected draw order", () => {

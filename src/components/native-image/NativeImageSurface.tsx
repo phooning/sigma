@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { getViewBounds } from "../../utils/viewport";
 import { buildNativeImageManifest } from "./manifest";
 import type { NativeImageSurfaceProps } from "./types";
 
@@ -179,8 +180,15 @@ export function NativeImageSurface({
         const previewSignature = signatureForPreviewRequests(previewRequests);
         if (previewSignature !== previewSignatureRef.current) {
           previewSignatureRef.current = previewSignature;
+          const viewBounds = getViewBounds(
+            viewport,
+            canvasSize.width,
+            canvasSize.height,
+          );
           for (const request of previewRequests) {
-            requestImagePreview(request.item, request.maxDimension);
+            requestImagePreview(request.item, request.maxDimension, {
+              viewBounds,
+            });
           }
         }
       }

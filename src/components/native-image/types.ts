@@ -1,4 +1,5 @@
 import type { MediaItem, Viewport } from "../../utils/media.types";
+import type { MediaQueueOptions } from "../../utils/media";
 
 export type NativeImageManifestAsset = {
   id: string;
@@ -64,5 +65,9 @@ export type NativeImageSurfaceProps = {
   croppingItemId: string | null;
   editingCropItemId: string | null;
   onReadyChange?: (isReady: boolean) => void;
-  requestImagePreview: (item: MediaItem, maxDimension: 256 | 1024) => void;
+  requestImagePreview: (
+    item: MediaItem,
+    maxDimension: 256 | 1024,
+    options?: MediaQueueOptions,
+  ) => void;
 };

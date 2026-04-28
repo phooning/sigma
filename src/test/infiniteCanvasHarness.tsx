@@ -20,7 +20,7 @@ const {
   const invokeMock = vi.fn(
     (
       command: string,
-      args?: { path?: string; paths?: string[]; maxDimension?: number }
+      args?: { path?: string; paths?: string[]; maxDimension?: number; lod?: number }
     ) => {
     if (command === 'probe_media') {
       return Promise.resolve({
@@ -55,6 +55,20 @@ const {
         `/tmp/${
           args?.path?.includes('portrait') ? 'portrait' : 'image'
         }-preview-${args?.maxDimension}.png`
+      );
+    }
+
+    if (command === 'request_decode') {
+      if (args?.path?.match(/\.(mp4|webm|mov|mkv)$/i)) {
+        return Promise.resolve(
+          `/tmp/${args?.path?.includes('heavy_video.mkv') ? 'heavy' : 'video'}-thumb.jpg`
+        );
+      }
+
+      return Promise.resolve(
+        `/tmp/${
+          args?.path?.includes('portrait') ? 'portrait' : 'image'
+        }-preview-${args?.lod}.png`
       );
     }
 
