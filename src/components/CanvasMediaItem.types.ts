@@ -1,5 +1,5 @@
-import type { MediaItem } from "../utils/media.types";
 import type { MediaQueueOptions } from "../utils/media";
+import type { MediaItem } from "../utils/media.types";
 import type { ViewBounds } from "../utils/viewport.types";
 
 export type MediaPointerHandler = (
@@ -7,10 +7,7 @@ export type MediaPointerHandler = (
   event: React.PointerEvent,
 ) => void;
 
-export type MediaActionHandler = (
-  id: string,
-  event: React.MouseEvent,
-) => void;
+export type MediaActionHandler = (id: string, event: React.MouseEvent) => void;
 
 export type CanvasMediaItemProps = {
   deleteItem: MediaActionHandler;

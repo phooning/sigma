@@ -49,10 +49,8 @@ const itemRefs: InteractionItemRefs = {
   croppingItem: null,
 };
 
-const resolveStateUpdate = <T,>(value: SetStateAction<T>, prev: T): T =>
-  typeof value === "function"
-    ? (value as (prevState: T) => T)(prev)
-    : value;
+const resolveStateUpdate = <T>(value: SetStateAction<T>, prev: T): T =>
+  typeof value === "function" ? (value as (prevState: T) => T)(prev) : value;
 
 const syncItemRefs = (next: Partial<InteractionItemRefs>) => {
   if ("draggingItem" in next) {

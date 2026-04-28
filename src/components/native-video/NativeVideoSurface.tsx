@@ -1,16 +1,16 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Channel, invoke } from "@tauri-apps/api/core";
-import {
-  computeNativeVideoBounds,
-  useNativeVideoManifest,
-} from "./useNativeVideoManifest";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { MediaItem, Viewport } from "../../utils/media.types";
 import type {
   NativeControllerSnapshot,
   NativeVideoManifest,
   NativeVideoProfile,
   NativeVideoSurfaceProps,
 } from "./types";
-import type { MediaItem, Viewport } from "../../utils/media.types";
+import {
+  computeNativeVideoBounds,
+  useNativeVideoManifest,
+} from "./useNativeVideoManifest";
 
 const MANIFEST_DEBOUNCE_MS = 120;
 const FORCE_NATIVE_KEY = "sigma.nativeVideo.enabled";

@@ -1,119 +1,119 @@
 .resize-handle {
-    position: absolute;
-    bottom: 0;
-    right: 0;
-    width: var(--resize-handle-size);
-    height: var(--resize-handle-size);
-    cursor: se-resize;
-    background: linear-gradient(
-        135deg,
-        transparent 50%,
-        rgba(255, 255, 255, 0.4) 50%
-    );
-    border-bottom-right-radius: var(--radius-md-app);
-    z-index: var(--z-resize);
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: var(--resize-handle-size);
+  height: var(--resize-handle-size);
+  cursor: se-resize;
+  background: linear-gradient(
+    135deg,
+    transparent 50%,
+    rgba(255, 255, 255, 0.4) 50%
+  );
+  border-bottom-right-radius: var(--radius-md-app);
+  z-index: var(--z-resize);
 }
 
 .resize-handle:hover {
-    background: linear-gradient(
-        135deg,
-        transparent 50%,
-        rgba(139, 92, 246, 0.8) 50%
-    );
+  background: linear-gradient(
+    135deg,
+    transparent 50%,
+    rgba(139, 92, 246, 0.8) 50%
+  );
 }
 
 .selection-box {
-    position: absolute;
-    border: var(--border-width) solid var(--accent-selection);
-    background-color: var(--accent-selection-soft);
-    pointer-events: none;
-    z-index: var(--z-selection);
+  position: absolute;
+  border: var(--border-width) solid var(--accent-selection);
+  background-color: var(--accent-selection-soft);
+  pointer-events: none;
+  z-index: var(--z-selection);
 }
 
 .crop-overlay {
-    position: absolute;
-    inset: 0;
-    border: var(--border-width-strong) solid rgba(20, 184, 166, 0.9);
-    background-image:
-        linear-gradient(
-            to right,
-            transparent 33.333%,
-            rgba(255, 255, 255, 0.35) 33.333%,
-            rgba(255, 255, 255, 0.35) calc(33.333% + var(--border-width)),
-            transparent calc(33.333% + var(--border-width)),
-            transparent 66.666%,
-            rgba(255, 255, 255, 0.35) 66.666%,
-            rgba(255, 255, 255, 0.35) calc(66.666% + var(--border-width)),
-            transparent calc(66.666% + var(--border-width))
-        ),
-        linear-gradient(
-            to bottom,
-            transparent 33.333%,
-            rgba(255, 255, 255, 0.35) 33.333%,
-            rgba(255, 255, 255, 0.35) calc(33.333% + var(--border-width)),
-            transparent calc(33.333% + var(--border-width)),
-            transparent 66.666%,
-            rgba(255, 255, 255, 0.35) 66.666%,
-            rgba(255, 255, 255, 0.35) calc(66.666% + var(--border-width)),
-            transparent calc(66.666% + var(--border-width))
-        );
-    pointer-events: none;
-    z-index: var(--z-crop-overlay);
+  position: absolute;
+  inset: 0;
+  border: var(--border-width-strong) solid rgba(20, 184, 166, 0.9);
+  background-image:
+    linear-gradient(
+      to right,
+      transparent 33.333%,
+      rgba(255, 255, 255, 0.35) 33.333%,
+      rgba(255, 255, 255, 0.35) calc(33.333% + var(--border-width)),
+      transparent calc(33.333% + var(--border-width)),
+      transparent 66.666%,
+      rgba(255, 255, 255, 0.35) 66.666%,
+      rgba(255, 255, 255, 0.35) calc(66.666% + var(--border-width)),
+      transparent calc(66.666% + var(--border-width))
+    ),
+    linear-gradient(
+      to bottom,
+      transparent 33.333%,
+      rgba(255, 255, 255, 0.35) 33.333%,
+      rgba(255, 255, 255, 0.35) calc(33.333% + var(--border-width)),
+      transparent calc(33.333% + var(--border-width)),
+      transparent 66.666%,
+      rgba(255, 255, 255, 0.35) 66.666%,
+      rgba(255, 255, 255, 0.35) calc(66.666% + var(--border-width)),
+      transparent calc(66.666% + var(--border-width))
+    );
+  pointer-events: none;
+  z-index: var(--z-crop-overlay);
 }
 
 .crop-handle {
-    position: absolute;
-    width: var(--crop-handle-size);
-    height: var(--crop-handle-size);
-    margin: calc(var(--crop-handle-size) / -2);
-    border: var(--border-width-strong) solid var(--text-strong);
-    border-radius: var(--radius-xs);
-    background: var(--accent-crop);
-    pointer-events: auto;
-    z-index: var(--z-crop-handle);
+  position: absolute;
+  width: var(--crop-handle-size);
+  height: var(--crop-handle-size);
+  margin: calc(var(--crop-handle-size) / -2);
+  border: var(--border-width-strong) solid var(--text-strong);
+  border-radius: var(--radius-xs);
+  background: var(--accent-crop);
+  pointer-events: auto;
+  z-index: var(--z-crop-handle);
 }
 
 .crop-handle-n,
 .crop-handle-s {
-    left: 50%;
+  left: 50%;
 }
 .crop-handle-e,
 .crop-handle-w {
-    top: 50%;
+  top: 50%;
 }
 .crop-handle-n {
-    top: 0;
-    cursor: n-resize;
+  top: 0;
+  cursor: n-resize;
 }
 .crop-handle-ne {
-    top: 0;
-    right: 0;
-    cursor: ne-resize;
+  top: 0;
+  right: 0;
+  cursor: ne-resize;
 }
 .crop-handle-e {
-    right: 0;
-    cursor: e-resize;
+  right: 0;
+  cursor: e-resize;
 }
 .crop-handle-se {
-    right: 0;
-    bottom: 0;
-    cursor: se-resize;
+  right: 0;
+  bottom: 0;
+  cursor: se-resize;
 }
 .crop-handle-s {
-    bottom: 0;
-    cursor: s-resize;
+  bottom: 0;
+  cursor: s-resize;
 }
 .crop-handle-sw {
-    bottom: 0;
-    left: 0;
-    cursor: sw-resize;
+  bottom: 0;
+  left: 0;
+  cursor: sw-resize;
 }
 .crop-handle-w {
-    left: 0;
-    cursor: w-resize;
+  left: 0;
+  cursor: w-resize;
 }
 .crop-handle-nw {
-    top: 0;
-    left: 0;
-    cursor: nw-resize;
+  top: 0;
+  left: 0;
+  cursor: nw-resize;
 }

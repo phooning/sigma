@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MediaItem } from "../utils/media.types";
+import type { MediaItem } from "../utils/media.types";
 import { VideoMedia } from "./Video";
 
 const videoItem: MediaItem = {
@@ -150,7 +150,7 @@ describe("VideoMedia timeline", () => {
   });
 
   it("keeps the timeline when media duration briefly becomes unavailable", async () => {
-    let duration = Number.NaN;
+    const duration = Number.NaN;
 
     render(
       <VideoMedia

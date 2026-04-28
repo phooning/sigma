@@ -11,7 +11,10 @@ const supportsNativeImageSurface = () =>
 
 const signatureForPreviewRequests = (
   requests: Array<{ item: { id: string }; maxDimension: 256 | 1024 }>,
-) => requests.map(({ item, maxDimension }) => `${item.id}:${maxDimension}`).join("|");
+) =>
+  requests
+    .map(({ item, maxDimension }) => `${item.id}:${maxDimension}`)
+    .join("|");
 
 const signatureForViewport = ({
   x,
@@ -54,7 +57,10 @@ export function NativeImageSurface({
     try {
       const offscreen = canvas.transferControlToOffscreen();
       worker = new Worker(
-        new URL("../../workers/nativeImageCompositor.worker.ts", import.meta.url),
+        new URL(
+          "../../workers/nativeImageCompositor.worker.ts",
+          import.meta.url,
+        ),
         { type: "module" },
       );
       workerRef.current = worker;

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { MediaItem } from "../utils/media.types";
+import type { MediaItem } from "../utils/media.types";
+import { getImageLod } from "../utils/videoUtils";
 import {
   clampVideoTime,
   getVideoLod,
   shouldRequestVideoThumbnail,
 } from "./Video";
-import { getImageLod } from "../utils/videoUtils";
 
 const videoItem: MediaItem = {
   id: "video-1",
@@ -38,13 +38,17 @@ describe("video level of detail", () => {
   });
 
   it("requests thumbnails only in the thumbnail-size band", () => {
-    expect(shouldRequestVideoThumbnail(thumbnailBandZoom, videoItem)).toBe(true);
+    expect(shouldRequestVideoThumbnail(thumbnailBandZoom, videoItem)).toBe(
+      true,
+    );
     expect(shouldRequestVideoThumbnail(0.5, videoItem)).toBe(false);
     expect(shouldRequestVideoThumbnail(0.05, videoItem)).toBe(false);
   });
 
   it("uses hysteresis so video LOD changes once per zoom boundary crossing", () => {
-    const zooms = [0.2, 0.13, 0.12, 0.115, 0.112, 0.11, 0.112, 0.115, 0.12, 0.13, 0.2];
+    const zooms = [
+      0.2, 0.13, 0.12, 0.115, 0.112, 0.11, 0.112, 0.115, 0.12, 0.13, 0.2,
+    ];
     let current = getVideoLod(zooms[0], true, videoItem);
     let transitions = 0;
 

@@ -1,7 +1,7 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
-import { MediaItem, Viewport } from "./media.types";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import type { MediaItem, Viewport } from "./media.types";
 import { notify } from "./notifications";
 
 type TErrorReason = "cancelled" | "invalid" | "error";

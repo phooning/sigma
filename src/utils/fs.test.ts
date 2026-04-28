@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getProjectRootForConfig,
   loadFromStorage,
@@ -8,7 +8,7 @@ import {
   saveToStorage,
   toProjectRelativePath,
 } from "./fs";
-import { MediaItem } from "./media.types";
+import type { MediaItem } from "./media.types";
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),

@@ -1,5 +1,5 @@
-import type { MediaItem, Viewport } from "../../utils/media.types";
 import type { MediaQueueOptions } from "../../utils/media";
+import type { MediaItem, Viewport } from "../../utils/media.types";
 
 export type NativeImageManifestAsset = {
   id: string;

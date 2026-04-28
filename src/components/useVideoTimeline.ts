@@ -1,18 +1,18 @@
 import {
-  MutableRefObject,
-  RefObject,
+  type MutableRefObject,
+  type RefObject,
   useCallback,
   useEffect,
   useRef,
 } from "react";
-import { MediaItem } from "../utils/media.types";
-import { useRefState } from "./useRefState";
+import type { MediaItem } from "../utils/media.types";
 import {
   clampVideoTime,
   getFiniteDuration,
   getLoopRange,
-  LoopState,
+  type LoopState,
 } from "../utils/videoUtils";
+import { useRefState } from "./useRefState";
 
 interface UseVideoTimelineArgs {
   videoRef: RefObject<HTMLVideoElement | null>;

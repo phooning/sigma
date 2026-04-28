@@ -1,9 +1,9 @@
-import type { MediaItem, MediaItemType, Viewport } from "../utils/media.types";
 import type {
   NativeControllerSnapshot,
   NativeVideoManifest,
   NativeVideoProfile,
 } from "../components/native-video/types";
+import type { MediaItem, MediaItemType, Viewport } from "../utils/media.types";
 
 export const BENCH_CANVAS_SIZE = {
   width: 1920,

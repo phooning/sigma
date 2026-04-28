@@ -1,5 +1,5 @@
-import type { MediaItem } from "../../utils/media.types";
 import { useSettingsStore } from "../../stores/useSettingsStore";
+import type { MediaItem } from "../../utils/media.types";
 import { getMediaFileName } from "./utils";
 
 type HudToolbarActionsProps = {
@@ -116,4 +116,3 @@ export function HudToolbarActions({
     </>
   );
 }
-

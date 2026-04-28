@@ -1,5 +1,3 @@
-import type { CSSProperties } from "react";
-import { Toaster as Sonner, type ToasterProps } from "sonner";
 import {
   CircleCheckIcon,
   InfoIcon,
@@ -7,6 +5,8 @@ import {
   OctagonXIcon,
   TriangleAlertIcon,
 } from "lucide-react";
+import type { CSSProperties } from "react";
+import { Toaster as Sonner, type ToasterProps } from "sonner";
 
 const TOASTER_ICONS: ToasterProps["icons"] = {
   success: <CircleCheckIcon className="size-4" />,

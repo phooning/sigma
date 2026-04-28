@@ -38,13 +38,3 @@ export const useAudioPlaybackStore = create<AudioPlaybackStore>((set) => ({
       muted: false,
     }),
 }));
-
-export const useAudioPlayback = () => ({
-  activeAudioItemId: useAudioPlaybackStore((state) => state.activeItemId),
-  audioVolume: useAudioPlaybackStore((state) => state.volume),
-  isAudioMuted: useAudioPlaybackStore((state) => state.muted),
-  setAudioVolume: useAudioPlaybackStore((state) => state.setVolume),
-  toggleAudioMuted: useAudioPlaybackStore((state) => state.toggleMuted),
-  toggleAudioItem: useAudioPlaybackStore((state) => state.toggleItem),
-  clearAudioItem: useAudioPlaybackStore((state) => state.clearItem),
-});

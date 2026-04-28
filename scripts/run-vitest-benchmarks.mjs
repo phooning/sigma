@@ -1,12 +1,18 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
 
 const root = resolve(new URL("..", import.meta.url).pathname);
 const baselineJsonPath = resolve(root, "benchmarks/vitest-bench-baseline.json");
-const baselineLogPath = resolve(root, "benchmarks/vitest-bench-baseline.verbose.txt");
+const baselineLogPath = resolve(
+  root,
+  "benchmarks/vitest-bench-baseline.verbose.txt",
+);
 const latestJsonPath = resolve(root, "benchmarks/vitest-bench-current.json");
-const latestLogPath = resolve(root, "benchmarks/vitest-bench-current.verbose.txt");
+const latestLogPath = resolve(
+  root,
+  "benchmarks/vitest-bench-current.verbose.txt",
+);
 const updateBaseline = process.argv.includes("--update-baseline");
 
 const jsonPath = updateBaseline ? baselineJsonPath : latestJsonPath;
@@ -31,14 +37,10 @@ if (!updateBaseline && hasBaseline) {
   vitestArgs.push("--compare", baselineJsonPath);
 }
 
-const result = spawnSync(
-  "pnpm",
-  vitestArgs,
-  {
-    cwd: root,
-    encoding: "utf8",
-  },
-);
+const result = spawnSync("pnpm", vitestArgs, {
+  cwd: root,
+  encoding: "utf8",
+});
 
 const combinedOutput = [result.stdout, result.stderr].filter(Boolean).join("");
 writeFileSync(logPath, combinedOutput);

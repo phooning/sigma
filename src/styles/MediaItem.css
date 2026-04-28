@@ -1,72 +1,71 @@
 .media-item {
-    --media-active-scale: 1;
-    --media-transient-x: 0px;
-    --media-transient-y: 0px;
+  --media-active-scale: 1;
+  --media-transient-x: 0px;
+  --media-transient-y: 0px;
 
-    position: absolute;
-    border-radius: var(--radius-md-app);
-    overflow: hidden;
-    box-shadow: 0 0 0 var(--border-width) var(--border);
-    background: var(--surface-control);
-    cursor: grab;
-    transition:
-        box-shadow var(--duration-medium) ease,
-        transform var(--duration-medium) ease;
-    transform: translate3d(var(--media-transient-x), var(--media-transient-y), 0) scale(var(--media-active-scale));
-    user-select: none;
-    -webkit-user-select: none;
-    -webkit-user-drag: none;
+  position: absolute;
+  border-radius: var(--radius-md-app);
+  overflow: hidden;
+  box-shadow: 0 0 0 var(--border-width) var(--border);
+  background: var(--surface-control);
+  cursor: grab;
+  transition: box-shadow var(--duration-medium) ease;
+  transform: translate3d(var(--media-transient-x), var(--media-transient-y), 0)
+    scale(var(--media-active-scale));
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
 }
 
 .media-item.is-transforming {
-    will-change: transform;
-    transition: box-shadow var(--duration-medium) ease;
+  will-change: transform;
+  transition: box-shadow var(--duration-medium) ease;
 }
 
 .media-item.crop-editing {
-    cursor: default;
+  cursor: default;
 }
 
 .media-item.native-image-item {
-    background: transparent;
+  background: transparent;
 }
 
 .media-item:active {
-    --media-active-scale: 1.02;
+  --media-active-scale: 1.02;
 
-    cursor: grabbing;
-    box-shadow:
-        var(--shadow-media-active),
-        0 0 0 var(--border-width-strong) rgba(139, 92, 246, 0.5);
+  cursor: grabbing;
+  box-shadow:
+    var(--shadow-media-active),
+    0 0 0 var(--border-width-strong) rgba(139, 92, 246, 0.5);
 }
 
 .media-item.crop-editing:active {
-    --media-active-scale: 1;
+  --media-active-scale: 1;
 
-    cursor: default;
+  cursor: default;
 }
 
 .media-content {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    pointer-events: none;
-    user-select: none;
-    -webkit-user-select: none;
-    -webkit-user-drag: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
 }
 
 .media-crop-box {
-    position: absolute;
-    pointer-events: none;
+  position: absolute;
+  pointer-events: none;
 }
 
 .media-item.selected {
-    box-shadow:
-        0 0 0 var(--focus-ring-width) var(--accent-selection),
-        var(--shadow-media);
+  box-shadow:
+    0 0 0 var(--focus-ring-width) var(--accent-selection),
+    var(--shadow-media);
 }
 
 .reset-btn,
@@ -75,29 +74,29 @@
 .screenshot-btn,
 .audio-btn,
 .crop-btn {
-    position: absolute;
-    top: var(--media-action-offset);
-    box-sizing: border-box;
-    width: var(--media-action-size);
-    height: var(--media-action-size);
-    min-width: var(--media-action-size);
-    min-height: var(--media-action-size);
-    padding: 0;
-    border-radius: var(--radius-round);
-    color: var(--text-strong);
-    background: var(--surface-action);
-    border: var(--border-width) solid var(--input);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    line-height: var(--leading-none);
-    cursor: pointer;
-    opacity: 0;
-    transition:
-        opacity var(--duration-medium) ease,
-        background var(--duration-medium) ease,
-        transform var(--duration-medium) ease;
-    z-index: var(--z-media-action);
+  position: absolute;
+  top: var(--media-action-offset);
+  box-sizing: border-box;
+  width: var(--media-action-size);
+  height: var(--media-action-size);
+  min-width: var(--media-action-size);
+  min-height: var(--media-action-size);
+  padding: 0;
+  border-radius: var(--radius-round);
+  color: var(--text-strong);
+  background: var(--surface-action);
+  border: var(--border-width) solid var(--input);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: var(--leading-none);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--duration-medium) ease,
+    background var(--duration-medium) ease,
+    transform var(--duration-medium) ease;
+  z-index: var(--z-media-action);
 }
 
 .media-item.selected .reset-btn,
@@ -118,35 +117,35 @@
 .media-item.crop-editing .screenshot-btn,
 .media-item.crop-editing .audio-btn,
 .media-item.crop-editing .crop-btn {
-    backdrop-filter: blur(var(--blur-md));
-    -webkit-backdrop-filter: blur(var(--blur-md));
+  backdrop-filter: blur(var(--blur-md));
+  -webkit-backdrop-filter: blur(var(--blur-md));
 }
 
 .delete-btn {
-    right: var(--media-action-offset);
-    font-size: var(--text-3xl);
+  right: var(--media-action-offset);
+  font-size: var(--text-3xl);
 }
 .reset-btn {
-    right: calc(var(--media-action-offset) + var(--media-action-step));
-    font-size: var(--text-3xl);
+  right: calc(var(--media-action-offset) + var(--media-action-step));
+  font-size: var(--text-3xl);
 }
 .reveal-btn {
-    right: calc(var(--media-action-offset) + var(--media-action-step) * 2);
-    font-size: var(--text-4xl);
+  right: calc(var(--media-action-offset) + var(--media-action-step) * 2);
+  font-size: var(--text-4xl);
 }
 .screenshot-btn {
-    right: calc(var(--media-action-offset) + var(--media-action-step) * 3);
-    font-size: var(--text-icon);
+  right: calc(var(--media-action-offset) + var(--media-action-step) * 3);
+  font-size: var(--text-icon);
 }
 .crop-btn {
-    right: calc(var(--media-action-offset) + var(--media-action-step) * 4);
-    font-size: var(--text-2xl);
-    font-weight: 700;
+  right: calc(var(--media-action-offset) + var(--media-action-step) * 4);
+  font-size: var(--text-2xl);
+  font-weight: 700;
 }
 .audio-btn {
-    right: calc(var(--media-action-offset) + var(--media-action-step) * 5);
-    font-size: var(--text-icon);
-    font-weight: 700;
+  right: calc(var(--media-action-offset) + var(--media-action-step) * 5);
+  font-size: var(--text-icon);
+  font-weight: 700;
 }
 
 .media-item:hover .delete-btn,
@@ -156,32 +155,32 @@
 .media-item:hover .audio-btn,
 .media-item:hover .crop-btn,
 .media-item.crop-editing .crop-btn {
-    opacity: 1;
+  opacity: 1;
 }
 
 .delete-btn:hover {
-    background: var(--accent-danger);
-    transform: scale(1.1);
+  background: var(--accent-danger);
+  transform: scale(1.1);
 }
 .reset-btn:hover {
-    background: var(--accent-info);
-    transform: scale(1.1);
+  background: var(--accent-info);
+  transform: scale(1.1);
 }
 .reveal-btn:hover {
-    background: var(--accent-warning);
-    transform: scale(1.1);
+  background: var(--accent-warning);
+  transform: scale(1.1);
 }
 .screenshot-btn:hover {
-    background: var(--accent-success);
-    transform: scale(1.1);
+  background: var(--accent-success);
+  transform: scale(1.1);
 }
 .audio-btn:hover,
 .media-item:hover .audio-btn[aria-pressed="true"] {
-    background: rgba(45, 212, 191, 0.85);
-    transform: scale(1.1);
+  background: rgba(45, 212, 191, 0.85);
+  transform: scale(1.1);
 }
 .crop-btn:hover,
 .crop-btn[aria-pressed="true"] {
-    background: rgba(20, 184, 166, 0.8);
-    transform: scale(1.1);
+  background: rgba(20, 184, 166, 0.8);
+  transform: scale(1.1);
 }

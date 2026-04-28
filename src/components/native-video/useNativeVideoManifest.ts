@@ -24,7 +24,7 @@ type CanvasSize = {
 export function computeNativeVideoBounds(
   item: MediaItem,
   viewport: Viewport,
-  canvasSize: CanvasSize
+  canvasSize: CanvasSize,
 ): NativeVideoGeometryBounds | null {
   if (item.type !== "video") return null;
 
@@ -49,7 +49,7 @@ export function computeNativeVideoBounds(
     screenY,
     renderedWidthPx,
     renderedHeightPx,
-    visibleAreaPx
+    visibleAreaPx,
   };
 }
 
@@ -58,7 +58,7 @@ export function useNativeVideoManifest({
   viewport,
   canvasSize,
   selectedItems,
-  activeAudioItemId
+  activeAudioItemId,
 }: UseNativeVideoManifestOptions): NativeVideoManifest {
   return useMemo(() => {
     const canvasWidth = Math.max(1, Math.round(canvasSize.width));
@@ -74,7 +74,7 @@ export function useNativeVideoManifest({
 
         const screenRect = projectItemToScreen(item, viewport, {
           width: canvasWidth,
-          height: canvasHeight
+          height: canvasHeight,
         });
         const visibleAreaPx = screenRect.visibleAreaPx;
 
@@ -82,7 +82,7 @@ export function useNativeVideoManifest({
 
         const centerWeight = getCenterWeight(screenRect, {
           width: canvasWidth,
-          height: canvasHeight
+          height: canvasHeight,
         });
         const focusWeight = selectedItems.has(item.id)
           ? 2.5
@@ -96,11 +96,11 @@ export function useNativeVideoManifest({
             path: item.filePath,
             sourceWidth: Math.max(
               1,
-              Math.round(item.sourceWidth ?? item.width)
+              Math.round(item.sourceWidth ?? item.width),
             ),
             sourceHeight: Math.max(
               1,
-              Math.round(item.sourceHeight ?? item.height)
+              Math.round(item.sourceHeight ?? item.height),
             ),
             screenX: screenRect.x,
             screenY: screenRect.y,
@@ -109,10 +109,10 @@ export function useNativeVideoManifest({
             visibleAreaPx,
             focusWeight,
             centerWeight,
-            targetFps: TARGET_PRESENTATION_FPS
-          }
+            targetFps: TARGET_PRESENTATION_FPS,
+          },
         ];
-      })
+      }),
     };
   }, [activeAudioItemId, canvasSize, items, selectedItems, viewport]);
 }

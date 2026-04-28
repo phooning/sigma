@@ -1,55 +1,55 @@
 .canvas-container {
-    position: relative;
-    width: 100dvw;
-    height: 100dvh;
-    overflow: hidden;
-    background-color: var(--canvas-background);
-    user-select: none;
-    -webkit-user-select: none;
-    -webkit-tap-highlight-color: transparent;
-    touch-action: none;
+  position: relative;
+  width: 100dvw;
+  height: 100dvh;
+  overflow: hidden;
+  background-color: var(--canvas-background);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
 }
 
 .canvas-background {
-    position: fixed;
-    inset: 0;
-    z-index: var(--z-canvas-base);
-    display: block;
-    width: 100dvw;
-    height: 100dvh;
-    transform: translateZ(0);
-    contain: strict;
-    pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-canvas-base);
+  display: block;
+  width: 100dvw;
+  height: 100dvh;
+  transform: translateZ(0);
+  contain: strict;
+  pointer-events: none;
 }
 
 .native-video-surface {
-    position: fixed;
-    inset: 0;
-    z-index: calc(var(--z-canvas-world) + 1);
-    display: block;
-    width: 100dvw;
-    height: 100dvh;
-    contain: strict;
-    pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-canvas-world) + 1);
+  display: block;
+  width: 100dvw;
+  height: 100dvh;
+  contain: strict;
+  pointer-events: none;
 }
 
 .native-image-surface {
-    position: fixed;
-    inset: 0;
-    z-index: var(--z-canvas-world);
-    display: block;
-    width: 100dvw;
-    height: 100dvh;
-    contain: strict;
-    pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-canvas-world);
+  display: block;
+  width: 100dvw;
+  height: 100dvh;
+  contain: strict;
+  pointer-events: none;
 }
 
 .canvas-world {
-    position: absolute;
-    top: 0;
-    left: 0;
-    transform-origin: 0 0;
-    z-index: var(--z-canvas-world);
-    user-select: none;
-    -webkit-user-select: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  z-index: var(--z-canvas-world);
+  user-select: none;
+  -webkit-user-select: none;
 }

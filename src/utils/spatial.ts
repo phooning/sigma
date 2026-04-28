@@ -24,7 +24,9 @@ export const intersectsRect = (left: Rect, right: Rect) =>
   left.y < right.y + right.height &&
   left.y + left.height > right.y;
 
-export const getItemRect = (item: Pick<MediaItem, "x" | "y" | "width" | "height">): Rect => ({
+export const getItemRect = (
+  item: Pick<MediaItem, "x" | "y" | "width" | "height">,
+): Rect => ({
   x: item.x,
   y: item.y,
   width: item.width,
@@ -88,7 +90,10 @@ export const getCenterWeight = (
 const toCellIndex = (value: number, cellSize: number) =>
   Math.floor(value / cellSize);
 
-export const getRectCells = (rect: Rect, cellSize: number): SpatialIndexCell[] => {
+export const getRectCells = (
+  rect: Rect,
+  cellSize: number,
+): SpatialIndexCell[] => {
   const startX = toCellIndex(rect.x, cellSize);
   const endX = toCellIndex(rect.x + rect.width, cellSize);
   const startY = toCellIndex(rect.y, cellSize);

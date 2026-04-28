@@ -1,6 +1,6 @@
-import { RefObject, useCallback, useEffect, useRef } from "react";
+import { type RefObject, useCallback, useEffect, useRef } from "react";
+import type { VideoLod } from "../utils/videoUtils";
 import { useRefState } from "./useRefState";
-import { VideoLod } from "../utils/videoUtils";
 
 interface UseVideoPlaybackArgs {
   videoRef: RefObject<HTMLVideoElement | null>;

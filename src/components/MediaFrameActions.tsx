@@ -1,6 +1,6 @@
-import { CROP_HANDLES, EMPTY_CROP } from "../utils/media";
-import { MediaItem } from "../utils/media.types";
 import { useAudioPlaybackStore } from "../stores/useAudioPlaybackStore";
+import { CROP_HANDLES, EMPTY_CROP } from "../utils/media";
+import type { MediaItem } from "../utils/media.types";
 import {
   Tooltip,
   TooltipContent,
@@ -87,7 +87,7 @@ export function MediaFrameActions({
   isCropEditing: boolean;
 }) {
   const isAudioActive = useAudioPlaybackStore(
-    (state) => state.activeItemId === item.id,
+    (s) => s.activeItemId === item.id,
   );
   const audioLabel = isAudioActive
     ? "Disable audio playback"

@@ -1,5 +1,6 @@
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { type CSSProperties, useCallback, useEffect, useRef } from "react";
-import {
+import type {
   CropHandle,
   CropInsets,
   ImageLodAssets,
@@ -8,10 +9,9 @@ import {
   SetItems,
   VideoLodAssets,
 } from "./media.types";
-import type { ViewBounds } from "./viewport.types";
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { getViewBounds } from "./viewport";
 import { getImageLod, shouldRequestVideoThumbnail } from "./videoUtils";
+import { getViewBounds } from "./viewport";
+import type { ViewBounds } from "./viewport.types";
 
 export const VIDEO_EXTENSIONS = ["mp4", "webm", "mov", "mkv"];
 export const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp"];
@@ -72,7 +72,9 @@ export const advanceViewportGeneration = () => {
 
 export const getViewportGeneration = () => viewportGeneration;
 
-const subscribeViewportGeneration = (listener: (generation: number) => void) => {
+const subscribeViewportGeneration = (
+  listener: (generation: number) => void,
+) => {
   viewportGenerationListeners.add(listener);
   return () => {
     viewportGenerationListeners.delete(listener);
@@ -88,6 +90,14 @@ export type MediaQueueOptions = {
 };
 
 type DecodePriority = "visible" | "prefetch" | "background";
+
+const hasMatchingAssetSource = (
+  currentItem: MediaItem,
+  requestedItem: MediaItem,
+) =>
+  currentItem.id === requestedItem.id &&
+  currentItem.type === requestedItem.type &&
+  currentItem.filePath === requestedItem.filePath;
 
 const intersectsViewBounds = (
   item: Pick<MediaItem, "x" | "y" | "width" | "height">,
@@ -303,13 +313,7 @@ export function useImagePreviewQueue(setItems: SetItems) {
       if (generation < currentGeneration) return;
 
       const requestKey = `${item.id}:${maxDimension}`;
-      const requestedGeneration = requestedRef.current.get(requestKey);
-      if (
-        requestedGeneration !== undefined &&
-        requestedGeneration >= generation
-      ) {
-        return;
-      }
+      if (requestedRef.current.has(requestKey)) return;
 
       requestedRef.current.set(requestKey, generation);
       void decodePreview({
@@ -322,7 +326,7 @@ export function useImagePreviewQueue(setItems: SetItems) {
           requestedRef.current.delete(requestKey);
         }
 
-        if (!decodedPath || generation < getViewportGeneration()) return;
+        if (!decodedPath) return;
 
         const previewAssets = assetsForDecodedPath(
           item,
@@ -334,13 +338,26 @@ export function useImagePreviewQueue(setItems: SetItems) {
 
         if (!previewAssets[previewKey]) return;
 
-        setItems((prev) =>
-          prev.map((currentItem) =>
-            currentItem.id === item.id
-              ? { ...currentItem, ...previewAssets }
-              : currentItem,
-          ),
-        );
+        setItems((prev) => {
+          let changed = false;
+          const nextItems = prev.map((currentItem) => {
+            if (!hasMatchingAssetSource(currentItem, item)) {
+              return currentItem;
+            }
+
+            if (
+              (maxDimension === 256 && currentItem.imagePreview256Url) ||
+              (maxDimension === 1024 && currentItem.imagePreview1024Url)
+            ) {
+              return currentItem;
+            }
+
+            changed = true;
+            return { ...currentItem, ...previewAssets };
+          });
+
+          return changed ? nextItems : prev;
+        });
       });
     },
     [setItems],
@@ -360,26 +377,22 @@ export function useThumbnailQueue(setItems: SetItems) {
       const generation = options.generation ?? currentGeneration;
       if (generation < currentGeneration) return;
 
-      const requestedGeneration = requestedRef.current.get(item.id);
-      if (
-        requestedGeneration !== undefined &&
-        requestedGeneration >= generation
-      ) {
+      const priority = computeDecodePriority(item, options.viewBounds);
+      if (priority === "background" || requestedRef.current.has(item.id))
         return;
-      }
 
       requestedRef.current.set(item.id, generation);
       void decodePreview({
         item,
         lod: 256,
         generation,
-        priority: computeDecodePriority(item, options.viewBounds),
+        priority,
       }).then((decodedPath) => {
         if (requestedRef.current.get(item.id) === generation) {
           requestedRef.current.delete(item.id);
         }
 
-        if (!decodedPath || generation < getViewportGeneration()) return;
+        if (!decodedPath) return;
 
         const lodAssets = assetsForDecodedPath(
           item,
@@ -389,13 +402,22 @@ export function useThumbnailQueue(setItems: SetItems) {
 
         if (!lodAssets.thumbnailUrl) return;
 
-        setItems((prev) =>
-          prev.map((currentItem) =>
-            currentItem.id === item.id && !currentItem.thumbnailUrl
-              ? { ...currentItem, ...lodAssets }
-              : currentItem,
-          ),
-        );
+        setItems((prev) => {
+          let changed = false;
+          const nextItems = prev.map((currentItem) => {
+            if (
+              !hasMatchingAssetSource(currentItem, item) ||
+              currentItem.thumbnailUrl
+            ) {
+              return currentItem;
+            }
+
+            changed = true;
+            return { ...currentItem, ...lodAssets };
+          });
+
+          return changed ? nextItems : prev;
+        });
       });
     },
     [setItems],
@@ -446,9 +468,10 @@ export function useDecodeArbiterFeeder({
     [getViewport, requestImagePreview, requestThumbnail],
   );
 
-  useEffect(() => subscribeViewportGeneration(feedViewportDecodeRequests), [
-    feedViewportDecodeRequests,
-  ]);
+  useEffect(
+    () => subscribeViewportGeneration(feedViewportDecodeRequests),
+    [feedViewportDecodeRequests],
+  );
 
   useEffect(() => {
     feedViewportDecodeRequests();

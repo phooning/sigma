@@ -1,31 +1,27 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAudioPlaybackStore } from "../stores/useAudioPlaybackStore";
 import {
   getStoredVideoLoop,
-  useVideoExportStore,
+  useVideoExportStore
 } from "../stores/useVideoExportStore";
-import { useVideoLoop } from "./useVideoLoop";
-import { useVideoPlayback } from "./useVideoPlayback";
-import { useVideoTimeline } from "./useVideoTimeline";
+import { getCropBoxStyle } from "../utils/media";
 import {
   getVideoLod,
   initialLoopState,
-  shouldRequestVideoThumbnail,
+  shouldRequestVideoThumbnail
 } from "../utils/videoUtils";
-import { getCropBoxStyle } from "../utils/media";
+import { useVideoLoop } from "./useVideoLoop";
+import { useVideoPlayback } from "./useVideoPlayback";
+import { useVideoTimeline } from "./useVideoTimeline";
+import type { VideoMediaProps } from "./Video.types";
 import { VideoLoadProxy, VideoProxy, VideoThumbnail } from "./VideoLodViews";
 import { VideoTimeline } from "./VideoTimeline";
-import type { VideoMediaProps } from "./Video.types";
 import type { StopCanvasGestureHandler } from "./VideoTimeline.types";
 
 export {
   clampVideoTime,
   getVideoLod,
-  shouldRequestVideoThumbnail,
+  shouldRequestVideoThumbnail
 } from "../utils/videoUtils";
 
 export function VideoMedia({
@@ -34,21 +30,19 @@ export function VideoMedia({
   item,
   isInViewport,
   zoom,
-  onThumbnailNeeded,
+  onThumbnailNeeded
 }: VideoMediaProps) {
   const [isLoadRequested, setIsLoadRequested] = useState(false);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
   const [initialLoop] = useState(() => getStoredVideoLoop(item.id));
   const videoRef = useRef<HTMLVideoElement>(null);
   const externalLoopRef = useRef(initialLoopState);
-  const setVideoLoopState = useVideoExportStore(
-    (state) => state.setLoopState,
-  );
-  const activeAudioItemId = useAudioPlaybackStore(
-    (state) => state.activeItemId,
-  );
-  const audioVolume = useAudioPlaybackStore((state) => state.volume);
-  const isAudioMuted = useAudioPlaybackStore((state) => state.muted);
+  const setVideoLoopState = useVideoExportStore((s) => s.setLoopState);
+
+  const activeAudioItemId = useAudioPlaybackStore((s) => s.activeItemId);
+  const audioVolume = useAudioPlaybackStore((s) => s.volume);
+  const isAudioMuted = useAudioPlaybackStore((s) => s.muted);
+
   const isAudioActive = activeAudioItemId === item.id;
   const isVideoRequested = isLoadRequested || isAudioActive;
   const lod = isVideoRequested
@@ -83,12 +77,12 @@ export function VideoMedia({
     stopTimelineAnimation,
     syncPlaybackRate,
     syncTimelineFromVideo,
-    updateVideoMetadata,
+    updateVideoMetadata
   } = useVideoTimeline({
     videoRef,
     url,
     item,
-    loopRef: externalLoopRef,
+    loopRef: externalLoopRef
   });
 
   const { loop, setLoopPoint, toggleLoop, clearLoop } = useVideoLoop({
@@ -99,7 +93,7 @@ export function VideoMedia({
     initialLoop,
     duration,
     url,
-    syncTimelineFromVideo,
+    syncTimelineFromVideo
   });
 
   useEffect(() => {
@@ -114,7 +108,7 @@ export function VideoMedia({
       shouldDeferVideoLoad,
       onPause: stopTimelineAnimation,
       onPlay: startTimelineAnimation,
-      onPlaybackError: setPlaybackError,
+      onPlaybackError: setPlaybackError
     });
 
   useEffect(() => {
@@ -131,6 +125,7 @@ export function VideoMedia({
 
   const cropBoxStyle = getCropBoxStyle(item, crop);
 
+  // TODO: Interaction for massive video loads.
   if (shouldDeferVideoLoad) {
     return (
       <VideoLoadProxy
@@ -181,7 +176,7 @@ export function VideoMedia({
           onRateChange={(e) => {
             syncPlaybackRate(
               e.currentTarget.currentTime,
-              e.currentTarget.playbackRate,
+              e.currentTarget.playbackRate
             );
           }}
           onSeeked={(e) => {
@@ -194,7 +189,9 @@ export function VideoMedia({
             }
           }}
           onError={() => {
-            setPlaybackError("Playback failed. This file may need transcoding.");
+            setPlaybackError(
+              "Playback failed. This file may need transcoding."
+            );
           }}
           onDragStart={(e) => e.preventDefault()}
         />

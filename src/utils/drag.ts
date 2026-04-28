@@ -1,7 +1,7 @@
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { MediaItem, Viewport } from "./media.types";
 import { useEffect, useRef } from "react";
 import { onDropMedia } from "../components/CanvasActions";
+import type { MediaItem, Viewport } from "./media.types";
 
 export function attachDragPrevention(target: Window) {
   const prevent = (e: DragEvent) => {
@@ -53,7 +53,10 @@ export function useTauriDrop({ getViewport, setItems }: UseTauriDropOptions) {
         })();
       });
     } catch (error) {
-      console.warn("Native drag/drop unavailable; falling back to browser-only mode.", error);
+      console.warn(
+        "Native drag/drop unavailable; falling back to browser-only mode.",
+        error,
+      );
     }
 
     return () => {

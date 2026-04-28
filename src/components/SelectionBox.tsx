@@ -1,4 +1,3 @@
-
 export interface ISelectionBox {
   startX: number;
   startY: number;
@@ -14,9 +13,10 @@ const SelectionBox = ({ selectionBox }: { selectionBox: ISelectionBox }) => {
         left: Math.min(selectionBox.startX, selectionBox.endX),
         top: Math.min(selectionBox.startY, selectionBox.endY),
         width: Math.abs(selectionBox.endX - selectionBox.startX),
-        height: Math.abs(selectionBox.endY - selectionBox.startY)
+        height: Math.abs(selectionBox.endY - selectionBox.startY),
       }}
-    />)
-}
+    />
+  );
+};
 
 export { SelectionBox };

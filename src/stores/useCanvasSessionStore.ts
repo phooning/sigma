@@ -27,22 +27,28 @@ type CanvasSessionStore = CanvasSessionSnapshot & {
   loadSessionFromFile: () => Promise<boolean>;
 };
 
-const resolveStateUpdate = <T,>(
-  value: T | ((prevState: T) => T),
-  prev: T,
-): T => (typeof value === "function" ? (value as (prevState: T) => T)(prev) : value);
+const resolveStateUpdate = <T>(value: T | ((prevState: T) => T), prev: T): T =>
+  typeof value === "function" ? (value as (prevState: T) => T)(prev) : value;
+
+const toMediaUrl = (filePath: string, fallback?: string) => {
+  try {
+    return convertFileSrc(filePath);
+  } catch {
+    return fallback ?? `asset://${filePath}`;
+  }
+};
 
 const attachMediaUrls = (item: MediaItem) => {
   const nextUrls = {
-    url: convertFileSrc(item.filePath),
+    url: toMediaUrl(item.filePath, item.url),
     thumbnailUrl: item.thumbnailPath
-      ? convertFileSrc(item.thumbnailPath)
+      ? toMediaUrl(item.thumbnailPath, item.thumbnailUrl)
       : undefined,
     imagePreview256Url: item.imagePreview256Path
-      ? convertFileSrc(item.imagePreview256Path)
+      ? toMediaUrl(item.imagePreview256Path, item.imagePreview256Url)
       : undefined,
     imagePreview1024Url: item.imagePreview1024Path
-      ? convertFileSrc(item.imagePreview1024Path)
+      ? toMediaUrl(item.imagePreview1024Path, item.imagePreview1024Url)
       : undefined,
   };
 

@@ -1,6 +1,6 @@
 import packageJson from "../../package.json";
 import { saveToStorage } from "../utils/fs";
-import { MediaItem, Viewport } from "../utils/media.types";
+import type { MediaItem, Viewport } from "../utils/media.types";
 import { notify } from "../utils/notifications";
 
 export const SETTINGS_MENU_ITEMS = [

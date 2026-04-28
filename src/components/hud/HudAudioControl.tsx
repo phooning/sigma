@@ -1,5 +1,5 @@
+import { useAudioPlaybackStore } from "@/stores/useAudioPlaybackStore";
 import type { MediaItem } from "../../utils/media.types";
-import { useAudioPlayback } from "../../stores/useAudioPlaybackStore";
 
 type HudAudioControlProps = {
   activeAudioItem: MediaItem;
@@ -11,8 +11,11 @@ export function HudAudioControl({
   activeAudioName,
   onSelectActiveAudioItem,
 }: HudAudioControlProps) {
-  const { audioVolume, isAudioMuted, setAudioVolume, toggleAudioMuted } =
-    useAudioPlayback();
+  const audioVolume = useAudioPlaybackStore((s) => s.volume);
+  const isAudioMuted = useAudioPlaybackStore((s) => s.muted);
+  const setAudioVolume = useAudioPlaybackStore((s) => s.setVolume);
+  const toggleAudioMuted = useAudioPlaybackStore((s) => s.toggleMuted);
+
   const audioPercent = Math.round(audioVolume * 100);
 
   const renderAudioMarqueeItem = (isHidden = false) => (

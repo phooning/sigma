@@ -42,10 +42,15 @@ const regressions = latestBenchmarks.flatMap((entry) => {
 
   const baselineEntry = baselineBenchmarks.get(entry.key);
   if (!baselineEntry || typeof baselineEntry.mean !== "number") return [];
-  if (typeof baselineEntry.rme === "number" && baselineEntry.rme > maxAllowedRme) return [];
+  if (
+    typeof baselineEntry.rme === "number" &&
+    baselineEntry.rme > maxAllowedRme
+  )
+    return [];
   if (baselineEntry.mean <= 0) return [];
 
-  const regressionPercent = ((entry.mean - baselineEntry.mean) / baselineEntry.mean) * 100;
+  const regressionPercent =
+    ((entry.mean - baselineEntry.mean) / baselineEntry.mean) * 100;
   if (regressionPercent <= allowedRegressionPercent) return [];
 
   return [

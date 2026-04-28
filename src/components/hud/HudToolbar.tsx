@@ -1,5 +1,5 @@
+import { useAudioPlaybackStore } from "@/stores/useAudioPlaybackStore";
 import type { MediaItem } from "../../utils/media.types";
-import { useAudioPlayback } from "../../stores/useAudioPlaybackStore";
 import { HudAudioControl } from "./HudAudioControl";
 import { HudToolbarActions } from "./HudToolbarActions";
 import { getMediaFileName } from "./utils";
@@ -25,7 +25,7 @@ export function HudToolbar({
   onSelectActiveAudioItem,
   onExportSelectedVideo,
 }: HudToolbarProps) {
-  const { activeAudioItemId } = useAudioPlayback();
+  const activeAudioItemId = useAudioPlaybackStore((s) => s.activeItemId);
 
   const activeAudioItem =
     activeAudioItemId === null

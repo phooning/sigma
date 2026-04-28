@@ -30,4 +30,3 @@ export const HOTKEY_ROWS = [
     description: "Clear the current selection and exit crop editing.",
   },
 ] as const;
-

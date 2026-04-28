@@ -50,7 +50,7 @@ impl Ord for QueuedDecodeRequest {
             .request
             .priority
             .cmp(&self.request.priority)
-            .then_with(|| other.sequence.cmp(&self.sequence))
+            .then_with(|| self.sequence.cmp(&other.sequence))
     }
 }
 
@@ -209,10 +209,47 @@ fn is_video_path(path: &std::path::Path) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
         .map(|extension| {
-            matches!(
-                extension.to_ascii_lowercase().as_str(),
-                "mp4" | "webm" | "mov" | "mkv"
-            )
+            extension.eq_ignore_ascii_case("mp4")
+                || extension.eq_ignore_ascii_case("webm")
+                || extension.eq_ignore_ascii_case("mov")
+                || extension.eq_ignore_ascii_case("mkv")
         })
         .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn queued_request(sequence: u64, priority: DecodePriority) -> QueuedDecodeRequest {
+        let (respond_to, _response) = oneshot::channel();
+        QueuedDecodeRequest {
+            sequence,
+            request: DecodeRequest {
+                item_id: "item-1".into(),
+                path: PathBuf::from("/tmp/video.mp4"),
+                lod: 256,
+                generation: sequence,
+                priority,
+                respond_to,
+            },
+        }
+    }
+
+    #[test]
+    fn newer_requests_win_ties_within_the_same_priority() {
+        let older = queued_request(1, DecodePriority::Visible);
+        let newer = queued_request(2, DecodePriority::Visible);
+        let mut queue = BinaryHeap::from([older, newer]);
+
+        assert_eq!(queue.pop().map(|request| request.sequence), Some(2));
+        assert_eq!(queue.pop().map(|request| request.sequence), Some(1));
+    }
+
+    #[test]
+    fn video_path_detection_is_case_insensitive_without_allocating() {
+        assert!(is_video_path(std::path::Path::new("/tmp/demo.MP4")));
+        assert!(is_video_path(std::path::Path::new("/tmp/demo.WeBm")));
+        assert!(!is_video_path(std::path::Path::new("/tmp/demo.png")));
+    }
 }

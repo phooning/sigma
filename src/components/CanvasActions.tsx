@@ -1,8 +1,8 @@
-import { RefObject, WheelEvent } from "react";
-import { MediaItem, Viewport } from "../utils/media.types";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import type { RefObject, WheelEvent } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { IMAGE_EXTENSIONS, VIDEO_EXTENSIONS } from "../utils/media";
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import type { MediaItem, Viewport } from "../utils/media.types";
 import { applyPanDelta, applyZoomAtPoint } from "../utils/viewportMath";
 
 export type WheelInputType = "trackpad-pan" | "zoom";
@@ -49,7 +49,9 @@ const probeMedia = async (path: string): Promise<MediaFileInfo> => {
   }
 };
 
-const probeImages = async (paths: string[]): Promise<Map<string, ImageProbe>> => {
+const probeImages = async (
+  paths: string[],
+): Promise<Map<string, ImageProbe>> => {
   if (paths.length === 0) return new Map();
 
   try {
@@ -92,9 +94,6 @@ const runWithConcurrency = async (
   );
 };
 
-export const isMacOS = () =>
-  /mac/i.test(navigator.platform) || navigator.userAgent.includes("Macintosh");
-
 export const getWheelInputType = (e: WheelEvent): WheelInputType =>
   e.ctrlKey ? "zoom" : "trackpad-pan";
 
@@ -133,22 +132,24 @@ export const onDropMedia = async ({
   paths: string[];
   viewportRef: RefObject<Viewport>;
 }) => {
-  const supportedMedia = paths.flatMap<SupportedDropMedia>((filePath, index) => {
-    const ext = filePath.split(".").pop()?.toLowerCase();
-    const isVideo = VIDEO_EXTENSIONS.includes(ext ?? "");
-    const isImage = IMAGE_EXTENSIONS.includes(ext ?? "");
+  const supportedMedia = paths.flatMap<SupportedDropMedia>(
+    (filePath, index) => {
+      const ext = filePath.split(".").pop()?.toLowerCase();
+      const isVideo = VIDEO_EXTENSIONS.includes(ext ?? "");
+      const isImage = IMAGE_EXTENSIONS.includes(ext ?? "");
 
-    if (!isVideo && !isImage) return [];
+      if (!isVideo && !isImage) return [];
 
-    return [
-      {
-        filePath,
-        index,
-        type: isVideo ? "video" : "image",
-        url: convertFileSrc(filePath),
-      },
-    ];
-  });
+      return [
+        {
+          filePath,
+          index,
+          type: isVideo ? "video" : "image",
+          url: convertFileSrc(filePath),
+        },
+      ];
+    },
+  );
 
   if (supportedMedia.length === 0) {
     return [];
@@ -172,7 +173,9 @@ export const onDropMedia = async ({
     x: centerX + media.index * 1350,
     y: centerY,
     width: DEFAULT_MEDIA_WIDTH,
-    height: width ? (height / width) * DEFAULT_MEDIA_WIDTH : DEFAULT_VIDEO_HEIGHT,
+    height: width
+      ? (height / width) * DEFAULT_MEDIA_WIDTH
+      : DEFAULT_VIDEO_HEIGHT,
     ...extra,
   });
 
@@ -181,7 +184,9 @@ export const onDropMedia = async ({
 
   for (const imageBatch of chunk(imageMedia, IMAGE_PROBE_BATCH_SIZE)) {
     tasks.push(async () => {
-      const probes = await probeImages(imageBatch.map((media) => media.filePath));
+      const probes = await probeImages(
+        imageBatch.map((media) => media.filePath),
+      );
 
       imageBatch.forEach((media) => {
         const probe = probes.get(media.filePath);
@@ -204,7 +209,9 @@ export const onDropMedia = async ({
     .filter((media) => media.type === "video")
     .forEach((media) => {
       tasks.push(async () => {
-        const { width, height, duration, size } = await probeMedia(media.filePath);
+        const { width, height, duration, size } = await probeMedia(
+          media.filePath,
+        );
         const mediaWidth = width || DEFAULT_MEDIA_WIDTH;
         const mediaHeight = height || DEFAULT_VIDEO_HEIGHT;
 
@@ -216,7 +223,8 @@ export const onDropMedia = async ({
             sourceWidth: mediaWidth,
             sourceHeight: mediaHeight,
             deferVideoLoad:
-              typeof size === "number" && size >= LARGE_VIDEO_LOAD_THRESHOLD_BYTES,
+              typeof size === "number" &&
+              size >= LARGE_VIDEO_LOAD_THRESHOLD_BYTES,
           }),
         );
       });

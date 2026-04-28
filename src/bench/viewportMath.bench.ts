@@ -1,6 +1,10 @@
 import { bench, describe } from "vitest";
+import {
+  applyPanDelta,
+  applyZoomAtPoint,
+  getNextZoom,
+} from "../utils/viewportMath";
 import { BENCH_VIEWPORT } from "./fixtures";
-import { applyPanDelta, applyZoomAtPoint, getNextZoom } from "../utils/viewportMath";
 
 describe("viewport math", () => {
   bench("applyPanDelta for repeated trackpad pans", () => {

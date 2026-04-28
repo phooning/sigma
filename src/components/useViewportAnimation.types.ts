@@ -8,10 +8,7 @@ export type ViewportCommitOptions = {
 
 export type UseViewportAnimationParams = {
   getViewport: () => Viewport;
-  commitViewport: (
-    viewport: Viewport,
-    options?: ViewportCommitOptions,
-  ) => void;
+  commitViewport: (viewport: Viewport, options?: ViewportCommitOptions) => void;
 };
 
 export type UseViewportAnimationResult = {

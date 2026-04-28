@@ -1,17 +1,51 @@
+/** biome-ignore-all lint/a11y/noAriaHiddenOnFocusable: <Disable for main canvas.> */
+import { open, save } from "@tauri-apps/plugin-dialog";
 import {
+  type WheelEvent as ReactWheelEvent,
   useCallback,
   useEffect,
   useMemo,
   useRef,
-  useState,
-  WheelEvent as ReactWheelEvent
+  useState
 } from "react";
 import { flushSync } from "react-dom";
-import { open, save } from "@tauri-apps/plugin-dialog";
-import { SelectionBox } from "./components/SelectionBox";
-import { Hud } from "./components/Hud";
+import {
+  getWheelInputType,
+  handlePanAction,
+  handleZoomAction
+} from "./components/CanvasActions";
+import { CanvasMediaItem } from "./components/CanvasMediaItem";
 import { DevelopmentOverlay } from "./components/DevelopmentOverlay";
+import { Hud } from "./components/Hud";
+import { appVersion, SETTINGS_MENU_ITEMS } from "./components/HudActions";
+import {
+  handleImageCrop,
+  handleImageResize,
+  resetImageSize,
+  type TCropStart,
+  type TResizeStart
+} from "./components/ImageActions";
 import { resetFrameSize } from "./components/MediaFrameActions";
+import {
+  NativeImageSurface,
+  supportsNativeImageSurface
+} from "./components/native-image/NativeImageSurface";
+import { NativeVideoSurface } from "./components/native-video/NativeVideoSurface";
+import { SelectionBox } from "./components/SelectionBox";
+import { useActiveAudioSelection } from "./components/useActiveAudioSelection";
+import { useCanvasViewport } from "./components/useCanvasViewport";
+import { useAudioPlaybackStore } from "./stores/useAudioPlaybackStore";
+import { useCanvasSessionStore } from "./stores/useCanvasSessionStore";
+import { useInteractionStore } from "./stores/useInteractionStore";
+import { useSettingsStore } from "./stores/useSettingsStore";
+import {
+  getStoredVideoLoop,
+  useVideoExportStore
+} from "./stores/useVideoExportStore";
+import { useTauriDrop as useUploadDrop } from "./utils/drag";
+import { getExportDefaultPath } from "./utils/exportPaths";
+import { revealItem } from "./utils/fs";
+import { useCanvasHotkeys } from "./utils/keyboard";
 import {
   exportMediaVideo,
   getCrop,
@@ -19,67 +53,19 @@ import {
   saveMediaScreenshot,
   useDecodeArbiterFeeder
 } from "./utils/media";
-import { CropHandle, CropInsets, MediaItem } from "./utils/media.types";
-import {
-  handleImageCrop,
-  handleImageResize,
-  resetImageSize,
-  TCropStart,
-  TResizeStart
-} from "./components/ImageActions";
-import { CanvasMediaItem } from "./components/CanvasMediaItem";
-import { revealItem } from "./utils/fs";
-import { appVersion, SETTINGS_MENU_ITEMS } from "./components/HudActions";
-import {
-  getWheelInputType,
-  handlePanAction,
-  handleZoomAction
-} from "./components/CanvasActions";
-import { useTauriDrop as useUploadDrop } from "./utils/drag";
-import { useCanvasHotkeys } from "./utils/keyboard";
-import { useSettingsStore } from "./stores/useSettingsStore";
-import { useAudioPlayback } from "./stores/useAudioPlaybackStore";
-import {
-  getStoredVideoLoop,
-  useVideoExportStore
-} from "./stores/useVideoExportStore";
-import { useActiveAudioSelection } from "./components/useActiveAudioSelection";
-import { useCanvasViewport } from "./components/useCanvasViewport";
-import { getExportDefaultPath } from "./utils/exportPaths";
-import { getViewBounds } from "./utils/viewport";
-import { getImageLod, getLoopRange, getVideoLod } from "./utils/videoUtils";
+import type {
+  CropHandle,
+  CropInsets,
+  ItemMotionMode,
+  MediaItem,
+  TransientItemMotion
+} from "./utils/media.types";
 import { notify } from "./utils/notifications";
 import { ACTION_SELECTORS } from "./utils/press";
-import { NativeVideoSurface } from "./components/native-video/NativeVideoSurface";
-import { useCanvasSessionStore } from "./stores/useCanvasSessionStore";
-import { useInteractionStore } from "./stores/useInteractionStore";
-import {
-  NativeImageSurface,
-  supportsNativeImageSurface
-} from "./components/native-image/NativeImageSurface";
-
-type ItemMotionMode = "drag" | "resize" | "crop";
-
-type TransientItemMotion = {
-  mode: ItemMotionMode;
-  activeIds: Set<string>;
-  baseItems: MediaItem[];
-  latestItems: MediaItem[];
-  startPointer: { x: number; y: number };
-  resizeStart: TResizeStart | null;
-  cropStart: TCropStart | null;
-  cropHandle: CropHandle | null;
-};
+import { getImageLod, getLoopRange, getVideoLod } from "./utils/videoUtils";
+import { getViewBounds, pushItemToTop } from "./utils/viewport";
 
 export default function InfiniteCanvas() {
-  const items = useCanvasSessionStore((state) => state.items);
-  const setItems = useCanvasSessionStore((state) => state.setItems);
-  const saveSessionToFile = useCanvasSessionStore(
-    (state) => state.saveSessionToFile
-  );
-  const loadSessionFromFile = useCanvasSessionStore(
-    (state) => state.loadSessionFromFile
-  );
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [transientItemIds, setTransientItemIds] = useState<Set<string>>(
     () => new Set()
@@ -89,6 +75,17 @@ export default function InfiniteCanvas() {
     height: window.innerHeight
   }));
 
+  // Canvas Session
+  const items = useCanvasSessionStore((state) => state.items);
+  const setItems = useCanvasSessionStore((state) => state.setItems);
+  const saveSessionToFile = useCanvasSessionStore(
+    (state) => state.saveSessionToFile
+  );
+  const loadSessionFromFile = useCanvasSessionStore(
+    (state) => state.loadSessionFromFile
+  );
+
+  // Interactions
   const draggingItem = useInteractionStore((s) => s.draggingItem);
   const resizingItem = useInteractionStore((s) => s.resizingItem);
   const editingCropItem = useInteractionStore((s) => s.editingCropItem);
@@ -110,6 +107,7 @@ export default function InfiniteCanvas() {
     (s) => s.toggleEditingCropItem
   );
 
+  // Settings
   const screenshotDirectory = useSettingsStore((s) => s.screenshotDirectory);
   const setScreenshotDirectory = useSettingsStore(
     (s) => s.setScreenshotDirectory
@@ -117,9 +115,13 @@ export default function InfiniteCanvas() {
   const canvasBackgroundPattern = useSettingsStore(
     (s) => s.canvasBackgroundPattern
   );
-  const { toggleAudioItem, clearAudioItem, activeAudioItemId } =
-    useAudioPlayback();
 
+  // Audio controls
+  const toggleAudioItem = useAudioPlaybackStore((s) => s.toggleItem);
+  const clearAudioItem = useAudioPlaybackStore((s) => s.clearItem);
+  const activeAudioItemId = useAudioPlaybackStore((s) => s.activeItemId);
+
+  // Video export
   const exportingItemId = useVideoExportStore((s) => s.exportingItemId);
   const setExportingItemId = useVideoExportStore((s) => s.setExportingItemId);
   const clearVideoExportItemState = useVideoExportStore(
@@ -241,17 +243,10 @@ export default function InfiniteCanvas() {
     [getMediaItemElement]
   );
 
-  const moveItemToTop = useCallback((currentItems: MediaItem[], id: string) => {
-    const itemIndex = currentItems.findIndex((item) => item.id === id);
-    if (itemIndex === -1 || itemIndex === currentItems.length - 1) {
-      return currentItems;
-    }
-
-    const nextItems = [...currentItems];
-    const [item] = nextItems.splice(itemIndex, 1);
-    nextItems.push(item);
-    return nextItems;
-  }, []);
+  const moveItemToTop = useCallback(
+    (currentItems: MediaItem[], id: string) => pushItemToTop(currentItems, id),
+    []
+  );
 
   const selectItemForInteraction = useCallback((id: string) => {
     if (selectedItemsRef.current.has(id)) {
@@ -530,7 +525,6 @@ export default function InfiniteCanvas() {
         resizeStartRef.current = null;
       } else if (isResize) {
         mode = "resize";
-        startResizing(id);
         const resizeIds = selectedItemsRef.current.has(id)
           ? selectedItemsRef.current
           : new Set([id]);
@@ -546,6 +540,7 @@ export default function InfiniteCanvas() {
             }
             return map;
           }, new Map());
+        startResizing(id);
         resizeStartRef.current = resizeStart;
       } else {
         mode = "drag";
@@ -639,14 +634,15 @@ export default function InfiniteCanvas() {
 
   const handleItemPointerUp = useCallback(
     (id: string, e: React.PointerEvent) => {
-      const interactionState = useInteractionStore.getState();
+      const { isDraggingItem, isResizingItem, isCroppingItem } =
+        useInteractionStore.getState();
 
-      if (
-        interactionState.isDraggingItem(id) ||
-        interactionState.isResizingItem(id) ||
-        interactionState.isCroppingItem(id)
-      ) {
+      if (isDraggingItem(id) || isResizingItem(id) || isCroppingItem(id)) {
         const motion = transientItemMotionRef.current;
+
+        if (motion?.mode === "drag") {
+          clearDragItemTransforms(motion.activeIds);
+        }
 
         flushSync(() => {
           if (motion && motion.latestItems !== motion.baseItems) {
@@ -656,10 +652,6 @@ export default function InfiniteCanvas() {
           clearItemInteraction();
           setTransientItemIds(new Set());
         });
-
-        if (motion?.mode === "drag") {
-          clearDragItemTransforms(motion.activeIds);
-        }
 
         transientItemMotionRef.current = null;
         startDragRef.current = null;
@@ -877,6 +869,7 @@ export default function InfiniteCanvas() {
 
   return (
     <div
+      role="application"
       className="canvas-container"
       ref={containerRef}
       onPointerDown={handlePointerDown}
@@ -914,6 +907,8 @@ export default function InfiniteCanvas() {
       <div className="canvas-world" ref={worldRef}>
         {items.map((item) => {
           const isTransientItem = transientItemIds.has(item.id);
+          const isActive = (currState: string | null) =>
+            currState === item.id || (currState !== null && isTransientItem);
 
           return (
             <CanvasMediaItem
@@ -924,19 +919,10 @@ export default function InfiniteCanvas() {
               handleItemPointerUp={handleItemPointerUp}
               item={item}
               isActiveAudioItem={activeAudioItemId === item.id}
-              isCropping={
-                croppingItem === item.id ||
-                (croppingItem !== null && isTransientItem)
-              }
+              isCropping={isActive(croppingItem)}
               isCropEditing={editingCropItem === item.id}
-              isDragging={
-                draggingItem === item.id ||
-                (draggingItem !== null && isTransientItem)
-              }
-              isResizing={
-                resizingItem === item.id ||
-                (resizingItem !== null && isTransientItem)
-              }
+              isDragging={isActive(draggingItem)}
+              isResizing={isActive(resizingItem)}
               isSelected={selectedItems.has(item.id)}
               requestImagePreview={requestImagePreview}
               requestThumbnail={requestThumbnail}

@@ -113,18 +113,11 @@ export const getVideoLod = (
   return "video";
 };
 
-export const shouldRequestVideoThumbnail = (
-  zoom: number,
-  item: MediaItem,
-) => {
+export const shouldRequestVideoThumbnail = (zoom: number, item: MediaItem) => {
   const screenWidth = item.width * zoom;
   const screenHeight = item.height * zoom;
 
-  return (
-    screenWidth <= 144 &&
-    screenWidth > 96 &&
-    screenHeight > 72
-  );
+  return screenWidth <= 144 && screenWidth > 96 && screenHeight > 72;
 };
 
 export const getLoopRange = (loop: LoopState) => {
