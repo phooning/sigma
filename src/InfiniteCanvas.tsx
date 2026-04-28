@@ -4,7 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
-  WheelEvent as ReactWheelEvent,
+  WheelEvent as ReactWheelEvent
 } from "react";
 import { flushSync } from "react-dom";
 import { open, save } from "@tauri-apps/plugin-dialog";
@@ -17,15 +17,21 @@ import {
   getCrop,
   getCropBoxStyle,
   saveMediaScreenshot,
-  useDecodeArbiterFeeder,
+  useDecodeArbiterFeeder
 } from "./utils/media";
-import { CropHandle, CropInsets, MediaItem } from "./utils/media.types";
+import {
+  CropHandle,
+  CropInsets,
+  ItemMotionMode,
+  MediaItem,
+  TransientItemMotion
+} from "./utils/media.types";
 import {
   handleImageCrop,
   handleImageResize,
   resetImageSize,
   TCropStart,
-  TResizeStart,
+  TResizeStart
 } from "./components/ImageActions";
 import { CanvasMediaItem } from "./components/CanvasMediaItem";
 import { revealItem } from "./utils/fs";
@@ -33,15 +39,15 @@ import { appVersion, SETTINGS_MENU_ITEMS } from "./components/HudActions";
 import {
   getWheelInputType,
   handlePanAction,
-  handleZoomAction,
+  handleZoomAction
 } from "./components/CanvasActions";
 import { useTauriDrop as useUploadDrop } from "./utils/drag";
 import { useCanvasHotkeys } from "./utils/keyboard";
 import { useSettingsStore } from "./stores/useSettingsStore";
-import { useAudioPlayback } from "./stores/useAudioPlaybackStore";
+import { useAudioPlaybackStore } from "./stores/useAudioPlaybackStore";
 import {
   getStoredVideoLoop,
-  useVideoExportStore,
+  useVideoExportStore
 } from "./stores/useVideoExportStore";
 import { useActiveAudioSelection } from "./components/useActiveAudioSelection";
 import { useCanvasViewport } from "./components/useCanvasViewport";
@@ -55,40 +61,30 @@ import { useCanvasSessionStore } from "./stores/useCanvasSessionStore";
 import { useInteractionStore } from "./stores/useInteractionStore";
 import {
   NativeImageSurface,
-  supportsNativeImageSurface,
+  supportsNativeImageSurface
 } from "./components/native-image/NativeImageSurface";
 
-type ItemMotionMode = "drag" | "resize" | "crop";
-
-type TransientItemMotion = {
-  mode: ItemMotionMode;
-  activeIds: Set<string>;
-  baseItems: MediaItem[];
-  latestItems: MediaItem[];
-  startPointer: { x: number; y: number };
-  resizeStart: TResizeStart | null;
-  cropStart: TCropStart | null;
-  cropHandle: CropHandle | null;
-};
-
 export default function InfiniteCanvas() {
-  const items = useCanvasSessionStore((state) => state.items);
-  const setItems = useCanvasSessionStore((state) => state.setItems);
-  const saveSessionToFile = useCanvasSessionStore(
-    (state) => state.saveSessionToFile,
-  );
-  const loadSessionFromFile = useCanvasSessionStore(
-    (state) => state.loadSessionFromFile,
-  );
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [transientItemIds, setTransientItemIds] = useState<Set<string>>(
-    () => new Set(),
+    () => new Set()
   );
   const [canvasSize, setCanvasSize] = useState(() => ({
     width: window.innerWidth,
-    height: window.innerHeight,
+    height: window.innerHeight
   }));
 
+  // Canvas Session
+  const items = useCanvasSessionStore((state) => state.items);
+  const setItems = useCanvasSessionStore((state) => state.setItems);
+  const saveSessionToFile = useCanvasSessionStore(
+    (state) => state.saveSessionToFile
+  );
+  const loadSessionFromFile = useCanvasSessionStore(
+    (state) => state.loadSessionFromFile
+  );
+
+  // Interactions
   const draggingItem = useInteractionStore((s) => s.draggingItem);
   const resizingItem = useInteractionStore((s) => s.resizingItem);
   const editingCropItem = useInteractionStore((s) => s.editingCropItem);
@@ -102,20 +98,37 @@ export default function InfiniteCanvas() {
   const setSelectionBox = useInteractionStore((s) => s.setSelectionBox);
   const clearSelectionBox = useInteractionStore((s) => s.clearSelectionBox);
   const stopPanning = useInteractionStore((s) => s.stopPanning);
-  const clearItemInteraction = useInteractionStore((s) => s.clearItemInteraction);
+  const clearItemInteraction = useInteractionStore(
+    (s) => s.clearItemInteraction
+  );
   const setEditingCropItem = useInteractionStore((s) => s.setEditingCropItem);
-  const toggleEditingCropItem = useInteractionStore((s) => s.toggleEditingCropItem);
+  const toggleEditingCropItem = useInteractionStore(
+    (s) => s.toggleEditingCropItem
+  );
 
+  // Settings
   const screenshotDirectory = useSettingsStore((s) => s.screenshotDirectory);
-  const setScreenshotDirectory = useSettingsStore((s) => s.setScreenshotDirectory);
-  const canvasBackgroundPattern = useSettingsStore((s) => s.canvasBackgroundPattern);
-  const { toggleAudioItem, clearAudioItem, activeAudioItemId } =
-    useAudioPlayback();
+  const setScreenshotDirectory = useSettingsStore(
+    (s) => s.setScreenshotDirectory
+  );
+  const canvasBackgroundPattern = useSettingsStore(
+    (s) => s.canvasBackgroundPattern
+  );
 
+  // Audio controls
+  const toggleAudioItem = useAudioPlaybackStore((s) => s.toggleItem);
+  const clearAudioItem = useAudioPlaybackStore((s) => s.clearItem);
+  const activeAudioItemId = useAudioPlaybackStore((s) => s.activeItemId);
+
+  // Video export
   const exportingItemId = useVideoExportStore((s) => s.exportingItemId);
   const setExportingItemId = useVideoExportStore((s) => s.setExportingItemId);
-  const clearVideoExportItemState = useVideoExportStore((s) => s.clearItemState);
-  const clearAllVideoExportState = useVideoExportStore((s) => s.clearAllItemState);
+  const clearVideoExportItemState = useVideoExportStore(
+    (s) => s.clearItemState
+  );
+  const clearAllVideoExportState = useVideoExportStore(
+    (s) => s.clearAllItemState
+  );
 
   // Refs mirrored for async callbacks and global pointer gestures.
   const worldRef = useRef<HTMLDivElement>(null);
@@ -140,17 +153,17 @@ export default function InfiniteCanvas() {
     getViewport,
     commitViewport,
     cancelViewportAnimation,
-    panViewportTo,
+    panViewportTo
   } = useCanvasViewport({
     backgroundCanvasRef,
     worldRef,
     canvasSize,
-    canvasBackgroundPattern,
+    canvasBackgroundPattern
   });
 
   useUploadDrop({
     getViewport,
-    setItems,
+    setItems
   });
 
   useCanvasHotkeys({
@@ -160,7 +173,7 @@ export default function InfiniteCanvas() {
     selectedItemsRef,
     setItems,
     setSelectedItems,
-    setEditingCropItem,
+    setEditingCropItem
   });
 
   // Canvas integrations.
@@ -168,16 +181,17 @@ export default function InfiniteCanvas() {
     items,
     getViewport,
     canvasSize,
-    setItems,
+    setItems
   });
 
   const getMediaItemElement = useCallback((id: string) => {
-    const mediaItems = containerRef.current?.querySelectorAll<HTMLElement>(
-      ".media-item",
+    const mediaItems =
+      containerRef.current?.querySelectorAll<HTMLElement>(".media-item");
+    return (
+      Array.from(mediaItems ?? []).find(
+        (element) => element.dataset.mediaId === id
+      ) ?? null
     );
-    return Array.from(mediaItems ?? []).find(
-      (element) => element.dataset.mediaId === id,
-    ) ?? null;
   }, []);
 
   const applyMediaItemLayout = useCallback(
@@ -199,7 +213,7 @@ export default function InfiniteCanvas() {
       cropBox.style.width = `${cropBoxStyle.width}px`;
       cropBox.style.height = `${cropBoxStyle.height}px`;
     },
-    [getMediaItemElement],
+    [getMediaItemElement]
   );
 
   const applyDragItemTransform = useCallback(
@@ -212,7 +226,7 @@ export default function InfiniteCanvas() {
         element.style.setProperty("--media-transient-y", `${dy}px`);
       });
     },
-    [getMediaItemElement],
+    [getMediaItemElement]
   );
 
   const clearDragItemTransforms = useCallback(
@@ -225,7 +239,7 @@ export default function InfiniteCanvas() {
         element.style.removeProperty("--media-transient-y");
       });
     },
-    [getMediaItemElement],
+    [getMediaItemElement]
   );
 
   const moveItemToTop = useCallback((currentItems: MediaItem[], id: string) => {
@@ -256,7 +270,7 @@ export default function InfiniteCanvas() {
       transientItemMotionRef.current = motion;
       setTransientItemIds(new Set(motion.activeIds));
     },
-    [],
+    []
   );
 
   const clearTransientItemMotion = useCallback(() => {
@@ -274,7 +288,7 @@ export default function InfiniteCanvas() {
     if (
       activeAudioItemId &&
       !items.some(
-        (item) => item.id === activeAudioItemId && item.type === "video",
+        (item) => item.id === activeAudioItemId && item.type === "video"
       )
     ) {
       clearAudioItem(activeAudioItemId);
@@ -285,7 +299,7 @@ export default function InfiniteCanvas() {
     const handleResize = () => {
       setCanvasSize({
         width: window.innerWidth,
-        height: window.innerHeight,
+        height: window.innerHeight
       });
     };
 
@@ -296,7 +310,7 @@ export default function InfiniteCanvas() {
   const startPanning = (
     pointerId: number,
     clientX: number,
-    clientY: number,
+    clientY: number
   ) => {
     cancelViewportAnimation();
     startInteractionPanning();
@@ -326,7 +340,7 @@ export default function InfiniteCanvas() {
     getViewport,
     panViewportTo,
     setEditingCropItem,
-    setSelectedItems,
+    setSelectedItems
   });
 
   // Canvas pointer handlers.
@@ -347,7 +361,7 @@ export default function InfiniteCanvas() {
           startX: clientX,
           startY: clientY,
           endX: clientX,
-          endY: clientY,
+          endY: clientY
         });
         setSelectedItems(new Set());
         setEditingCropItem(null);
@@ -374,7 +388,7 @@ export default function InfiniteCanvas() {
       const nextViewport = {
         ...currentViewport,
         x: currentViewport.x + dx,
-        y: currentViewport.y + dy,
+        y: currentViewport.y + dy
       };
 
       commitViewport(nextViewport);
@@ -386,16 +400,16 @@ export default function InfiniteCanvas() {
       const currentViewport = getViewport();
       const toWorld = (cx: number, cy: number) => ({
         x: cx / currentViewport.zoom - currentViewport.x,
-        y: cy / currentViewport.zoom - currentViewport.y,
+        y: cy / currentViewport.zoom - currentViewport.y
       });
 
       setSelectionBox((prev) =>
-        prev ? { ...prev, endX: clientX, endY: clientY } : null,
+        prev ? { ...prev, endX: clientX, endY: clientY } : null
       );
 
       const startWorld = toWorld(
         interactionState.selectionBox.startX,
-        interactionState.selectionBox.startY,
+        interactionState.selectionBox.startY
       );
       const endWorld = toWorld(clientX, clientY);
 
@@ -411,9 +425,9 @@ export default function InfiniteCanvas() {
               item.x < boxRight &&
               item.x + item.width > boxLeft &&
               item.y < boxBottom &&
-              item.y + item.height > boxTop,
+              item.y + item.height > boxTop
           )
-          .map((item) => item.id),
+          .map((item) => item.id)
       );
       setSelectedItems(newSelected);
     }
@@ -433,7 +447,7 @@ export default function InfiniteCanvas() {
       startDragRef.current = null;
       commitViewport(getViewport(), {
         flushDomNow: true,
-        syncReact: true,
+        syncReact: true
       });
     }
     if (interactionState.selectionBox) {
@@ -477,10 +491,10 @@ export default function InfiniteCanvas() {
       }
 
       const cropHandle = (e.target as HTMLElement).closest<HTMLElement>(
-        ".crop-handle",
+        ".crop-handle"
       )?.dataset.cropHandle as CropHandle | undefined;
       const isResize = (e.target as HTMLElement).classList.contains(
-        "resize-handle",
+        "resize-handle"
       );
       const nextSelection = selectItemForInteraction(id);
       const currentItems = useCanvasSessionStore.getState().items;
@@ -507,7 +521,7 @@ export default function InfiniteCanvas() {
           y: cropItem.y,
           width: cropItem.width,
           height: cropItem.height,
-          crop: { ...getCrop(cropItem) },
+          crop: { ...getCrop(cropItem) }
         };
 
         setEditingCropItem(id);
@@ -526,9 +540,9 @@ export default function InfiniteCanvas() {
               {
                 width: item.width,
                 height: item.height,
-                crop: { ...getCrop(item) },
-              },
-            ]),
+                crop: { ...getCrop(item) }
+              }
+            ])
         );
 
         startResizing(id);
@@ -554,7 +568,7 @@ export default function InfiniteCanvas() {
         startPointer: { x: e.clientX, y: e.clientY },
         resizeStart,
         cropStart,
-        cropHandle: cropHandleForMotion,
+        cropHandle: cropHandleForMotion
       });
     },
     [
@@ -566,8 +580,8 @@ export default function InfiniteCanvas() {
       setItems,
       startCropping,
       startDragging,
-      startResizing,
-    ],
+      startResizing
+    ]
   );
 
   const handleItemPointerMove = useCallback(
@@ -584,7 +598,7 @@ export default function InfiniteCanvas() {
         motion.latestItems = motion.baseItems.map((item) =>
           motion.activeIds.has(item.id)
             ? { ...item, x: item.x + dx, y: item.y + dy }
-            : item,
+            : item
         );
         applyDragItemTransform(motion.activeIds, dx, dy);
       } else if (
@@ -596,7 +610,7 @@ export default function InfiniteCanvas() {
           dy,
           prev: motion.baseItems,
           resizeStart: motion.resizeStart,
-          isHoldingShift: !!e.shiftKey,
+          isHoldingShift: !!e.shiftKey
         });
         motion.latestItems
           .filter((item) => motion.activeIds.has(item.id))
@@ -613,14 +627,14 @@ export default function InfiniteCanvas() {
           dy,
           prev: motion.baseItems,
           cropStart: motion.cropStart,
-          cropHandle: motion.cropHandle,
+          cropHandle: motion.cropHandle
         });
         motion.latestItems
           .filter((item) => motion.activeIds.has(item.id))
           .forEach(applyMediaItemLayout);
       }
     },
-    [applyDragItemTransform, applyMediaItemLayout, getViewport],
+    [applyDragItemTransform, applyMediaItemLayout, getViewport]
   );
 
   const handleItemPointerUp = useCallback(
@@ -634,6 +648,10 @@ export default function InfiniteCanvas() {
       ) {
         const motion = transientItemMotionRef.current;
 
+        if (motion?.mode === "drag") {
+          clearDragItemTransforms(motion.activeIds);
+        }
+
         flushSync(() => {
           if (motion && motion.latestItems !== motion.baseItems) {
             setItems(motion.latestItems);
@@ -642,10 +660,6 @@ export default function InfiniteCanvas() {
           clearItemInteraction();
           setTransientItemIds(new Set());
         });
-
-        if (motion?.mode === "drag") {
-          clearDragItemTransforms(motion.activeIds);
-        }
 
         transientItemMotionRef.current = null;
         startDragRef.current = null;
@@ -659,7 +673,7 @@ export default function InfiniteCanvas() {
         }
       }
     },
-    [clearDragItemTransforms, clearItemInteraction, setItems],
+    [clearDragItemTransforms, clearItemInteraction, setItems]
   );
 
   const deleteItem = useCallback(
@@ -675,7 +689,7 @@ export default function InfiniteCanvas() {
       clearAudioItem(id);
       clearVideoExportItemState(id);
     },
-    [clearAudioItem, clearVideoExportItemState],
+    [clearAudioItem, clearVideoExportItemState]
   );
 
   const startCropEdit = useCallback(
@@ -684,7 +698,7 @@ export default function InfiniteCanvas() {
       toggleEditingCropItem(id);
       setSelectedItems(new Set([id]));
     },
-    [toggleEditingCropItem],
+    [toggleEditingCropItem]
   );
 
   const resetSize = useCallback(
@@ -696,7 +710,7 @@ export default function InfiniteCanvas() {
       if (!result) return;
       setItems((prev) => resetFrameSize({ id, prev, ...result }));
     },
-    [setItems],
+    [setItems]
   );
 
   const screenshotItem = useCallback(
@@ -715,7 +729,7 @@ export default function InfiniteCanvas() {
         const selected = await open({
           directory: true,
           multiple: false,
-          title: "Choose screenshot directory",
+          title: "Choose screenshot directory"
         });
 
         if (typeof selected !== "string") return;
@@ -727,19 +741,19 @@ export default function InfiniteCanvas() {
         const screenshotPath = await saveMediaScreenshot({
           item,
           outputDirectory,
-          currentTime: mediaElement?.currentTime ?? 0,
+          currentTime: mediaElement?.currentTime ?? 0
         });
 
         notify.success("Screenshot saved", {
-          description: screenshotPath,
+          description: screenshotPath
         });
       } catch (error) {
         notify.error("Screenshot failed", {
-          description: error,
+          description: error
         });
       }
     },
-    [setScreenshotDirectory],
+    [setScreenshotDirectory]
   );
 
   const toggleAudioPlayback = useCallback(
@@ -748,7 +762,7 @@ export default function InfiniteCanvas() {
       setSelectedItems(new Set([id]));
       toggleAudioItem(id);
     },
-    [toggleAudioItem],
+    [toggleAudioItem]
   );
 
   const revealCanvasItem = useCallback((id: string, e: React.MouseEvent) => {
@@ -759,20 +773,19 @@ export default function InfiniteCanvas() {
     const selectedVideoItems = useCanvasSessionStore
       .getState()
       .items.filter(
-        (item) =>
-          item.type === "video" && selectedItemsRef.current.has(item.id),
+        (item) => item.type === "video" && selectedItemsRef.current.has(item.id)
       );
 
     if (selectedVideoItems.length !== 1) {
       notify.warning("Export unavailable", {
-        description: "Select one video to export.",
+        description: "Select one video to export."
       });
       return;
     }
 
     if (useVideoExportStore.getState().exportingItemId !== null) {
       notify.info("Export in progress", {
-        description: "Wait for the current export to finish.",
+        description: "Wait for the current export to finish."
       });
       return;
     }
@@ -784,9 +797,9 @@ export default function InfiniteCanvas() {
       filters: [
         {
           name: "MP4 Video",
-          extensions: ["mp4"],
-        },
-      ],
+          extensions: ["mp4"]
+        }
+      ]
     });
 
     if (!outputPath) return;
@@ -800,15 +813,15 @@ export default function InfiniteCanvas() {
       const output = await exportMediaVideo({
         item,
         outputPath: mp4OutputPath,
-        loopRange: getLoopRange(getStoredVideoLoop(item.id)),
+        loopRange: getLoopRange(getStoredVideoLoop(item.id))
       });
 
       notify.success("Export complete", {
-        description: output,
+        description: output
       });
     } catch (error) {
       notify.error("Export failed", {
-        description: error,
+        description: error
       });
     } finally {
       setExportingItemId(null);
@@ -819,11 +832,11 @@ export default function InfiniteCanvas() {
   const viewBounds = getViewBounds(
     renderViewport,
     canvasSize.width,
-    canvasSize.height,
+    canvasSize.height
   );
   const totalVideoCount = items.filter((item) => item.type === "video").length;
   const selectedVideoItems = items.filter(
-    (item) => item.type === "video" && selectedItems.has(item.id),
+    (item) => item.type === "video" && selectedItems.has(item.id)
   );
   const selectedVideoExportItem =
     selectedVideoItems.length === 1 ? selectedVideoItems[0] : null;
@@ -831,7 +844,7 @@ export default function InfiniteCanvas() {
     useState(false);
   const isNativeImageSurfaceSupported = useMemo(
     () => supportsNativeImageSurface(),
-    [],
+    []
   );
   const isNativeImageSurfaceEnabled =
     isNativeImageSurfaceSupported && isNativeImageSurfaceReady;
@@ -850,7 +863,7 @@ export default function InfiniteCanvas() {
         viewport.zoom,
         !!item.thumbnailUrl,
         item,
-        item.videoLod,
+        item.videoLod
       );
       if (item.videoLod === videoLod) return item;
       changed = true;

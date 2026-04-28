@@ -89,6 +89,11 @@ export type MediaQueueOptions = {
 
 type DecodePriority = "visible" | "prefetch" | "background";
 
+const hasMatchingAssetSource = (currentItem: MediaItem, requestedItem: MediaItem) =>
+  currentItem.id === requestedItem.id &&
+  currentItem.type === requestedItem.type &&
+  currentItem.filePath === requestedItem.filePath;
+
 const intersectsViewBounds = (
   item: Pick<MediaItem, "x" | "y" | "width" | "height">,
   viewBounds?: MediaQueueOptions["viewBounds"],
@@ -303,13 +308,7 @@ export function useImagePreviewQueue(setItems: SetItems) {
       if (generation < currentGeneration) return;
 
       const requestKey = `${item.id}:${maxDimension}`;
-      const requestedGeneration = requestedRef.current.get(requestKey);
-      if (
-        requestedGeneration !== undefined &&
-        requestedGeneration >= generation
-      ) {
-        return;
-      }
+      if (requestedRef.current.has(requestKey)) return;
 
       requestedRef.current.set(requestKey, generation);
       void decodePreview({
@@ -322,7 +321,7 @@ export function useImagePreviewQueue(setItems: SetItems) {
           requestedRef.current.delete(requestKey);
         }
 
-        if (!decodedPath || generation < getViewportGeneration()) return;
+        if (!decodedPath) return;
 
         const previewAssets = assetsForDecodedPath(
           item,
@@ -334,13 +333,26 @@ export function useImagePreviewQueue(setItems: SetItems) {
 
         if (!previewAssets[previewKey]) return;
 
-        setItems((prev) =>
-          prev.map((currentItem) =>
-            currentItem.id === item.id
-              ? { ...currentItem, ...previewAssets }
-              : currentItem,
-          ),
-        );
+        setItems((prev) => {
+          let changed = false;
+          const nextItems = prev.map((currentItem) => {
+            if (!hasMatchingAssetSource(currentItem, item)) {
+              return currentItem;
+            }
+
+            if (
+              (maxDimension === 256 && currentItem.imagePreview256Url) ||
+              (maxDimension === 1024 && currentItem.imagePreview1024Url)
+            ) {
+              return currentItem;
+            }
+
+            changed = true;
+            return { ...currentItem, ...previewAssets };
+          });
+
+          return changed ? nextItems : prev;
+        });
       });
     },
     [setItems],
@@ -360,26 +372,21 @@ export function useThumbnailQueue(setItems: SetItems) {
       const generation = options.generation ?? currentGeneration;
       if (generation < currentGeneration) return;
 
-      const requestedGeneration = requestedRef.current.get(item.id);
-      if (
-        requestedGeneration !== undefined &&
-        requestedGeneration >= generation
-      ) {
-        return;
-      }
+      const priority = computeDecodePriority(item, options.viewBounds);
+      if (priority === "background" || requestedRef.current.has(item.id)) return;
 
       requestedRef.current.set(item.id, generation);
       void decodePreview({
         item,
         lod: 256,
         generation,
-        priority: computeDecodePriority(item, options.viewBounds),
+        priority,
       }).then((decodedPath) => {
         if (requestedRef.current.get(item.id) === generation) {
           requestedRef.current.delete(item.id);
         }
 
-        if (!decodedPath || generation < getViewportGeneration()) return;
+        if (!decodedPath) return;
 
         const lodAssets = assetsForDecodedPath(
           item,
@@ -389,13 +396,22 @@ export function useThumbnailQueue(setItems: SetItems) {
 
         if (!lodAssets.thumbnailUrl) return;
 
-        setItems((prev) =>
-          prev.map((currentItem) =>
-            currentItem.id === item.id && !currentItem.thumbnailUrl
-              ? { ...currentItem, ...lodAssets }
-              : currentItem,
-          ),
-        );
+        setItems((prev) => {
+          let changed = false;
+          const nextItems = prev.map((currentItem) => {
+            if (
+              !hasMatchingAssetSource(currentItem, item) ||
+              currentItem.thumbnailUrl
+            ) {
+              return currentItem;
+            }
+
+            changed = true;
+            return { ...currentItem, ...lodAssets };
+          });
+
+          return changed ? nextItems : prev;
+        });
       });
     },
     [setItems],

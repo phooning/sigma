@@ -9,9 +9,7 @@
     box-shadow: 0 0 0 var(--border-width) var(--border);
     background: var(--surface-control);
     cursor: grab;
-    transition:
-        box-shadow var(--duration-medium) ease,
-        transform var(--duration-medium) ease;
+    transition: box-shadow var(--duration-medium) ease;
     transform: translate3d(var(--media-transient-x), var(--media-transient-y), 0) scale(var(--media-active-scale));
     user-select: none;
     -webkit-user-select: none;

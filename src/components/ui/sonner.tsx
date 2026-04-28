@@ -5,7 +5,7 @@ import {
   InfoIcon,
   Loader2Icon,
   OctagonXIcon,
-  TriangleAlertIcon,
+  TriangleAlertIcon
 } from "lucide-react";
 
 const TOASTER_ICONS: ToasterProps["icons"] = {
@@ -13,14 +13,14 @@ const TOASTER_ICONS: ToasterProps["icons"] = {
   info: <InfoIcon className="size-4" />,
   warning: <TriangleAlertIcon className="size-4" />,
   error: <OctagonXIcon className="size-4" />,
-  loading: <Loader2Icon className="size-4 animate-spin" />,
+  loading: <Loader2Icon className="size-4 animate-spin" />
 };
 
 const TOASTER_STYLE: CSSProperties = {
   "--normal-bg": "var(--popover)",
   "--normal-text": "var(--popover-foreground)",
   "--normal-border": "var(--border)",
-  "--border-radius": "var(--radius)",
+  "--border-radius": "var(--radius)"
 } as CSSProperties;
 
 const Toaster = ({ ...props }: ToasterProps) => {

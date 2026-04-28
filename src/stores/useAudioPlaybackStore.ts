@@ -21,13 +21,13 @@ export const useAudioPlaybackStore = create<AudioPlaybackStore>((set) => ({
     set((state) =>
       state.activeItemId === itemId
         ? { activeItemId: null, muted: true }
-        : { activeItemId: itemId, muted: false },
+        : { activeItemId: itemId, muted: false }
     ),
   clearItem: (itemId) =>
     set((state) =>
       itemId === undefined || state.activeItemId === itemId
         ? { activeItemId: null, muted: true }
-        : state,
+        : state
     ),
   setVolume: (volume) => set({ volume: clampVolume(volume) }),
   toggleMuted: () => set((state) => ({ muted: !state.muted })),
@@ -35,16 +35,6 @@ export const useAudioPlaybackStore = create<AudioPlaybackStore>((set) => ({
     set({
       activeItemId: null,
       volume: 0.8,
-      muted: false,
-    }),
+      muted: false
+    })
 }));
-
-export const useAudioPlayback = () => ({
-  activeAudioItemId: useAudioPlaybackStore((state) => state.activeItemId),
-  audioVolume: useAudioPlaybackStore((state) => state.volume),
-  isAudioMuted: useAudioPlaybackStore((state) => state.muted),
-  setAudioVolume: useAudioPlaybackStore((state) => state.setVolume),
-  toggleAudioMuted: useAudioPlaybackStore((state) => state.toggleMuted),
-  toggleAudioItem: useAudioPlaybackStore((state) => state.toggleItem),
-  clearAudioItem: useAudioPlaybackStore((state) => state.clearItem),
-});

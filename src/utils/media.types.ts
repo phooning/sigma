@@ -1,3 +1,5 @@
+import { TCropStart, TResizeStart } from "@/components/ImageActions";
+
 export interface CropInsets {
   top: number;
   right: number;
@@ -54,3 +56,16 @@ export type ImageLodAssets = Pick<
 >;
 
 export type SetItems = React.Dispatch<React.SetStateAction<MediaItem[]>>;
+
+export type ItemMotionMode = "drag" | "resize" | "crop";
+
+export type TransientItemMotion = {
+  mode: ItemMotionMode;
+  activeIds: Set<string>;
+  baseItems: MediaItem[];
+  latestItems: MediaItem[];
+  startPointer: { x: number; y: number };
+  resizeStart: TResizeStart | null;
+  cropStart: TCropStart | null;
+  cropHandle: CropHandle | null;
+};
