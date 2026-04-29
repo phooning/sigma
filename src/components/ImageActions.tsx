@@ -257,7 +257,7 @@ export function ImageActions({
 
     const image = imageRef.current;
     onReadyChange?.(Boolean(image?.complete && image.naturalWidth > 0));
-  }, [displayUrl, onReadyChange, shouldUseDomImage]);
+  }, [onReadyChange, shouldUseDomImage]);
 
   return (
     <>

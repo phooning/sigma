@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 export function useViewportEntrance(
   isInViewport: boolean,
   isMediaReady: boolean,
-  isTransforming: boolean
+  isTransforming: boolean,
 ) {
   const [isVisible, setIsVisible] = useState(false);
 

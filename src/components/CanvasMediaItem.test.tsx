@@ -91,12 +91,11 @@ describe("CanvasMediaItem readiness mask", () => {
   it("waits for DOM image readiness before fading the mask", () => {
     const animationFrames: FrameRequestCallback[] = [];
     let animationFrameHandle = 0;
-    vi.spyOn(window, "requestAnimationFrame")
-      .mockImplementation((callback) => {
-        animationFrames.push(callback);
-        animationFrameHandle += 1;
-        return animationFrameHandle;
-      });
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      animationFrames.push(callback);
+      animationFrameHandle += 1;
+      return animationFrameHandle;
+    });
     vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
 
     const { container } = render(<CanvasMediaItem {...baseProps} />);
@@ -107,8 +106,12 @@ describe("CanvasMediaItem readiness mask", () => {
       backdropFilter: "blur(12px)",
     });
     expect(animationFrames).toHaveLength(0);
+    const image = container.querySelector('[data-testid="image-ready"]');
+    if (!image) {
+      throw new Error('Cannot find image from "image-ready".');
+    }
 
-    fireEvent.click(container.querySelector('[data-testid="image-ready"]')!);
+    fireEvent.click(image);
 
     expect(animationFrames).toHaveLength(1);
 

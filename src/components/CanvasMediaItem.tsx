@@ -18,7 +18,7 @@ const MEDIA_MASK_TRANSITION =
 const getViewportState = ({
   item,
   isActiveAudioItem,
-  viewBounds
+  viewBounds,
 }: Pick<CanvasMediaItemProps, "item" | "isActiveAudioItem" | "viewBounds">) => {
   const itemLeft = item.x;
   const itemTop = item.y;
@@ -39,13 +39,13 @@ const getViewportState = ({
 
   return {
     isCulled,
-    isInViewport: isVisuallyInViewport || isActiveAudioItem
+    isInViewport: isVisuallyInViewport || isActiveAudioItem,
   };
 };
 
 const areCanvasMediaItemPropsEqual = (
   prevProps: CanvasMediaItemProps,
-  nextProps: CanvasMediaItemProps
+  nextProps: CanvasMediaItemProps,
 ) => {
   if (prevProps.item !== nextProps.item) return false;
   if (prevProps.isActiveAudioItem !== nextProps.isActiveAudioItem) return false;
@@ -104,14 +104,14 @@ export const CanvasMediaItem = memo(function CanvasMediaItem({
   startCropEdit,
   toggleAudioPlayback,
   viewBounds,
-  zoom
+  zoom,
 }: CanvasMediaItemProps) {
   const { id, url } = item;
   const crop = getCrop(item);
   const { isCulled, isInViewport } = getViewportState({
     item,
     isActiveAudioItem,
-    viewBounds
+    viewBounds,
   });
 
   const [isMediaReady, setIsMediaReady] = useState(false);
@@ -129,7 +129,7 @@ export const CanvasMediaItem = memo(function CanvasMediaItem({
   const isVisible = useViewportEntrance(
     isInViewport,
     isTransforming || nativeImageReady || isMediaReady,
-    isTransforming
+    isTransforming,
   );
 
   if (isCulled && !isActiveAudioItem) {
@@ -146,7 +146,7 @@ export const CanvasMediaItem = memo(function CanvasMediaItem({
         isSelected && "selected",
         isCropEditing && "crop-editing",
         item.type === "image" && useNativeImageSurface && "native-image-item",
-        isTransforming && "is-transforming"
+        isTransforming && "is-transforming",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -156,7 +156,7 @@ export const CanvasMediaItem = memo(function CanvasMediaItem({
         width: item.width,
         height: item.height,
         zIndex,
-        transition: MEDIA_ITEM_BASE_TRANSITION
+        transition: MEDIA_ITEM_BASE_TRANSITION,
       }}
       onPointerDown={(e) => handleItemPointerDown(id, e)}
       onPointerMove={(e) => handleItemPointerMove(id, e)}
@@ -214,7 +214,7 @@ export const CanvasMediaItem = memo(function CanvasMediaItem({
           opacity: isVisible ? 0 : 1,
           backdropFilter: isVisible ? "blur(0px)" : "blur(12px)",
           WebkitBackdropFilter: isVisible ? "blur(0px)" : "blur(12px)",
-          transition: isTransforming ? "none" : MEDIA_MASK_TRANSITION
+          transition: isTransforming ? "none" : MEDIA_MASK_TRANSITION,
         }}
       />
       <div

@@ -47,7 +47,7 @@ export function VideoThumbnail({
   useEffect(() => {
     const image = imageRef.current;
     onReadyChange?.(Boolean(image?.complete && image.naturalWidth > 0));
-  }, [onReadyChange, thumbnailUrl]);
+  }, [onReadyChange]);
 
   return (
     <div className="media-crop-box" style={cropBoxStyle}>
