@@ -5,7 +5,7 @@ import {
   getCanvasContainer,
   getCanvasWorld,
   mockCanvasRect,
-  renderCanvas
+  renderCanvas,
 } from "./test/infiniteCanvasHarness";
 
 // ---------------------------------------------------------------------------
@@ -18,23 +18,23 @@ function doPan(
   {
     from,
     to,
-    pointerId = 1
+    pointerId = 1,
   }: {
     from: { x: number; y: number };
     to: { x: number; y: number };
     pointerId?: number;
-  }
+  },
 ) {
   fireEvent.pointerDown(containerEl, {
     button: 1,
     clientX: from.x,
     clientY: from.y,
-    pointerId
+    pointerId,
   });
   fireEvent.pointerMove(containerEl, {
     clientX: to.x,
     clientY: to.y,
-    pointerId
+    pointerId,
   });
   fireEvent.pointerUp(containerEl, { pointerId });
 }
@@ -60,14 +60,14 @@ describe("InfiniteCanvas - panning (middle-click drag)", () => {
         button: 1,
         clientX: 100,
         clientY: 100,
-        pointerId: 1
+        pointerId: 1,
       });
 
       // --- first move ---
       fireEvent.pointerMove(containerEl, {
         clientX: 130,
         clientY: 140,
-        pointerId: 1
+        pointerId: 1,
       });
       act(() => {
         vi.advanceTimersByTime(100);
@@ -80,18 +80,18 @@ describe("InfiniteCanvas - panning (middle-click drag)", () => {
       expect(useCanvasSessionStore.getState().viewport).toEqual({
         x: 0,
         y: 0,
-        zoom: 1
+        zoom: 1,
       });
       expect(localStorage.setItem).not.toHaveBeenCalledWith(
         "sigma:canvas-session",
-        expect.any(String)
+        expect.any(String),
       );
 
       // --- second move ---
       fireEvent.pointerMove(containerEl, {
         clientX: 160,
         clientY: 180,
-        pointerId: 1
+        pointerId: 1,
       });
       act(() => {
         vi.advanceTimersByTime(100);
@@ -106,11 +106,11 @@ describe("InfiniteCanvas - panning (middle-click drag)", () => {
       expect(useCanvasSessionStore.getState().viewport).toEqual({
         x: 60,
         y: 80,
-        zoom: 1
+        zoom: 1,
       });
       expect(localStorage.setItem).toHaveBeenCalledWith(
         "sigma:canvas-session",
-        expect.stringContaining('"viewport":{"x":60,"y":80,"zoom":1}')
+        expect.stringContaining('"viewport":{"x":60,"y":80,"zoom":1}'),
       );
     } finally {
       vi.useRealTimers();
@@ -133,7 +133,7 @@ describe("InfiniteCanvas - panning (middle-click drag)", () => {
     expect(useCanvasSessionStore.getState().viewport).toEqual({
       x: 90,
       y: 10,
-      zoom: 1
+      zoom: 1,
     });
   });
 
@@ -147,12 +147,12 @@ describe("InfiniteCanvas - panning (middle-click drag)", () => {
       button: 1,
       clientX: 100,
       clientY: 100,
-      pointerId: 1
+      pointerId: 1,
     });
     fireEvent.pointerMove(containerEl, {
       clientX: 160,
       clientY: 180,
-      pointerId: 1
+      pointerId: 1,
     });
 
     // Cancel instead of releasing
@@ -162,11 +162,11 @@ describe("InfiniteCanvas - panning (middle-click drag)", () => {
     expect(useCanvasSessionStore.getState().viewport).toEqual({
       x: 60,
       y: 80,
-      zoom: 1
+      zoom: 1,
     });
     expect(localStorage.setItem).toHaveBeenCalledWith(
       "sigma:canvas-session",
-      expect.stringContaining('"viewport":{"x":60,"y":80,"zoom":1}')
+      expect.stringContaining('"viewport":{"x":60,"y":80,"zoom":1}'),
     );
   });
 
@@ -179,12 +179,12 @@ describe("InfiniteCanvas - panning (middle-click drag)", () => {
       button: 0,
       clientX: 100,
       clientY: 100,
-      pointerId: 1
+      pointerId: 1,
     });
     fireEvent.pointerMove(containerEl, {
       clientX: 200,
       clientY: 200,
-      pointerId: 1
+      pointerId: 1,
     });
     fireEvent.pointerUp(containerEl, { pointerId: 1 });
 
@@ -192,7 +192,7 @@ describe("InfiniteCanvas - panning (middle-click drag)", () => {
     expect(useCanvasSessionStore.getState().viewport).toEqual({
       x: 0,
       y: 0,
-      zoom: 1
+      zoom: 1,
     });
   });
 
@@ -205,12 +205,12 @@ describe("InfiniteCanvas - panning (middle-click drag)", () => {
       button: 2,
       clientX: 100,
       clientY: 100,
-      pointerId: 1
+      pointerId: 1,
     });
     fireEvent.pointerMove(containerEl, {
       clientX: 200,
       clientY: 200,
-      pointerId: 1
+      pointerId: 1,
     });
     fireEvent.pointerUp(containerEl, { pointerId: 1 });
 
@@ -218,7 +218,7 @@ describe("InfiniteCanvas - panning (middle-click drag)", () => {
     expect(useCanvasSessionStore.getState().viewport).toEqual({
       x: 100,
       y: 100,
-      zoom: 1
+      zoom: 1,
     });
   });
 });
@@ -237,7 +237,7 @@ describe("InfiniteCanvas - selection box (left-click drag)", () => {
       button: 0,
       clientX: 200,
       clientY: 200,
-      pointerId: 2
+      pointerId: 2,
     });
 
     let selBox = document.querySelector(".selection-box") as HTMLElement;
@@ -252,7 +252,7 @@ describe("InfiniteCanvas - selection box (left-click drag)", () => {
     fireEvent.pointerMove(containerEl, {
       clientX: 350,
       clientY: 280,
-      pointerId: 2
+      pointerId: 2,
     });
 
     selBox = document.querySelector(".selection-box") as HTMLElement;
@@ -277,12 +277,12 @@ describe("InfiniteCanvas - selection box (left-click drag)", () => {
       button: 0,
       clientX: 350,
       clientY: 280,
-      pointerId: 2
+      pointerId: 2,
     });
     fireEvent.pointerMove(containerEl, {
       clientX: 200,
       clientY: 200,
-      pointerId: 2
+      pointerId: 2,
     });
 
     const selBox = document.querySelector(".selection-box") as HTMLElement;
@@ -305,12 +305,12 @@ describe("InfiniteCanvas - selection box (left-click drag)", () => {
       button: 0,
       clientX: 200,
       clientY: 200,
-      pointerId: 2
+      pointerId: 2,
     });
     fireEvent.pointerMove(containerEl, {
       clientX: 350,
       clientY: 280,
-      pointerId: 2
+      pointerId: 2,
     });
     expect(document.querySelector(".selection-box")).toBeInTheDocument();
 
@@ -328,12 +328,12 @@ describe("InfiniteCanvas - selection box (left-click drag)", () => {
       button: 1,
       clientX: 200,
       clientY: 200,
-      pointerId: 1
+      pointerId: 1,
     });
     fireEvent.pointerMove(containerEl, {
       clientX: 350,
       clientY: 280,
-      pointerId: 1
+      pointerId: 1,
     });
 
     expect(document.querySelector(".selection-box")).not.toBeInTheDocument();

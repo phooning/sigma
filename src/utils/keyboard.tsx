@@ -43,7 +43,10 @@ export function useCanvasHotkeys(config: CanvasHotkeyConfig) {
             ?.querySelector<HTMLElement>(`[data-media-id="${item.id}"]`)
             ?.querySelector("video"),
         )
-        .filter((video): video is HTMLVideoElement => video instanceof HTMLVideoElement);
+        .filter(
+          (video): video is HTMLVideoElement =>
+            video instanceof HTMLVideoElement,
+        );
 
       if (selectedVideos.length === 0) return false;
 

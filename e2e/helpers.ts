@@ -71,7 +71,11 @@ export async function installTauriMocks(
   options: { disableNativeImageSurface?: boolean } = {},
 ) {
   await page.addInitScript(
-    ({ mockImageDataUrl, playwrightVideoFixtureUrl, disableNativeImageSurface }) => {
+    ({
+      mockImageDataUrl,
+      playwrightVideoFixtureUrl,
+      disableNativeImageSurface,
+    }) => {
       type Callback = (payload: unknown) => void;
       type ListenerRecord = {
         event: string;
@@ -138,7 +142,10 @@ export async function installTauriMocks(
 
       const normalizePath = (path: string) => path.replaceAll("\\", "/");
 
-      const pathMatches = (expectedPath: string | undefined, actualPath: unknown) =>
+      const pathMatches = (
+        expectedPath: string | undefined,
+        actualPath: unknown,
+      ) =>
         expectedPath === undefined ||
         (typeof actualPath === "string" &&
           normalizePath(actualPath) === normalizePath(expectedPath));
@@ -222,7 +229,10 @@ export async function installTauriMocks(
           args: Record<string, unknown> | Uint8Array = {},
           options?: { headers?: Record<string, string> },
         ) => {
-          invokeCalls.push({ cmd, args: args instanceof Uint8Array ? {} : args });
+          invokeCalls.push({
+            cmd,
+            args: args instanceof Uint8Array ? {} : args,
+          });
 
           const invokeFailure = findInvokeFailure(cmd, args);
           if (invokeFailure) {

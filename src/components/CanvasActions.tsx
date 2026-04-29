@@ -1,9 +1,9 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import type { RefObject, WheelEvent } from "react";
 import { v4 as uuidv4 } from "uuid";
-import { notify } from "../utils/notifications";
 import { IMAGE_EXTENSIONS, VIDEO_EXTENSIONS } from "../utils/media";
 import type { MediaItem, Viewport } from "../utils/media.types";
+import { notify } from "../utils/notifications";
 import { applyPanDelta, applyZoomAtPoint } from "../utils/viewportMath";
 
 export type WheelInputType = "trackpad-pan" | "zoom";

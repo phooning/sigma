@@ -1,5 +1,5 @@
 import path from "node:path";
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import {
   clearInvokeCalls,
   dropFiles,
@@ -252,8 +252,9 @@ test("does not delete a selected item while an editable element owns focus", asy
   await expect(page.getByText("1 items")).toBeVisible();
 
   await page.evaluate(() => {
-    (document.getElementById("e2e-focus-guard") as HTMLInputElement | null)
-      ?.blur();
+    (
+      document.getElementById("e2e-focus-guard") as HTMLInputElement | null
+    )?.blur();
   });
 
   await page.keyboard.press("Delete");
@@ -308,11 +309,13 @@ test("passes a real non-zero currentTime when saving a video screenshot", async 
   await expect(page.getByText("Screenshot saved")).toBeVisible();
 
   const calls = await getInvokeCalls(page);
-  const screenshotCall = calls.find((call) => call.cmd === "save_media_screenshot");
+  const screenshotCall = calls.find(
+    (call) => call.cmd === "save_media_screenshot",
+  );
   expect(screenshotCall).toBeTruthy();
-  expect(
-    (screenshotCall?.args as { path?: string }).path,
-  ).toBe(videoFixturePath);
+  expect((screenshotCall?.args as { path?: string }).path).toBe(
+    videoFixturePath,
+  );
   expect(
     (screenshotCall?.args as { currentTime?: number }).currentTime ?? 0,
   ).toBeGreaterThan(2);
