@@ -81,7 +81,7 @@ const metricsWindow = {
   receivedFrames: 0,
   droppedFrames: 0,
   receivedBytes: 0,
-  startedAt: performance.now()
+  startedAt: performance.now(),
 };
 
 let renderer: Renderer | null = null;
@@ -148,7 +148,7 @@ async function initialize(message: InitMessage) {
     message.canvas,
     canvasWidth,
     canvasHeight,
-    devicePixelRatio
+    devicePixelRatio,
   );
 
   if (!renderer) {
@@ -156,7 +156,7 @@ async function initialize(message: InitMessage) {
       message.canvas,
       canvasWidth,
       canvasHeight,
-      devicePixelRatio
+      devicePixelRatio,
     );
   }
 
@@ -207,7 +207,7 @@ function applyGeometry(itemId: string, bounds: Layout | null) {
     x: bounds.x,
     y: bounds.y,
     width: bounds.width,
-    height: bounds.height
+    height: bounds.height,
   });
 }
 
@@ -221,7 +221,7 @@ function applyLayoutManifest(manifest: NativeVideoManifest) {
       x: asset.screenX,
       y: asset.screenY,
       width: asset.renderedWidthPx,
-      height: asset.renderedHeightPx
+      height: asset.renderedHeightPx,
     });
   }
 }
@@ -248,7 +248,7 @@ function layoutManifestUnchanged(manifest: NativeVideoManifest) {
 
 function parseFramePacket(
   packet: ArrayBuffer,
-  packetLength: number
+  packetLength: number,
 ): Frame | null {
   if (packetLength < FRAME_PACKET_HEADER_LEN) return null;
 
@@ -257,7 +257,7 @@ function parseFramePacket(
     view.getUint8(0),
     view.getUint8(1),
     view.getUint8(2),
-    view.getUint8(3)
+    view.getUint8(3),
   );
   if (magic !== FRAME_PACKET_MAGIC) return null;
 
@@ -299,7 +299,7 @@ function parseFramePacket(
     yPlane: new Uint8Array(packet, headerLength, yLength),
     uPlane: new Uint8Array(packet, uOffset, chromaLength),
     vPlane: new Uint8Array(packet, vOffset, chromaLength),
-    presented: false
+    presented: false,
   };
 }
 
@@ -329,7 +329,7 @@ class Canvas2dRenderer implements Renderer {
     private readonly canvas: OffscreenCanvas,
     width: number,
     height: number,
-    ratio: number
+    ratio: number,
   ) {
     const context = canvas.getContext("2d", { alpha: true });
     if (!context) {
@@ -379,7 +379,7 @@ class Canvas2dRenderer implements Renderer {
           layout.x,
           layout.y,
           layout.width,
-          layout.height
+          layout.height,
         );
       }
     }
@@ -391,7 +391,7 @@ class Canvas2dRenderer implements Renderer {
       rgba: Uint8ClampedArray<ArrayBuffer>;
       pendingBitmap: ImageBitmap | null;
       decoding: boolean;
-    }
+    },
   ) {
     const yPlane = frame.yPlane;
     const uPlane = frame.uPlane;
@@ -410,10 +410,10 @@ class Canvas2dRenderer implements Renderer {
           vPlane,
           scratch.rgba,
           frame.width,
-          frame.height
+          frame.height,
         );
         const bitmap = await createImageBitmap(
-          new ImageData(scratch.rgba, frame.width, frame.height)
+          new ImageData(scratch.rgba, frame.width, frame.height),
         );
         releaseFrameBuffer(frame);
         scratch.pendingBitmap?.close();
@@ -458,7 +458,7 @@ class Canvas2dRenderer implements Renderer {
       rgba: new Uint8ClampedArray(new ArrayBuffer(width * height * 4)),
       pendingBitmap: null,
       decoding: false,
-      hasPixels: false
+      hasPixels: false,
     };
     this.scratch.set(streamId, scratch);
     return scratch;
@@ -479,10 +479,10 @@ class WebGpuRenderer implements Renderer {
     private readonly device: GPUDevice,
     width: number,
     height: number,
-    ratio: number
+    ratio: number,
   ) {
     const context = canvas.getContext(
-      "webgpu" as OffscreenRenderingContextId
+      "webgpu" as OffscreenRenderingContextId,
     ) as GPUCanvasContext | null;
     if (!context) {
       throw new Error("WebGPU canvas context is unavailable.");
@@ -493,11 +493,11 @@ class WebGpuRenderer implements Renderer {
     this.context.configure({
       device,
       format,
-      alphaMode: "premultiplied"
+      alphaMode: "premultiplied",
     });
     this.sampler = device.createSampler({
       magFilter: "linear",
-      minFilter: "linear"
+      minFilter: "linear",
     });
     this.computePipeline = this.createYuvComputePipeline();
     this.renderPipeline = this.createRenderPipeline(format);
@@ -534,9 +534,9 @@ class WebGpuRenderer implements Renderer {
           view,
           clearValue: { r: 0, g: 0, b: 0, a: 0 },
           loadOp: "clear",
-          storeOp: "store"
-        }
-      ]
+          storeOp: "store",
+        },
+      ],
     });
 
     pass.setPipeline(this.renderPipeline);
@@ -561,7 +561,7 @@ class WebGpuRenderer implements Renderer {
   private uploadYuvFrame(
     encoder: GPUCommandEncoder,
     streamId: string,
-    frame: Frame
+    frame: Frame,
   ) {
     const yPlane = frame.yPlane;
     const uPlane = frame.uPlane;
@@ -577,19 +577,19 @@ class WebGpuRenderer implements Renderer {
       gpuFrame.yTexture,
       yPlane,
       frame.width,
-      frame.height
+      frame.height,
     );
     this.writePlaneTexture(
       gpuFrame.uTexture,
       uPlane,
       chromaWidth,
-      chromaHeight
+      chromaHeight,
     );
     this.writePlaneTexture(
       gpuFrame.vTexture,
       vPlane,
       chromaWidth,
-      chromaHeight
+      chromaHeight,
     );
 
     const computePass = encoder.beginComputePass();
@@ -597,7 +597,7 @@ class WebGpuRenderer implements Renderer {
     computePass.setBindGroup(0, gpuFrame.computeBindGroup);
     computePass.dispatchWorkgroups(
       Math.ceil(frame.width / 8),
-      Math.ceil(frame.height / 8)
+      Math.ceil(frame.height / 8),
     );
     computePass.end();
 
@@ -610,7 +610,7 @@ class WebGpuRenderer implements Renderer {
     texture: GPUTexture,
     plane: Uint8Array,
     width: number,
-    height: number
+    height: number,
   ) {
     const bytesPerRow = alignTo(width, 256);
     const source =
@@ -622,7 +622,7 @@ class WebGpuRenderer implements Renderer {
       { texture },
       source,
       { bytesPerRow, rowsPerImage: height },
-      { width, height }
+      { width, height },
     );
   }
 
@@ -639,22 +639,22 @@ class WebGpuRenderer implements Renderer {
     const yTexture = this.device.createTexture({
       size: [frame.width, frame.height, 1],
       format: "r8unorm",
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
     });
     const uTexture = this.device.createTexture({
       size: [frame.width / 2, frame.height / 2, 1],
       format: "r8unorm",
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
     });
     const vTexture = this.device.createTexture({
       size: [frame.width / 2, frame.height / 2, 1],
       format: "r8unorm",
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
     });
     const rgbaTexture = this.device.createTexture({
       size: [frame.width, frame.height, 1],
       format: "rgba8unorm",
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING,
     });
     const computeBindGroup = this.device.createBindGroup({
       layout: this.computePipeline.getBindGroupLayout(0),
@@ -662,19 +662,19 @@ class WebGpuRenderer implements Renderer {
         { binding: 0, resource: yTexture.createView() },
         { binding: 1, resource: uTexture.createView() },
         { binding: 2, resource: vTexture.createView() },
-        { binding: 3, resource: rgbaTexture.createView() }
-      ]
+        { binding: 3, resource: rgbaTexture.createView() },
+      ],
     });
     const renderBindGroup = this.device.createBindGroup({
       layout: this.renderPipeline.getBindGroupLayout(0),
       entries: [
         { binding: 0, resource: rgbaTexture.createView() },
-        { binding: 1, resource: this.sampler }
-      ]
+        { binding: 1, resource: this.sampler },
+      ],
     });
     const vertexBuffer = this.device.createBuffer({
       size: 6 * 4 * Float32Array.BYTES_PER_ELEMENT,
-      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
     });
     const gpuFrame = {
       width: frame.width,
@@ -686,7 +686,7 @@ class WebGpuRenderer implements Renderer {
       computeBindGroup,
       renderBindGroup,
       vertexBuffer,
-      layout: null
+      layout: null,
     };
     this.gpuFrames.set(streamId, gpuFrame);
     return gpuFrame;
@@ -698,7 +698,7 @@ class WebGpuRenderer implements Renderer {
     this.device.queue.writeBuffer(
       gpuFrame.vertexBuffer,
       0,
-      verticesForLayout(layout)
+      verticesForLayout(layout),
     );
     gpuFrame.layout = { ...layout };
   }
@@ -728,15 +728,15 @@ fn yuv420ToRgba(@builtin(global_invocation_id) id: vec3u) {
   let b = y + 1.772 * u;
   textureStore(outTexture, vec2i(id.xy), vec4f(r, g, b, 1.0));
 }
-`
+`,
     });
 
     return this.device.createComputePipeline({
       layout: "auto",
       compute: {
         module: shader,
-        entryPoint: "yuv420ToRgba"
-      }
+        entryPoint: "yuv420ToRgba",
+      },
     });
   }
 
@@ -763,7 +763,7 @@ fn vertexMain(@location(0) position: vec2f, @location(1) uv: vec2f) -> VertexOut
 fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
   return textureSample(frameTexture, frameSampler, in.uv);
 }
-`
+`,
     });
 
     return this.device.createRenderPipeline({
@@ -779,18 +779,18 @@ fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
               {
                 shaderLocation: 1,
                 offset: 2 * Float32Array.BYTES_PER_ELEMENT,
-                format: "float32x2"
-              }
-            ]
-          }
-        ]
+                format: "float32x2",
+              },
+            ],
+          },
+        ],
       },
       fragment: {
         module: shader,
         entryPoint: "fragmentMain",
-        targets: [{ format }]
+        targets: [{ format }],
       },
-      primitive: { topology: "triangle-list" }
+      primitive: { topology: "triangle-list" },
     });
   }
 }
@@ -812,7 +812,7 @@ async function createWebGpuRenderer(
   canvas: OffscreenCanvas,
   width: number,
   height: number,
-  ratio: number
+  ratio: number,
 ) {
   const gpu = (navigator as unknown as { gpu?: GPU }).gpu;
   if (!gpu) return null;
@@ -854,7 +854,7 @@ function verticesForLayout(layout: Layout) {
     x1,
     y1,
     1,
-    1
+    1,
   ]);
 }
 
@@ -878,7 +878,7 @@ function yuv420ToRgba(
   vPlane: Uint8Array,
   rgba: Uint8ClampedArray,
   width: number,
-  height: number
+  height: number,
 ) {
   // 2D fallback converts YUV420 to RGBA with lookup tables in the worker.
   const chromaWidth = width / 2;
@@ -895,7 +895,7 @@ function yuv420ToRgba(
 
       rgba[output] = clampByte((yy + vToRTable[v] + 128) >> 8);
       rgba[output + 1] = clampByte(
-        (yy + uToGTable[u] + vToGTable[v] + 128) >> 8
+        (yy + uToGTable[u] + vToGTable[v] + 128) >> 8,
       );
       rgba[output + 2] = clampByte((yy + uToBTable[u] + 128) >> 8);
       rgba[output + 3] = 255;
@@ -936,7 +936,7 @@ function maybePostMetrics() {
     measuredIpcBytesPerSec:
       elapsedMs > 0
         ? Math.round((metricsWindow.receivedBytes / elapsedMs) * 1_000)
-        : 0
+        : 0,
   };
 
   metricsWindow.uploadLatencyMs = [];
@@ -954,7 +954,7 @@ function percentile(values: number[], p: number) {
   values.sort((a, b) => a - b);
   const index = Math.min(
     values.length - 1,
-    Math.max(0, Math.ceil(values.length * p) - 1)
+    Math.max(0, Math.ceil(values.length * p) - 1),
   );
   return Number(values[index].toFixed(3));
 }
@@ -980,14 +980,14 @@ function padPlaneRows(
   plane: Uint8Array,
   rowBytes: number,
   rowCount: number,
-  paddedRowBytes: number
+  paddedRowBytes: number,
 ) {
   const padded = new Uint8Array(paddedRowBytes * rowCount);
   for (let row = 0; row < rowCount; row += 1) {
     const sourceOffset = row * rowBytes;
     padded.set(
       plane.subarray(sourceOffset, sourceOffset + rowBytes),
-      row * paddedRowBytes
+      row * paddedRowBytes,
     );
   }
   return padded;
