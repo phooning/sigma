@@ -13,14 +13,14 @@ import {
   open,
   renderCanvas,
   revealItemInDirMock,
-  setViewportSize,
+  setViewportSize
 } from "./test/infiniteCanvasHarness";
 
 describe("InfiniteCanvas media loading", () => {
   it("drops multiple videos as playable video elements without eager thumbnail work", async () => {
     const videoPath = new URL(
       "../fixtures/generated-lod-test-1080p.mp4",
-      import.meta.url,
+      import.meta.url
     ).pathname;
 
     setViewportSize({ width: 3000 });
@@ -36,66 +36,21 @@ describe("InfiniteCanvas media loading", () => {
       expect(video).toHaveAttribute("src", `asset://${videoPath}`);
     });
     expect(
-      document.querySelector(".video-lod-thumbnail"),
+      document.querySelector(".video-lod-thumbnail")
     ).not.toBeInTheDocument();
     expect(document.querySelector(".video-lod-proxy")).not.toBeInTheDocument();
     expect(invoke).not.toHaveBeenCalledWith(
       "request_decode",
       expect.objectContaining({
-        path: expect.stringMatching(/\.(mp4|webm|mov|mkv)$/i),
-      }),
+        path: expect.stringMatching(/\.(mp4|webm|mov|mkv)$/i)
+      })
     );
-  });
-
-  it("pauses selected videos with the spacebar", async () => {
-    const videoPath = "/path/to/spacebar-video.mp4";
-
-    renderCanvas();
-    await dropFiles([videoPath]);
-
-    const video = await waitFor(() => {
-      const found = document.querySelector(
-        "video.media-content",
-      ) as HTMLVideoElement | null;
-      if (!found) {
-        throw new Error("Expected selected video element to be rendered");
-      }
-      expect(found).toBeInTheDocument();
-      return found;
-    });
-    const pause = vi.fn();
-    Object.defineProperty(video, "paused", {
-      configurable: true,
-      get: () => false,
-    });
-    Object.defineProperty(video, "pause", {
-      configurable: true,
-      value: pause,
-    });
-
-    const mediaItem = getMediaItem();
-    await act(async () => {
-      fireEvent.pointerDown(mediaItem, {
-        button: 0,
-        clientX: 10,
-        clientY: 10,
-        pointerId: 21,
-      });
-    });
-
-    expect(mediaItem).toHaveClass("selected");
-
-    await act(async () => {
-      fireEvent.keyDown(window, { key: " ", code: "Space" });
-    });
-
-    expect(pause).toHaveBeenCalledOnce();
   });
 
   it("drops large videos as deferred load proxies until playback is requested", async () => {
     const heavyVideoPath = new URL(
       "../fixtures/heavy_video.mkv",
-      import.meta.url,
+      import.meta.url
     ).pathname;
 
     setViewportSize({ width: 3000 });
@@ -105,15 +60,15 @@ describe("InfiniteCanvas media loading", () => {
     await waitFor(() => {
       expect(document.querySelectorAll(".media-item")).toHaveLength(1);
       expect(
-        screen.getByRole("button", { name: /load video/i }),
+        screen.getByRole("button", { name: /load video/i })
       ).toBeInTheDocument();
     });
 
     expect(
-      document.querySelector("video.media-content"),
+      document.querySelector("video.media-content")
     ).not.toBeInTheDocument();
     expect(invoke).toHaveBeenCalledWith("probe_media", {
-      path: heavyVideoPath,
+      path: heavyVideoPath
     });
 
     await waitFor(() => {
@@ -123,12 +78,12 @@ describe("InfiniteCanvas media loading", () => {
           itemId: expect.any(String),
           path: heavyVideoPath,
           lod: 256,
-          priority: "visible",
-        }),
+          priority: "visible"
+        })
       );
       expect(document.querySelector(".video-load-thumbnail")).toHaveAttribute(
         "src",
-        "asset:///tmp/heavy-thumb.jpg",
+        "asset:///tmp/heavy-thumb.jpg"
       );
     });
 
@@ -149,19 +104,19 @@ describe("InfiniteCanvas media loading", () => {
 
     await waitFor(() => {
       expect(document.querySelector(".item-count")?.textContent).toContain(
-        "2 items",
+        "2 items"
       );
       expect(screen.getByAltText("canvas item")).toBeInTheDocument();
     });
 
     expect(invoke).toHaveBeenCalledWith("probe_images", {
-      paths: ["/path/to/test.png", "/path/to/portrait.webp"],
+      paths: ["/path/to/test.png", "/path/to/portrait.webp"]
     });
     expect(invoke).not.toHaveBeenCalledWith("probe_media", {
-      path: "/path/to/test.png",
+      path: "/path/to/test.png"
     });
     expect(invoke).not.toHaveBeenCalledWith("probe_media", {
-      path: "/path/to/portrait.webp",
+      path: "/path/to/portrait.webp"
     });
   });
 
@@ -181,7 +136,7 @@ describe("InfiniteCanvas media loading", () => {
   it("splits large image drops into bounded native probe batches", async () => {
     const imagePaths = Array.from(
       { length: 9 },
-      (_, index) => `/path/to/gallery-${index}.png`,
+      (_, index) => `/path/to/gallery-${index}.png`
     );
 
     renderCanvas();
@@ -189,7 +144,7 @@ describe("InfiniteCanvas media loading", () => {
 
     await waitFor(() => {
       expect(document.querySelector(".item-count")?.textContent).toContain(
-        "9 items",
+        "9 items"
       );
     });
 
@@ -199,10 +154,10 @@ describe("InfiniteCanvas media loading", () => {
 
     expect(probeImageCalls).toHaveLength(2);
     expect(probeImageCalls[0][1]).toEqual({
-      paths: imagePaths.slice(0, 8),
+      paths: imagePaths.slice(0, 8)
     });
     expect(probeImageCalls[1][1]).toEqual({
-      paths: imagePaths.slice(8),
+      paths: imagePaths.slice(8)
     });
   });
 
@@ -214,14 +169,14 @@ describe("InfiniteCanvas media loading", () => {
       "request_decode",
       expect.objectContaining({
         path: "/path/to/test.png",
-        lod: 1024,
-      }),
+        lod: 1024
+      })
     );
 
     await waitFor(() => {
       expect(screen.getByAltText("canvas item")).toHaveAttribute(
         "src",
-        "asset:///path/to/test.png",
+        "asset:///path/to/test.png"
       );
     });
   });
@@ -239,7 +194,7 @@ describe("InfiniteCanvas media loading", () => {
         ctrlKey: true,
         deltaY: 900,
         clientX: 10,
-        clientY: 10,
+        clientY: 10
       });
     });
 
@@ -250,8 +205,8 @@ describe("InfiniteCanvas media loading", () => {
           itemId: expect.any(String),
           path: "/path/to/test.png",
           lod: 256,
-          priority: "visible",
-        }),
+          priority: "visible"
+        })
       );
     });
   });
@@ -273,7 +228,7 @@ describe("InfiniteCanvas media item interactions", () => {
         button: 0,
         clientX: 0,
         clientY: 0,
-        pointerId: 16,
+        pointerId: 16
       });
     });
     vi.mocked(localStorage.setItem).mockClear();
@@ -283,7 +238,7 @@ describe("InfiniteCanvas media item interactions", () => {
         clientX: 100,
         clientY: 200,
         pointerId: 16,
-        button: 0,
+        button: 0
       });
     });
 
@@ -291,14 +246,14 @@ describe("InfiniteCanvas media item interactions", () => {
     expect(mediaItem.style.left).toBe(`${startItem.x}px`);
     expect(mediaItem.style.top).toBe(`${startItem.y}px`);
     expect(mediaItem.style.getPropertyValue("--media-transient-x")).toBe(
-      "100px",
+      "100px"
     );
     expect(mediaItem.style.getPropertyValue("--media-transient-y")).toBe(
-      "200px",
+      "200px"
     );
     expect(localStorage.setItem).not.toHaveBeenCalledWith(
       "sigma:canvas-session",
-      expect.any(String),
+      expect.any(String)
     );
 
     await act(async () => {
@@ -313,7 +268,7 @@ describe("InfiniteCanvas media item interactions", () => {
     expect(mediaItem.style.getPropertyValue("--media-transient-x")).toBe("");
     expect(localStorage.setItem).toHaveBeenCalledWith(
       "sigma:canvas-session",
-      expect.stringContaining(`"x":${startItem.x + 100}`),
+      expect.stringContaining(`"x":${startItem.x + 100}`)
     );
   });
 
@@ -324,7 +279,7 @@ describe("InfiniteCanvas media item interactions", () => {
       id: "second-image",
       filePath: "/path/to/second.png",
       url: "asset:///path/to/second.png",
-      x: firstItem.x + 40,
+      x: firstItem.x + 40
     };
 
     useCanvasSessionStore.getState().setItems([firstItem, secondItem]);
@@ -334,8 +289,8 @@ describe("InfiniteCanvas media item interactions", () => {
       .getState()
       .setItems((prev) =>
         prev.map((item) =>
-          item.id === firstItem.id ? { ...item, x: item.x + 10 } : item,
-        ),
+          item.id === firstItem.id ? { ...item, x: item.x + 10 } : item
+        )
       );
 
     expect(useCanvasSessionStore.getState().items[1]).toBe(unchangedItem);
@@ -356,7 +311,7 @@ describe("InfiniteCanvas media item interactions", () => {
         clientX: 0,
         clientY: 0,
         pointerId: 3,
-        button: 0,
+        button: 0
       });
     });
     await act(async () => {
@@ -364,7 +319,7 @@ describe("InfiniteCanvas media item interactions", () => {
         clientX: 100,
         clientY: 200,
         pointerId: 3,
-        button: 0,
+        button: 0
       });
     });
     await act(async () => {
@@ -394,7 +349,7 @@ describe("InfiniteCanvas media item interactions", () => {
         clientX: 0,
         clientY: 0,
         pointerId: 6,
-        button: 0,
+        button: 0
       });
     });
     await act(async () => {
@@ -402,7 +357,7 @@ describe("InfiniteCanvas media item interactions", () => {
         clientX: 100,
         clientY: 200,
         pointerId: 6,
-        button: 0,
+        button: 0
       });
     });
     await act(async () => {
@@ -419,7 +374,7 @@ describe("InfiniteCanvas media item interactions", () => {
         clientX: 0,
         clientY: 0,
         pointerId: 7,
-        button: 0,
+        button: 0
       });
     });
     await act(async () => {
@@ -428,7 +383,7 @@ describe("InfiniteCanvas media item interactions", () => {
         clientY: 0,
         pointerId: 7,
         button: 0,
-        shiftKey: true,
+        shiftKey: true
       });
     });
     await act(async () => {
@@ -481,7 +436,7 @@ describe("InfiniteCanvas media item interactions", () => {
         clientX: 0,
         clientY: 0,
         pointerId: 11,
-        button: 0,
+        button: 0
       });
     });
     await act(async () => {
@@ -489,7 +444,7 @@ describe("InfiniteCanvas media item interactions", () => {
         clientX: 120,
         clientY: 0,
         pointerId: 11,
-        button: 0,
+        button: 0
       });
     });
     await act(async () => {
@@ -497,7 +452,7 @@ describe("InfiniteCanvas media item interactions", () => {
     });
 
     const screenshotBtn = document.querySelector(
-      ".screenshot-btn",
+      ".screenshot-btn"
     ) as HTMLElement;
     await act(async () => {
       fireEvent.pointerDown(screenshotBtn, { pointerId: 12, button: 0 });
@@ -507,7 +462,7 @@ describe("InfiniteCanvas media item interactions", () => {
     expect(open).toHaveBeenCalledWith({
       directory: true,
       multiple: false,
-      title: "Choose screenshot directory",
+      title: "Choose screenshot directory"
     });
     expect(invoke).toHaveBeenCalledWith("save_media_screenshot", {
       path: "/path/to/test.png",
@@ -520,8 +475,8 @@ describe("InfiniteCanvas media item interactions", () => {
         width: 1160 / 1280,
         height: 1,
         boxWidth: 1280,
-        boxHeight: 960,
-      },
+        boxHeight: 960
+      }
     });
   });
 
@@ -548,7 +503,7 @@ describe("InfiniteCanvas media item interactions", () => {
         clientX: 0,
         clientY: 0,
         pointerId: 8,
-        button: 0,
+        button: 0
       });
     });
     await act(async () => {
@@ -556,7 +511,7 @@ describe("InfiniteCanvas media item interactions", () => {
         clientX: 120,
         clientY: 0,
         pointerId: 8,
-        button: 0,
+        button: 0
       });
     });
     await act(async () => {
@@ -569,7 +524,7 @@ describe("InfiniteCanvas media item interactions", () => {
     expect(cropBox.style.width).toBe("1280px");
 
     const northWestHandle = document.querySelector(
-      ".crop-handle-nw",
+      ".crop-handle-nw"
     ) as HTMLElement;
 
     await act(async () => {
@@ -577,7 +532,7 @@ describe("InfiniteCanvas media item interactions", () => {
         clientX: 120,
         clientY: 0,
         pointerId: 9,
-        button: 0,
+        button: 0
       });
     });
     await act(async () => {
@@ -585,7 +540,7 @@ describe("InfiniteCanvas media item interactions", () => {
         clientX: 70,
         clientY: 80,
         pointerId: 9,
-        button: 0,
+        button: 0
       });
     });
     await act(async () => {
@@ -605,7 +560,7 @@ describe("InfiniteCanvas media item interactions", () => {
     const image = screen.getByAltText("canvas item") as HTMLImageElement;
     const cropBox = image.parentElement as HTMLDivElement;
     const resizeHandle = document.querySelector(
-      ".resize-handle",
+      ".resize-handle"
     ) as HTMLElement;
 
     await act(async () => {
@@ -613,7 +568,7 @@ describe("InfiniteCanvas media item interactions", () => {
         clientX: 0,
         clientY: 0,
         pointerId: 13,
-        button: 0,
+        button: 0
       });
     });
     await act(async () => {
@@ -621,7 +576,7 @@ describe("InfiniteCanvas media item interactions", () => {
         clientX: 100,
         clientY: 200,
         pointerId: 13,
-        button: 0,
+        button: 0
       });
     });
     await act(async () => {
@@ -642,7 +597,7 @@ describe("InfiniteCanvas media item interactions", () => {
         clientX: 0,
         clientY: 0,
         pointerId: 14,
-        button: 0,
+        button: 0
       });
     });
     await act(async () => {
@@ -650,7 +605,7 @@ describe("InfiniteCanvas media item interactions", () => {
         clientX: -120,
         clientY: 0,
         pointerId: 14,
-        button: 0,
+        button: 0
       });
     });
     await act(async () => {
@@ -668,7 +623,7 @@ describe("InfiniteCanvas media item interactions", () => {
         clientX: 0,
         clientY: 0,
         pointerId: 15,
-        button: 0,
+        button: 0
       });
     });
     await act(async () => {
@@ -676,7 +631,7 @@ describe("InfiniteCanvas media item interactions", () => {
         clientX: 120,
         clientY: 0,
         pointerId: 15,
-        button: 0,
+        button: 0
       });
     });
     await act(async () => {

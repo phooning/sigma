@@ -455,6 +455,35 @@ export default function InfiniteCanvas() {
     }
   };
 
+  const handlePointerCancel = (e: React.PointerEvent) => {
+    const interactionState = useInteractionStore.getState();
+    const activeItemId = interactionState.getActiveItemId();
+
+    if (activeItemId) {
+      handleItemPointerUp(activeItemId, e);
+      return;
+    }
+
+    if (interactionState.isPanning) {
+      stopPanning();
+      startDragRef.current = null;
+      commitViewport(getViewport(), {
+        flushDomNow: true,
+        syncReact: true,
+      });
+    }
+
+    if (interactionState.selectionBox) {
+      clearSelectionBox();
+    }
+
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // Pointer capture may already be gone if the browser cancelled the gesture.
+    }
+  };
+
   const handleWheel = (e: ReactWheelEvent) => {
     e.preventDefault();
     cancelViewportAnimation();
@@ -878,6 +907,7 @@ export default function InfiniteCanvas() {
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
       onWheel={handleWheel}
       onContextMenu={(e) => e.preventDefault()}
     >

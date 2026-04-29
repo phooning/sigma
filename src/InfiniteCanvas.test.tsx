@@ -56,7 +56,9 @@ describe("InfiniteCanvas settings and persistence", () => {
       screen.getByText("Save the current canvas configuration."),
     ).toBeInTheDocument();
     expect(screen.getByText("Spacebar")).toBeInTheDocument();
-    expect(screen.getByText("Pause selected videos.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Toggle playback for selected videos."),
+    ).toBeInTheDocument();
     expect(screen.getByText("Ctrl/Cmd+A")).toBeInTheDocument();
     expect(
       screen.getByText("Select every item on the canvas."),
