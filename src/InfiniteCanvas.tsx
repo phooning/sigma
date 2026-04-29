@@ -866,6 +866,9 @@ export default function InfiniteCanvas() {
     selectedVideoItems.length === 1 ? selectedVideoItems[0] : null;
   const [isNativeImageSurfaceReady, setIsNativeImageSurfaceReady] =
     useState(false);
+  const [nativeImageReadyPaths, setNativeImageReadyPaths] = useState<
+    Record<string, string>
+  >({});
   const isNativeImageSurfaceSupported = useMemo(
     () => supportsNativeImageSurface(),
     [],
@@ -928,6 +931,11 @@ export default function InfiniteCanvas() {
         croppingItemId={croppingItem}
         editingCropItemId={editingCropItem}
         onReadyChange={setIsNativeImageSurfaceReady}
+        onAssetReadyChange={(itemId, path) => {
+          setNativeImageReadyPaths((current) =>
+            current[itemId] === path ? current : { ...current, [itemId]: path },
+          );
+        }}
         requestImagePreview={requestImagePreview}
       />
       <NativeVideoSurface
@@ -955,6 +963,7 @@ export default function InfiniteCanvas() {
               isCropping={isActive(croppingItem)}
               isCropEditing={editingCropItem === item.id}
               isDragging={isActive(draggingItem)}
+              nativeImageReadyPath={nativeImageReadyPaths[item.id]}
               isResizing={isActive(resizingItem)}
               isSelected={selectedItems.has(item.id)}
               requestImagePreview={requestImagePreview}

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import {
   CROP_HANDLES,
   clamp,
@@ -213,6 +213,7 @@ export function ImageActions({
   useNativeImageSurface,
   handleItemPointerDown,
   requestImagePreview,
+  onReadyChange,
   zoom,
 }: {
   id: string;
@@ -225,10 +226,12 @@ export function ImageActions({
   useNativeImageSurface: boolean;
   handleItemPointerDown: (id: string, e: React.PointerEvent) => void;
   requestImagePreview: (item: MediaItem, maxDimension: 256 | 1024) => void;
+  onReadyChange?: (isReady: boolean) => void;
   zoom: number;
 }) {
   const lod = getImageLod(zoom, item);
   const displayUrl = getImagePreviewUrl(item, lod);
+  const imageRef = useRef<HTMLImageElement>(null);
   const shouldUseDomImage =
     !useNativeImageSurface ||
     isDragging ||
@@ -246,11 +249,22 @@ export function ImageActions({
     }
   }, [item, lod, requestImagePreview, shouldUseDomImage]);
 
+  useEffect(() => {
+    if (!shouldUseDomImage) {
+      onReadyChange?.(false);
+      return;
+    }
+
+    const image = imageRef.current;
+    onReadyChange?.(Boolean(image?.complete && image.naturalWidth > 0));
+  }, [displayUrl, onReadyChange, shouldUseDomImage]);
+
   return (
     <>
       {!shouldUseDomImage ? null : (
         <div className="media-crop-box" style={getCropBoxStyle(item, crop)}>
           <img
+            ref={imageRef}
             className={[
               "media-content",
               lod === "full" ? "image-lod-full" : "image-lod-preview",
@@ -258,6 +272,8 @@ export function ImageActions({
             src={displayUrl}
             alt="canvas item"
             draggable={false}
+            onLoad={() => onReadyChange?.(true)}
+            onError={() => onReadyChange?.(false)}
             onDragStart={(e) => e.preventDefault()}
           />
         </div>

@@ -36,6 +36,7 @@ export function NativeImageSurface({
   croppingItemId,
   editingCropItemId,
   onReadyChange,
+  onAssetReadyChange,
   requestImagePreview,
 }: NativeImageSurfaceProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -68,10 +69,16 @@ export function NativeImageSurface({
       worker.onmessage = (event: MessageEvent) => {
         const message = event.data as
           | { type: "ready" }
+          | { type: "asset-ready"; itemId: string; path: string }
           | { type: "error"; reason?: string };
 
         if (message.type === "ready") {
           onReadyChange?.(true);
+          return;
+        }
+
+        if (message.type === "asset-ready") {
+          onAssetReadyChange?.(message.itemId, message.path);
           return;
         }
 
@@ -114,7 +121,13 @@ export function NativeImageSurface({
       worker?.terminate();
       workerRef.current = null;
     };
-  }, [canvasSize.height, canvasSize.width, isEnabled, onReadyChange]);
+  }, [
+    canvasSize.height,
+    canvasSize.width,
+    isEnabled,
+    onAssetReadyChange,
+    onReadyChange,
+  ]);
 
   useEffect(() => {
     if (!isEnabled) return;

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type {
   VideoLoadProxyProps,
   VideoThumbnailProps,
@@ -39,14 +40,25 @@ export function VideoLoadProxy({
 export function VideoThumbnail({
   cropBoxStyle,
   thumbnailUrl,
+  onReadyChange,
 }: VideoThumbnailProps) {
+  const imageRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    const image = imageRef.current;
+    onReadyChange?.(Boolean(image?.complete && image.naturalWidth > 0));
+  }, [onReadyChange, thumbnailUrl]);
+
   return (
     <div className="media-crop-box" style={cropBoxStyle}>
       <img
+        ref={imageRef}
         className="media-content video-lod-thumbnail"
         src={thumbnailUrl}
         alt="video thumbnail"
         draggable={false}
+        onLoad={() => onReadyChange?.(true)}
+        onError={() => onReadyChange?.(false)}
         onDragStart={(e) => e.preventDefault()}
       />
     </div>
