@@ -6,5 +6,6 @@ export interface VideoMediaProps {
   item: MediaItem;
   isInViewport: boolean;
   zoom: number;
+  onReadyChange?: (isReady: boolean) => void;
   onThumbnailNeeded?: (item: MediaItem) => void;
 }

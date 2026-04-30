@@ -4,18 +4,15 @@ import { positiveModulo } from "@/utils/math";
 import type { Viewport } from "@/utils/media.types";
 import { markPerformance } from "@/utils/performance";
 
-// ─── Dot grid ────────────────────────────────────────────────────────────────
 const DOT_GRID_BASE_SIZE = 50;
 const DOT_GRID_MIN_VISIBLE_SCREEN_SIZE = 8;
 const DOT_GRID_FULL_OPACITY_SCREEN_SIZE = 18;
 const DOT_GRID_WORLD_RADIUS = 2;
 
-// ─── Line grid (normal zoom) ──────────────────────────────────────────────────
 const LINE_GRID_WORLD_SIZE = 500;
 const LINE_GRID_MIN_SCREEN_SIZE = 96;
 const LINE_GRID_MAX_SCREEN_SIZE = 320;
 
-// ─── Far-zoom line grid (replaces empty background when fully zoomed out) ─────
 // Activates when dot spacing falls below this screen-pixel threshold.
 const FAR_GRID_DOT_FADE_SCREEN_SIZE = DOT_GRID_MIN_VISIBLE_SCREEN_SIZE; // 8px
 const FAR_GRID_WORLD_SIZE = 500; // world units between far-grid lines
@@ -23,7 +20,6 @@ const FAR_GRID_MAX_OPACITY = 0.1; // kept very low – thin, minimalist
 
 const SAFE_MIN_ZOOM = 0.001;
 
-// ─── Sub-pixel jitter fix ─────────────────────────────────────────────────────
 // Keep structural grid math exact and only snap the final layer translation to
 // physical display pixels. Snapping tile sizes causes phase jumps during
 // trackpad micro-zoom events on HiDPI / ProMotion displays.
@@ -51,7 +47,6 @@ type FarGridGeometry = {
   screenSize: number;
 };
 
-// ─── SVG helpers ──────────────────────────────────────────────────────────────
 const svgBg = (svg: string) =>
   `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 
@@ -75,7 +70,6 @@ const makeFarGridImage = (alpha: number) => {
   ].join(", ");
 };
 
-// ─── Line grid sizing ─────────────────────────────────────────────────────────
 const getLineGridWorldSize = (zoom: number) => {
   let size = LINE_GRID_WORLD_SIZE;
   while (size * zoom < LINE_GRID_MIN_SCREEN_SIZE) size *= 2;
@@ -86,7 +80,6 @@ const getLineGridWorldSize = (zoom: number) => {
 const getPatternWorldSize = (pattern: CanvasBackgroundPattern, zoom: number) =>
   pattern === "dots" ? DOT_GRID_BASE_SIZE : getLineGridWorldSize(zoom);
 
-// ─── Dot opacity / image ──────────────────────────────────────────────────────
 const getDotOpacity = (screenSpacing: number) => {
   if (screenSpacing <= DOT_GRID_MIN_VISIBLE_SCREEN_SIZE) return 0;
   if (screenSpacing >= DOT_GRID_FULL_OPACITY_SCREEN_SIZE) return 1;
@@ -105,7 +98,6 @@ const getDotBackgroundImage = (zoom: number, screenSpacing: number) => {
   return `radial-gradient(circle at center, rgba(148,163,184,${(0.78 * opacity).toFixed(3)}) 0 ${solidStop}px, transparent ${transparentStop}px)`;
 };
 
-// ─── Far grid (zoomed-out thin lines) ────────────────────────────────────────
 /**
  * When dots are invisible (screen spacing < FAR_GRID_DOT_FADE_SCREEN_SIZE),
  * we cross-fade in a minimalist thin line grid so the canvas never feels
@@ -149,7 +141,6 @@ const getFarGridLayer = (
   };
 };
 
-// ─── Normal line grid image ───────────────────────────────────────────────────
 const getLineGridImage = (screenSpacing: number) => {
   const lineAlpha = screenSpacing < 144 ? 0.1 : 0.16;
   const c = `rgba(248,250,252,${lineAlpha})`;
@@ -160,7 +151,6 @@ const getLineGridImage = (screenSpacing: number) => {
   ].join(", ");
 };
 
-// ─── Pattern offset ───────────────────────────────────────────────────────────
 const getPatternOffset = (
   pattern: CanvasBackgroundPattern,
   screenOffset: number,
@@ -388,7 +378,6 @@ export const drawCanvasBackground = (
   }
 };
 
-// ─── Main export ──────────────────────────────────────────────────────────────
 export const getCanvasBackgroundStyle = ({
   canvasSize,
   pattern,
@@ -411,7 +400,6 @@ export const getCanvasBackgroundStyle = ({
   const width = Math.ceil(canvasSize.width + screenSpacing * 2);
   const height = Math.ceil(canvasSize.height + screenSpacing * 2);
 
-  // ── Build background layers ─────────────────────────────────────────────
   let backgroundImage: string;
   let backgroundSize: string;
 

@@ -7,6 +7,7 @@ const getMediaFileStem = (filePath: string) => {
 
 export const getExportDefaultPath = (filePath: string) => {
   const safeStem = getMediaFileStem(filePath)
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional control char strip for filename sanitization
     .replace(/[<>:"/\\|?*\x00-\x1F]/g, "_")
     .trim();
 

@@ -31,7 +31,7 @@ const isReactManagedImage = (
   item.id === croppingItemId ||
   item.id === editingCropItemId;
 
-const getNativeImageSource = (item: MediaItem, zoom: number) => {
+const getNativeImageSourceDescriptor = (item: MediaItem, zoom: number) => {
   const lod = getImageLod(zoom, item);
   const fallbackUrl =
     item.thumbnailUrl ?? item.lowResProxyUrl ?? IMAGE_PLACEHOLDER_URL;
@@ -42,14 +42,14 @@ const getNativeImageSource = (item: MediaItem, zoom: number) => {
       return {
         lod,
         path,
-        url: item.imagePreview1024Path ? convertFileSrc(path) : fallbackUrl,
+        isPlaceholder: path === IMAGE_PLACEHOLDER_URL,
       };
     }
 
     return {
       lod,
       path: item.imagePreview256Path,
-      url: convertFileSrc(item.imagePreview256Path),
+      isPlaceholder: false,
     };
   }
 
@@ -59,14 +59,14 @@ const getNativeImageSource = (item: MediaItem, zoom: number) => {
       return {
         lod,
         path,
-        url: item.imagePreview256Path ? convertFileSrc(path) : fallbackUrl,
+        isPlaceholder: path === IMAGE_PLACEHOLDER_URL,
       };
     }
 
     return {
       lod,
       path: item.imagePreview1024Path,
-      url: convertFileSrc(item.imagePreview1024Path),
+      isPlaceholder: false,
     };
   }
 
@@ -75,7 +75,7 @@ const getNativeImageSource = (item: MediaItem, zoom: number) => {
       return {
         lod,
         path: item.imagePreview1024Path,
-        url: convertFileSrc(item.imagePreview1024Path),
+        isPlaceholder: false,
       };
     }
 
@@ -83,11 +83,32 @@ const getNativeImageSource = (item: MediaItem, zoom: number) => {
     return {
       lod,
       path,
-      url: item.imagePreview256Path ? convertFileSrc(path) : fallbackUrl,
+      isPlaceholder: path === IMAGE_PLACEHOLDER_URL,
     };
   }
 
-  return { lod, path: item.filePath, url: item.url };
+  return {
+    lod,
+    path: item.filePath,
+    isPlaceholder: false,
+  };
+};
+
+export const getNativeImageSource = (item: MediaItem, zoom: number) => {
+  const source = getNativeImageSourceDescriptor(item, zoom);
+  return {
+    ...source,
+    url: source.isPlaceholder ? source.path : convertFileSrc(source.path),
+  };
+};
+
+export const isNativeImageSourceReady = (
+  item: MediaItem,
+  zoom: number,
+  readyPath?: string,
+) => {
+  const source = getNativeImageSourceDescriptor(item, zoom);
+  return !source.isPlaceholder && readyPath === source.path;
 };
 
 export const getNativeImagePriorityScore = (

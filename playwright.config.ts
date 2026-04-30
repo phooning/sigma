@@ -1,4 +1,14 @@
+import * as os from "node:os";
 import { defineConfig, devices } from "@playwright/test";
+
+const getChromiumLaunchOptions = () => {
+  if (os.platform() === "linux") {
+    return {
+      executablePath: "/usr/bin/chromium",
+    };
+  }
+};
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -11,6 +21,8 @@ export default defineConfig({
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
+    ...devices["Desktop Chrome"],
+    launchOptions: getChromiumLaunchOptions(),
   },
   projects: [
     {

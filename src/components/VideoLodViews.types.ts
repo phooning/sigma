@@ -11,4 +11,5 @@ export type VideoLoadProxyProps = {
 export type VideoThumbnailProps = {
   cropBoxStyle: VideoCropBoxStyle;
   thumbnailUrl: string;
+  onReadyChange?: (isReady: boolean) => void;
 };

@@ -3,6 +3,7 @@ import type { RefObject, WheelEvent } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { IMAGE_EXTENSIONS, VIDEO_EXTENSIONS } from "../utils/media";
 import type { MediaItem, Viewport } from "../utils/media.types";
+import { notify } from "../utils/notifications";
 import { applyPanDelta, applyZoomAtPoint } from "../utils/viewportMath";
 
 export type WheelInputType = "trackpad-pan" | "zoom";
@@ -36,16 +37,18 @@ type SupportedDropMedia = {
   url: string;
 };
 
-const probeMedia = async (path: string): Promise<MediaFileInfo> => {
+const probeMedia = async (
+  path: string,
+): Promise<{ info: MediaFileInfo; failed: boolean }> => {
   try {
     // Probe the media natively through Rust instead of metadata.
     const info = await invoke<MediaFileInfo | null>("probe_media", {
       path,
     });
 
-    return info ?? {};
+    return { info: info ?? {}, failed: false };
   } catch {
-    return {};
+    return { info: {}, failed: true };
   }
 };
 
@@ -209,11 +212,18 @@ export const onDropMedia = async ({
     .filter((media) => media.type === "video")
     .forEach((media) => {
       tasks.push(async () => {
-        const { width, height, duration, size } = await probeMedia(
-          media.filePath,
-        );
+        const { info, failed } = await probeMedia(media.filePath);
+        const { width, height, duration, size } = info;
         const mediaWidth = width || DEFAULT_MEDIA_WIDTH;
         const mediaHeight = height || DEFAULT_VIDEO_HEIGHT;
+
+        if (failed) {
+          notify.error("Video metadata probe failed", {
+            description: `Using fallback dimensions for ${
+              media.filePath.split(/[/\\]/).pop() ?? media.filePath
+            }.`,
+          });
+        }
 
         itemsByIndex.set(
           media.index,

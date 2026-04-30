@@ -47,51 +47,6 @@ describe("InfiniteCanvas media loading", () => {
     );
   });
 
-  it("pauses selected videos with the spacebar", async () => {
-    const videoPath = "/path/to/spacebar-video.mp4";
-
-    renderCanvas();
-    await dropFiles([videoPath]);
-
-    const video = await waitFor(() => {
-      const found = document.querySelector(
-        "video.media-content",
-      ) as HTMLVideoElement | null;
-      if (!found) {
-        throw new Error("Expected selected video element to be rendered");
-      }
-      expect(found).toBeInTheDocument();
-      return found;
-    });
-    const pause = vi.fn();
-    Object.defineProperty(video, "paused", {
-      configurable: true,
-      get: () => false,
-    });
-    Object.defineProperty(video, "pause", {
-      configurable: true,
-      value: pause,
-    });
-
-    const mediaItem = getMediaItem();
-    await act(async () => {
-      fireEvent.pointerDown(mediaItem, {
-        button: 0,
-        clientX: 10,
-        clientY: 10,
-        pointerId: 21,
-      });
-    });
-
-    expect(mediaItem).toHaveClass("selected");
-
-    await act(async () => {
-      fireEvent.keyDown(window, { key: " ", code: "Space" });
-    });
-
-    expect(pause).toHaveBeenCalledOnce();
-  });
-
   it("drops large videos as deferred load proxies until playback is requested", async () => {
     const heavyVideoPath = new URL(
       "../fixtures/heavy_video.mkv",
@@ -523,6 +478,148 @@ describe("InfiniteCanvas media item interactions", () => {
         boxHeight: 960,
       },
     });
+  });
+
+  it("passes the selected video's current playback time to screenshots", async () => {
+    const videoPath = new URL(
+      "../fixtures/generated-lod-test-1080p.mp4",
+      import.meta.url,
+    ).pathname;
+    let currentTime = 0;
+
+    vi.mocked(open).mockResolvedValue("/shots");
+    setViewportSize({ width: 3000 });
+    await dropFiles([videoPath]);
+
+    await waitFor(() => {
+      expect(document.querySelector("video.media-content")).toBeInTheDocument();
+    });
+
+    const mediaItems = Array.from(
+      document.querySelectorAll(".media-item"),
+    ) as HTMLElement[];
+    const mediaItem = mediaItems.at(-1);
+    const video = Array.from(
+      document.querySelectorAll("video.media-content"),
+    ).at(-1) as HTMLVideoElement | undefined;
+
+    expect(mediaItem).toBeDefined();
+    expect(video).toBeDefined();
+    if (!mediaItem || !video) {
+      throw new Error("Expected video media item to be rendered");
+    }
+
+    Object.defineProperty(video, "currentTime", {
+      configurable: true,
+      get: () => currentTime,
+      set: (value) => {
+        currentTime = value;
+      },
+    });
+
+    currentTime = 2.25;
+
+    const screenshotBtn = mediaItem.querySelector(
+      ".screenshot-btn",
+    ) as HTMLElement | null;
+    expect(screenshotBtn).toBeTruthy();
+    if (!screenshotBtn) {
+      throw new Error("Expected screenshot button for video media item");
+    }
+
+    await act(async () => {
+      fireEvent.pointerDown(screenshotBtn, { pointerId: 31, button: 0 });
+      fireEvent.click(screenshotBtn);
+    });
+
+    expect(invoke).toHaveBeenCalledWith("save_media_screenshot", {
+      path: videoPath,
+      mediaType: "video",
+      outputDirectory: "/shots",
+      currentTime: 2.25,
+      crop: {
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+        boxWidth: 1280,
+        boxHeight: 720,
+      },
+    });
+  });
+
+  it("toggles playback for selected videos with the spacebar hotkey", async () => {
+    const videoPath = new URL(
+      "../fixtures/generated-lod-test-1080p.mp4",
+      import.meta.url,
+    ).pathname;
+    let paused = false;
+
+    setViewportSize({ width: 3000 });
+    await dropFiles([videoPath]);
+
+    await waitFor(() => {
+      expect(document.querySelector("video.media-content")).toBeInTheDocument();
+    });
+
+    const mediaItems = Array.from(
+      document.querySelectorAll(".media-item"),
+    ) as HTMLElement[];
+    const mediaItem = mediaItems.at(-1);
+    const video = Array.from(
+      document.querySelectorAll("video.media-content"),
+    ).at(-1) as HTMLVideoElement | undefined;
+
+    expect(mediaItem).toBeDefined();
+    expect(video).toBeDefined();
+    if (!mediaItem || !video) {
+      throw new Error("Expected video media item to be rendered");
+    }
+
+    Object.defineProperty(video, "paused", {
+      configurable: true,
+      get: () => paused,
+    });
+
+    Object.defineProperty(video, "play", {
+      configurable: true,
+      value: vi.fn(() => {
+        paused = false;
+        fireEvent.play(video);
+        return Promise.resolve();
+      }),
+    });
+    Object.defineProperty(video, "pause", {
+      configurable: true,
+      value: vi.fn(() => {
+        paused = true;
+        fireEvent.pause(video);
+      }),
+    });
+
+    const audioBtn = mediaItem.querySelector(
+      ".audio-btn",
+    ) as HTMLElement | null;
+    expect(audioBtn).toBeTruthy();
+    if (!audioBtn) {
+      throw new Error("Expected audio button for video media item");
+    }
+
+    await act(async () => {
+      fireEvent.click(audioBtn);
+    });
+
+    expect(mediaItem).toHaveClass("selected");
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: " ", code: "Space" });
+    });
+    expect(paused).toBe(true);
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: " ", code: "Space" });
+    });
+    expect(paused).toBe(false);
   });
 
   it("crops an image in place from side and corner handles", async () => {

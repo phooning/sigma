@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { gotoApp, openSettings } from "./helpers";
+import { gotoApp, openSettings, seedCanvasItems } from "./helpers";
 
 test("opens the settings dialog from the HUD and closes it with Escape", async ({
   page,
@@ -30,7 +30,7 @@ test("persists the selected canvas background pattern across reloads", async ({
 
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByText("SIGMA Media Canvas")).toBeVisible();
-  await expect(page.getByText("0 items")).toBeVisible();
+  await expect(page.locator(".ui-overlay .item-count")).toHaveText("0 items");
 
   await expect(page.locator(".canvas-background.grid")).toBeVisible();
   await openSettings(page);
@@ -52,4 +52,21 @@ test("shows the development overlay when debug mode is enabled", async ({
   await expect(page.getByLabel("Development stats")).toBeVisible();
   await expect(page.getByText("FPS")).toBeVisible();
   await expect(page.getByText("GPU usage")).toBeVisible();
+});
+
+test("renders a minimap summary after media is loaded", async ({ page }) => {
+  await gotoApp(page);
+  await seedCanvasItems(page, 6, "image");
+
+  const minimap = page.locator(".canvas-minimap");
+  const canvas = page.locator(".canvas-minimap__canvas");
+
+  await expect(minimap).toBeVisible();
+  await expect(minimap.locator(".canvas-minimap__label")).toHaveText("1.00x");
+  await expect(minimap.locator(".canvas-minimap__count")).toHaveText(
+    "0 of 6 selected",
+  );
+  await expect(canvas).toBeVisible();
+  await expect(canvas).toHaveCSS("width", "220px");
+  await expect(canvas).toHaveCSS("height", "160px");
 });

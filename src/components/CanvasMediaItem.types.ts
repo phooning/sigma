@@ -20,6 +20,7 @@ export type CanvasMediaItemProps = {
   isCropEditing: boolean;
   isDragging: boolean;
   useNativeImageSurface: boolean;
+  nativeImageReadyPath?: string;
   isResizing: boolean;
   isSelected: boolean;
   requestImagePreview: (

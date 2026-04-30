@@ -11,10 +11,12 @@ const supportsNativeImageSurface = () =>
 
 const signatureForPreviewRequests = (
   requests: Array<{ item: { id: string }; maxDimension: 256 | 1024 }>,
+  viewportSignature: string,
 ) =>
-  requests
-    .map(({ item, maxDimension }) => `${item.id}:${maxDimension}`)
-    .join("|");
+  [
+    viewportSignature,
+    ...requests.map(({ item, maxDimension }) => `${item.id}:${maxDimension}`),
+  ].join("|");
 
 const signatureForViewport = ({
   x,
@@ -36,6 +38,7 @@ export function NativeImageSurface({
   croppingItemId,
   editingCropItemId,
   onReadyChange,
+  onAssetReadyChange,
   requestImagePreview,
 }: NativeImageSurfaceProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -68,10 +71,16 @@ export function NativeImageSurface({
       worker.onmessage = (event: MessageEvent) => {
         const message = event.data as
           | { type: "ready" }
+          | { type: "asset-ready"; itemId: string; path: string }
           | { type: "error"; reason?: string };
 
         if (message.type === "ready") {
           onReadyChange?.(true);
+          return;
+        }
+
+        if (message.type === "asset-ready") {
+          onAssetReadyChange?.(message.itemId, message.path);
           return;
         }
 
@@ -114,7 +123,13 @@ export function NativeImageSurface({
       worker?.terminate();
       workerRef.current = null;
     };
-  }, [canvasSize.height, canvasSize.width, isEnabled, onReadyChange]);
+  }, [
+    canvasSize.height,
+    canvasSize.width,
+    isEnabled,
+    onAssetReadyChange,
+    onReadyChange,
+  ]);
 
   useEffect(() => {
     if (!isEnabled) return;
@@ -183,7 +198,10 @@ export function NativeImageSurface({
           workerRef.current?.postMessage({ type: "layout", manifest });
         }
 
-        const previewSignature = signatureForPreviewRequests(previewRequests);
+        const previewSignature = signatureForPreviewRequests(
+          previewRequests,
+          viewportSignature,
+        );
         if (previewSignature !== previewSignatureRef.current) {
           previewSignatureRef.current = previewSignature;
           const viewBounds = getViewBounds(

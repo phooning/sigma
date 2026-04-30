@@ -1,6 +1,13 @@
 # AGENTS
 
-Complete the task. After every task, **explicitly verify** using this repository's testing frameworks (Vitest, Playwright, Criterion, etc.). If the test fails, gauge to fix the test or fix the implementation while preventing regressions.
+Complete the task. After every task, **explicitly verify** using this repository's testing frameworks:
+
+- Vitest: `pnpm test`
+- Playwright: `pnpm test:e2e`
+- Linting: `pnpm lint` and `pnpm lint:apply`
+- Criterion (when necessary): `pnpm bench`
+
+If the test fails, gauge to fix the test or fix the implementation while preventing regressions.
 
 ## Code exploration — prefer `ast-outline` over full reads
 
@@ -33,4 +40,3 @@ If the outline header contains `# WARNING: N parse errors`, the outline
 for that file is partial — read the source directly for the affected region.
 
 `ast-outline help` for flags and rare options.
-

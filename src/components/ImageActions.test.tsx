@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { EMPTY_CROP } from "../utils/media";
 import type { MediaItem } from "../utils/media.types";
@@ -17,7 +17,11 @@ const imageItem: MediaItem = {
   sourceHeight: 4000,
 };
 
-const renderImageActions = (item: MediaItem, requestImagePreview = vi.fn()) =>
+const renderImageActions = (
+  item: MediaItem,
+  requestImagePreview = vi.fn(),
+  onReadyChange = vi.fn(),
+) =>
   render(
     <ImageActions
       id={item.id}
@@ -30,6 +34,7 @@ const renderImageActions = (item: MediaItem, requestImagePreview = vi.fn()) =>
       useNativeImageSurface={false}
       handleItemPointerDown={vi.fn()}
       requestImagePreview={requestImagePreview}
+      onReadyChange={onReadyChange}
       zoom={0.1}
     />,
   );
@@ -61,5 +66,25 @@ describe("ImageActions LOD fallback", () => {
       "src",
       "asset:///images/full-res-preview-1024.png",
     );
+  });
+
+  it("reports readiness only after the current image source loads", () => {
+    const onReadyChange = vi.fn();
+
+    renderImageActions(
+      {
+        ...imageItem,
+        imagePreview1024Url: "asset:///images/full-res-preview-1024.png",
+      },
+      vi.fn(),
+      onReadyChange,
+    );
+
+    const image = screen.getByAltText("canvas item");
+    expect(onReadyChange).toHaveBeenLastCalledWith(false);
+
+    fireEvent.load(image);
+
+    expect(onReadyChange).toHaveBeenLastCalledWith(true);
   });
 });

@@ -15,7 +15,7 @@ export const HOTKEY_ROWS = [
   },
   {
     keys: "Spacebar",
-    description: "Pause selected videos.",
+    description: "Toggle playback for selected videos.",
   },
   {
     keys: "Ctrl/Cmd+A",

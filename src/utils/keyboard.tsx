@@ -32,27 +32,34 @@ export function useCanvasHotkeys(config: CanvasHotkeyConfig) {
       setEditingCropItem,
     } = config;
 
-    const pauseSelectedVideos = () => {
+    const toggleSelectedVideosPlayback = () => {
       const selected = selectedItemsRef.current;
       if (selected.size === 0) return false;
 
-      let hasSelectedVideo = false;
-
-      getItems()
+      const selectedVideos = getItems()
         .filter((item) => item.type === "video" && selected.has(item.id))
-        .forEach((item) => {
-          hasSelectedVideo = true;
-          const mediaElement = containerRef.current?.querySelector<HTMLElement>(
-            `[data-media-id="${item.id}"]`,
-          );
-          const video = mediaElement?.querySelector("video");
+        .map((item) =>
+          containerRef.current
+            ?.querySelector<HTMLElement>(`[data-media-id="${item.id}"]`)
+            ?.querySelector("video"),
+        )
+        .filter(
+          (video): video is HTMLVideoElement =>
+            video instanceof HTMLVideoElement,
+        );
 
-          if (video && !video.paused) {
-            video.pause();
-          }
-        });
+      if (selectedVideos.length === 0) return false;
 
-      return hasSelectedVideo;
+      const shouldPlay = selectedVideos.every((video) => video.paused);
+      selectedVideos.forEach((video) => {
+        if (shouldPlay) {
+          void video.play().catch(() => {});
+        } else if (!video.paused) {
+          video.pause();
+        }
+      });
+
+      return true;
     };
 
     if (isEditableTarget(event.target)) return;
@@ -85,7 +92,7 @@ export function useCanvasHotkeys(config: CanvasHotkeyConfig) {
     }
 
     if (event.key === " " || event.code === "Space") {
-      if (pauseSelectedVideos()) {
+      if (toggleSelectedVideosPlayback()) {
         event.preventDefault();
       }
       return;
