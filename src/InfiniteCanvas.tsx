@@ -745,7 +745,9 @@ export default function InfiniteCanvas() {
       if (!item) return;
       const mediaElement = (
         e.currentTarget as HTMLElement
-      ).parentElement?.querySelector("video") as HTMLVideoElement | null;
+      )
+        .closest<HTMLElement>("[data-media-id]")
+        ?.querySelector("video") as HTMLVideoElement | null;
 
       let outputDirectory = screenshotDirectoryRef.current;
       if (!outputDirectory) {

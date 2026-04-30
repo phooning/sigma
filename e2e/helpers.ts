@@ -64,7 +64,7 @@ const MOCK_IMAGE_DATA_URL =
     </svg>
   `);
 
-const PLAYWRIGHT_VIDEO_FIXTURE_URL = "/fixtures/generated-lod-test-1080p.mp4";
+const PLAYWRIGHT_VIDEO_FIXTURE_URL = "/fixtures/generated-lod-test-1080p.webm";
 
 export async function installTauriMocks(
   page: Page,
