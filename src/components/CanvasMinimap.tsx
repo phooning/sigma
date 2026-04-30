@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { computeMinimapLayout } from "../utils/minimap";
 import type { MediaItem, Viewport } from "../utils/media.types";
+import { computeMinimapLayout } from "../utils/minimap";
 
 type CanvasMinimapProps = {
   canvasSize: {
@@ -37,35 +37,46 @@ export const CanvasMinimap = memo(function CanvasMinimap({
         minimapHeight: MINIMAP_HEIGHT,
         padding: MINIMAP_PADDING,
       }),
-    [canvasSize.height, canvasSize.width, items, viewport.x, viewport.y, viewport.zoom],
+    [canvasSize, items, viewport],
   );
 
   useEffect(() => {
+    let removeMediaQueryListener = () => {};
+
     const updateDpr = () => {
       const nextDpr = window.devicePixelRatio || 1;
       setDpr((currentDpr) => (currentDpr === nextDpr ? currentDpr : nextDpr));
     };
 
-    const mediaQuery = window.matchMedia(
-      `(resolution: ${window.devicePixelRatio || 1}dppx)`,
-    );
+    const subscribeToDprChanges = () => {
+      const mediaQuery = window.matchMedia(
+        `(resolution: ${window.devicePixelRatio || 1}dppx)`,
+      );
+      const handleChange = () => {
+        updateDpr();
+        removeMediaQueryListener();
+        subscribeToDprChanges();
+      };
+
+      if ("addEventListener" in mediaQuery) {
+        mediaQuery.addEventListener("change", handleChange);
+        removeMediaQueryListener = () =>
+          mediaQuery.removeEventListener("change", handleChange);
+        return;
+      }
+
+      mediaQuery.addListener(handleChange);
+      removeMediaQueryListener = () => mediaQuery.removeListener(handleChange);
+    };
 
     window.addEventListener("resize", updateDpr);
-    if ("addEventListener" in mediaQuery) {
-      mediaQuery.addEventListener("change", updateDpr);
-    } else {
-      mediaQuery.addListener(updateDpr);
-    }
+    subscribeToDprChanges();
 
     return () => {
       window.removeEventListener("resize", updateDpr);
-      if ("removeEventListener" in mediaQuery) {
-        mediaQuery.removeEventListener("change", updateDpr);
-      } else {
-        mediaQuery.removeListener(updateDpr);
-      }
+      removeMediaQueryListener();
     };
-  }, [dpr]);
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;

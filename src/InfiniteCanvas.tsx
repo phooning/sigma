@@ -14,8 +14,8 @@ import {
   handlePanAction,
   handleZoomAction,
 } from "./components/CanvasActions";
-import { CanvasMinimap } from "./components/CanvasMinimap";
 import { CanvasMediaItem } from "./components/CanvasMediaItem";
+import { CanvasMinimap } from "./components/CanvasMinimap";
 import { DevelopmentOverlay } from "./components/DevelopmentOverlay";
 import { Hud } from "./components/Hud";
 import { appVersion, SETTINGS_MENU_ITEMS } from "./components/HudActions";

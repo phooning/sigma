@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { computeMinimapLayout } from "./minimap";
 import type { MediaItem, Viewport } from "./media.types";
+import { computeMinimapLayout } from "./minimap";
 
 const viewport: Viewport = {
   x: 0,
@@ -111,11 +111,11 @@ describe("computeMinimapLayout", () => {
 
     expect(layout.viewportRect.x).toBeGreaterThanOrEqual(layout.frame.x);
     expect(layout.viewportRect.y).toBeGreaterThanOrEqual(layout.frame.y);
-    expect(layout.viewportRect.x + layout.viewportRect.width).toBeLessThanOrEqual(
-      layout.frame.x + layout.frame.width,
-    );
-    expect(layout.viewportRect.y + layout.viewportRect.height).toBeLessThanOrEqual(
-      layout.frame.y + layout.frame.height,
-    );
+    expect(
+      layout.viewportRect.x + layout.viewportRect.width,
+    ).toBeLessThanOrEqual(layout.frame.x + layout.frame.width);
+    expect(
+      layout.viewportRect.y + layout.viewportRect.height,
+    ).toBeLessThanOrEqual(layout.frame.y + layout.frame.height);
   });
 });

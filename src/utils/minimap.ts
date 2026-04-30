@@ -129,22 +129,32 @@ export const computeMinimapLayout = ({
     type: item.type,
   }));
 
-  const viewBounds = getViewBounds(viewport, canvasSize.width, canvasSize.height);
+  const viewBounds = getViewBounds(
+    viewport,
+    canvasSize.width,
+    canvasSize.height,
+  );
   const frame = {
     x: frameX,
     y: frameY,
     width: frameWidth,
     height: frameHeight,
   };
-  const viewportRect = clampRectToFrame({
-    x: projectX(viewBounds.viewLeft),
-    y: projectY(viewBounds.viewTop),
-    width: Math.max(viewBounds.screenWidth * scale, MIN_VISIBLE_VIEWPORT_SIZE),
-    height: Math.max(
-      viewBounds.screenHeight * scale,
-      MIN_VISIBLE_VIEWPORT_SIZE,
-    ),
-  }, frame);
+  const viewportRect = clampRectToFrame(
+    {
+      x: projectX(viewBounds.viewLeft),
+      y: projectY(viewBounds.viewTop),
+      width: Math.max(
+        viewBounds.screenWidth * scale,
+        MIN_VISIBLE_VIEWPORT_SIZE,
+      ),
+      height: Math.max(
+        viewBounds.screenHeight * scale,
+        MIN_VISIBLE_VIEWPORT_SIZE,
+      ),
+    },
+    frame,
+  );
 
   return {
     assetRects,
