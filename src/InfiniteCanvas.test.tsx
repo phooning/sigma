@@ -9,7 +9,7 @@ import {
   writeTextFile,
 } from "./test/infiniteCanvasHarness";
 
-describe("InfiniteCanvas settings and persistence", () => {
+describe("Settings and persistence", () => {
   it("opens the settings modal from the toolbar cog", () => {
     renderCanvas();
 
