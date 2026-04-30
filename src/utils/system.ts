@@ -7,6 +7,6 @@ const isLinux = platform() === "linux";
 
 export const isWayland =
   isLinux &&
-  window.matchMedia("(display-mode: window-controls-overlay)").matches ===
-    false &&
+  (window.matchMedia?.("(display-mode: window-controls-overlay)").matches ??
+    false) === false &&
   navigator.userAgent.includes("Wayland");

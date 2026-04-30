@@ -49,6 +49,11 @@ export const CanvasMinimap = memo(function CanvasMinimap({
     };
 
     const subscribeToDprChanges = () => {
+      if (typeof window.matchMedia !== "function") {
+        removeMediaQueryListener = () => {};
+        return;
+      }
+
       const mediaQuery = window.matchMedia(
         `(resolution: ${window.devicePixelRatio || 1}dppx)`,
       );

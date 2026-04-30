@@ -19,6 +19,22 @@ if (!Element.prototype.releasePointerCapture) {
   Element.prototype.releasePointerCapture = () => {};
 }
 
+if (typeof window.matchMedia !== "function") {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    value: vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+}
+
 HTMLCanvasElement.prototype.getContext = function getContext(contextId) {
   if (contextId !== "2d") return null;
 
@@ -27,10 +43,12 @@ HTMLCanvasElement.prototype.getContext = function getContext(contextId) {
     beginPath: () => {},
     clearRect: () => {},
     fill: () => {},
+    fillRect: () => {},
     lineTo: () => {},
     moveTo: () => {},
     setTransform: () => {},
     stroke: () => {},
+    strokeRect: () => {},
     set fillStyle(_value: string) {},
     set lineCap(_value: CanvasLineCap) {},
     set lineWidth(_value: number) {},
