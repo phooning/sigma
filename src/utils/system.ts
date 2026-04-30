@@ -5,9 +5,8 @@ export const isMacOS = () =>
 
 const isLinux = platform() === "linux";
 
-const isWayland =
+export const isWayland =
   isLinux &&
   window.matchMedia("(display-mode: window-controls-overlay)").matches ===
     false &&
-  (navigator.userAgent.includes("Wayland") ||
-    (window as any).__TAURI_INTERNALS?.env?.WAYLAND_DISPLAY?.WAYLAND_DISPLAY);
+  navigator.userAgent.includes("Wayland");

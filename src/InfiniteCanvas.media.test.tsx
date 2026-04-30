@@ -597,7 +597,9 @@ describe("InfiniteCanvas media item interactions", () => {
       }),
     });
 
-    const audioBtn = mediaItem.querySelector(".audio-btn") as HTMLElement | null;
+    const audioBtn = mediaItem.querySelector(
+      ".audio-btn",
+    ) as HTMLElement | null;
     expect(audioBtn).toBeTruthy();
     if (!audioBtn) {
       throw new Error("Expected audio button for video media item");

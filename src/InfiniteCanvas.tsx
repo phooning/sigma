@@ -743,9 +743,7 @@ export default function InfiniteCanvas() {
         .getState()
         .items.find((i) => i.id === id);
       if (!item) return;
-      const mediaElement = (
-        e.currentTarget as HTMLElement
-      )
+      const mediaElement = (e.currentTarget as HTMLElement)
         .closest<HTMLElement>("[data-media-id]")
         ?.querySelector("video") as HTMLVideoElement | null;
 

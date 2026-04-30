@@ -1,5 +1,5 @@
+import * as os from "node:os";
 import { defineConfig, devices } from "@playwright/test";
-import * as os from "os";
 
 const getChromiumLaunchOptions = () => {
   if (os.platform() === "linux") {
