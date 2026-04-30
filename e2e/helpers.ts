@@ -468,7 +468,7 @@ export async function gotoApp(
   await installTauriMocks(page, options);
   await page.goto("/");
   await expect(page.getByText("SIGMA Media Canvas")).toBeVisible();
-  await expect(page.getByText("0 items")).toBeVisible();
+  await expect(page.locator(".ui-overlay .item-count")).toHaveText("0 items");
 }
 
 export async function dropFiles(page: Page, paths: string[]) {
@@ -634,7 +634,9 @@ export async function loadCanvasConfig(
 
   const loadStartedAt = await page.evaluate(() => performance.now());
   await page.getByRole("button", { name: TOOLBAR_LOAD_BUTTON_NAME }).click();
-  await expect(page.getByText(`${config.items.length} items`)).toBeVisible();
+  await expect(page.locator(".ui-overlay .item-count")).toHaveText(
+    `${config.items.length} items`,
+  );
   await waitForAnimationFrames(page, 2);
   const loadCompletedAt = await page.evaluate(() => performance.now());
 
@@ -669,12 +671,13 @@ const selectAllShortcut =
   process.platform === "darwin" ? "Meta+A" : "Control+A";
 
 export async function deleteAllItems(page: Page) {
-  const itemCountText = (await page.locator(".item-count").textContent()) ?? "";
+  const itemCountText =
+    (await page.locator(".ui-overlay .item-count").textContent()) ?? "";
   if (itemCountText.trim() === "0 items") return;
 
   await page.keyboard.press(selectAllShortcut);
   await page.keyboard.press("Delete");
-  await expect(page.getByText("0 items")).toBeVisible();
+  await expect(page.locator(".ui-overlay .item-count")).toHaveText("0 items");
   await waitForAnimationFrames(page, 2);
 }
 

@@ -14,6 +14,7 @@ import {
   handlePanAction,
   handleZoomAction,
 } from "./components/CanvasActions";
+import { CanvasMinimap } from "./components/CanvasMinimap";
 import { CanvasMediaItem } from "./components/CanvasMediaItem";
 import { DevelopmentOverlay } from "./components/DevelopmentOverlay";
 import { Hud } from "./components/Hud";
@@ -982,6 +983,12 @@ export default function InfiniteCanvas() {
       </div>
 
       {selectionBox && <SelectionBox selectionBox={selectionBox} />}
+      <CanvasMinimap
+        items={items}
+        viewport={renderViewport}
+        canvasSize={canvasSize}
+        selectedItems={selectedItems}
+      />
       <DevelopmentOverlay
         canvasRef={containerRef}
         totalVideoCount={totalVideoCount}
