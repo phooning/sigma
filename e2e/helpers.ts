@@ -13,6 +13,13 @@ type SigmaE2EHandle = {
   setOpenDialogResult: (value: string | string[] | null) => void;
   setSaveDialogResult: (value: string | null) => void;
   setMockFileText: (path: string, text: string) => void;
+  getInvokeCalls: () => Array<{ cmd: string; args: unknown }>;
+  clearInvokeCalls: () => void;
+  setInvokeFailure: (
+    cmd: string,
+    options?: { path?: string; message?: string } | null,
+  ) => void;
+  clearInvokeFailures: () => void;
   waitForAnimationFrames: (count: number) => Promise<void>;
   startFrameSampler: () => void;
   stopFrameSampler: () => FrameSamplerResult;
@@ -57,13 +64,31 @@ const MOCK_IMAGE_DATA_URL =
     </svg>
   `);
 
-export async function installTauriMocks(page: Page) {
+const PLAYWRIGHT_VIDEO_FIXTURE_URL = "/fixtures/generated-lod-test-1080p.mp4";
+
+export async function installTauriMocks(
+  page: Page,
+  options: { disableNativeImageSurface?: boolean } = {},
+) {
   await page.addInitScript(
-    ({ mockImageDataUrl }) => {
+    ({
+      mockImageDataUrl,
+      playwrightVideoFixtureUrl,
+      disableNativeImageSurface,
+    }) => {
       type Callback = (payload: unknown) => void;
       type ListenerRecord = {
         event: string;
         handlerId: number;
+      };
+      type InvokeCall = {
+        cmd: string;
+        args: unknown;
+      };
+      type InvokeFailure = {
+        cmd: string;
+        path?: string;
+        message: string;
       };
       type FrameSamplerState = {
         frameDeltas: number[];
@@ -77,6 +102,8 @@ export async function installTauriMocks(page: Page) {
       const callbacks = new Map<number, Callback>();
       const listeners = new Map<number, ListenerRecord>();
       const mockFiles = new Map<string, string>();
+      const invokeCalls: InvokeCall[] = [];
+      const invokeFailures: InvokeFailure[] = [];
       const tauriWindow = window as SigmaE2EWindow;
       let nextCallbackId = 1;
       let nextEventId = 1;
@@ -112,6 +139,51 @@ export async function installTauriMocks(page: Page) {
 
       const getExtension = (path: string) =>
         path.split(".").pop()?.toLowerCase() ?? "";
+
+      const normalizePath = (path: string) => path.replaceAll("\\", "/");
+
+      const pathMatches = (
+        expectedPath: string | undefined,
+        actualPath: unknown,
+      ) =>
+        expectedPath === undefined ||
+        (typeof actualPath === "string" &&
+          normalizePath(actualPath) === normalizePath(expectedPath));
+
+      const findInvokeFailure = (
+        cmd: string,
+        args: Record<string, unknown> | Uint8Array,
+      ) => {
+        if (args instanceof Uint8Array) return null;
+
+        return (
+          invokeFailures.find(
+            (entry) => entry.cmd === cmd && pathMatches(entry.path, args.path),
+          ) ?? null
+        );
+      };
+
+      const toMediaUrl = (filePath: string) => {
+        const extension = getExtension(filePath);
+        if (["png", "jpg", "jpeg", "gif", "webp"].includes(extension)) {
+          return mockImageDataUrl;
+        }
+
+        if (["mp4", "webm", "mov", "mkv"].includes(extension)) {
+          return playwrightVideoFixtureUrl;
+        }
+
+        return "";
+      };
+
+      if (disableNativeImageSurface) {
+        // Force DOM image rendering when an e2e test needs observable image LOD state.
+        delete (
+          HTMLCanvasElement.prototype as HTMLCanvasElement & {
+            transferControlToOffscreen?: () => OffscreenCanvas;
+          }
+        ).transferControlToOffscreen;
+      }
 
       const getCallbackId = (handler: unknown) => {
         if (typeof handler === "number") return handler;
@@ -151,19 +223,22 @@ export async function installTauriMocks(page: Page) {
         unregisterCallback: (callbackId: number) => {
           callbacks.delete(callbackId);
         },
-        convertFileSrc: (filePath: string) => {
-          const extension = getExtension(filePath);
-          if (["png", "jpg", "jpeg", "gif", "webp"].includes(extension)) {
-            return mockImageDataUrl;
-          }
-
-          return "";
-        },
+        convertFileSrc: toMediaUrl,
         invoke: async (
           cmd: string,
           args: Record<string, unknown> | Uint8Array = {},
           options?: { headers?: Record<string, string> },
         ) => {
+          invokeCalls.push({
+            cmd,
+            args: args instanceof Uint8Array ? {} : args,
+          });
+
+          const invokeFailure = findInvokeFailure(cmd, args);
+          if (invokeFailure) {
+            throw new Error(invokeFailure.message);
+          }
+
           const objectArgs = args instanceof Uint8Array ? {} : args;
 
           switch (cmd) {
@@ -302,6 +377,20 @@ export async function installTauriMocks(page: Page) {
         setMockFileText: (path, text) => {
           mockFiles.set(path, text);
         },
+        getInvokeCalls: () => [...invokeCalls],
+        clearInvokeCalls: () => {
+          invokeCalls.length = 0;
+        },
+        setInvokeFailure: (cmd, options) => {
+          invokeFailures.push({
+            cmd,
+            path: options?.path,
+            message: options?.message ?? `Mocked failure for ${cmd}`,
+          });
+        },
+        clearInvokeFailures: () => {
+          invokeFailures.length = 0;
+        },
         waitForAnimationFrames,
         startFrameSampler: () => {
           if (frameSamplerState?.rafId != null) {
@@ -364,12 +453,19 @@ export async function installTauriMocks(page: Page) {
         },
       };
     },
-    { mockImageDataUrl: MOCK_IMAGE_DATA_URL },
+    {
+      mockImageDataUrl: MOCK_IMAGE_DATA_URL,
+      playwrightVideoFixtureUrl: PLAYWRIGHT_VIDEO_FIXTURE_URL,
+      disableNativeImageSurface: options.disableNativeImageSurface ?? false,
+    },
   );
 }
 
-export async function gotoApp(page: Page) {
-  await installTauriMocks(page);
+export async function gotoApp(
+  page: Page,
+  options: { disableNativeImageSurface?: boolean } = {},
+) {
+  await installTauriMocks(page, options);
   await page.goto("/");
   await expect(page.getByText("SIGMA Media Canvas")).toBeVisible();
   await expect(page.getByText("0 items")).toBeVisible();
@@ -412,6 +508,46 @@ export async function setMockFileText(page: Page, path: string, text: string) {
     },
     { filePath: path, fileText: text },
   );
+}
+
+export async function getInvokeCalls(page: Page) {
+  return page.evaluate(() => {
+    const handle = (window as typeof window & { __SIGMA_E2E__: SigmaE2EHandle })
+      .__SIGMA_E2E__;
+    return handle.getInvokeCalls();
+  });
+}
+
+export async function clearInvokeCalls(page: Page) {
+  await page.evaluate(() => {
+    const handle = (window as typeof window & { __SIGMA_E2E__: SigmaE2EHandle })
+      .__SIGMA_E2E__;
+    handle.clearInvokeCalls();
+  });
+}
+
+export async function setInvokeFailure(
+  page: Page,
+  cmd: string,
+  options?: { path?: string; message?: string } | null,
+) {
+  await page.evaluate(
+    ({ invokeCmd, invokeOptions }) => {
+      const handle = (
+        window as typeof window & { __SIGMA_E2E__: SigmaE2EHandle }
+      ).__SIGMA_E2E__;
+      handle.setInvokeFailure(invokeCmd, invokeOptions);
+    },
+    { invokeCmd: cmd, invokeOptions: options ?? null },
+  );
+}
+
+export async function clearInvokeFailures(page: Page) {
+  await page.evaluate(() => {
+    const handle = (window as typeof window & { __SIGMA_E2E__: SigmaE2EHandle })
+      .__SIGMA_E2E__;
+    handle.clearInvokeFailures();
+  });
 }
 
 export async function waitForAnimationFrames(page: Page, count = 2) {

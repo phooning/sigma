@@ -35,7 +35,7 @@ export function useTauriDrop({ getViewport, setItems }: UseTauriDropOptions) {
   useEffect(() => {
     const removeDragPrevention = attachDragPrevention(window);
     let isActive = true;
-    let unlistenPromise: Promise<(() => void) | void> | null = null;
+    let unlistenPromise: Promise<() => void> | null = null;
 
     try {
       unlistenPromise = getCurrentWebview().onDragDropEvent((event) => {

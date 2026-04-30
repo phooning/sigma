@@ -65,6 +65,7 @@ export type NativeImageSurfaceProps = {
   croppingItemId: string | null;
   editingCropItemId: string | null;
   onReadyChange?: (isReady: boolean) => void;
+  onAssetReadyChange?: (itemId: string, path: string) => void;
   requestImagePreview: (
     item: MediaItem,
     maxDimension: 256 | 1024,

@@ -51,12 +51,7 @@ async fn probe_media(path: String) -> Result<MediaMetadata, String> {
 fn probe_media_blocking(path: String) -> Result<MediaMetadata, String> {
     let metadata =
         fs::metadata(&path).map_err(|err| format!("Failed to read media file metadata: {err}"))?;
-    let fallback = MediaMetadata {
-        width: 1280,
-        height: 720,
-        duration: 0.0,
-        size: metadata.len(),
-    };
+    let fallback = MediaMetadata { width: 1280, height: 720, duration: 0.0, size: metadata.len() };
 
     let output = match Command::new("ffprobe")
         .args([
@@ -82,11 +77,10 @@ fn probe_media_blocking(path: String) -> Result<MediaMetadata, String> {
         Err(_) => return Ok(fallback),
     };
 
-    let Some(stream) = json["streams"].as_array().and_then(|streams| {
-        streams
-            .iter()
-            .find(|stream| stream["codec_type"] == "video")
-    }) else {
+    let Some(stream) = json["streams"]
+        .as_array()
+        .and_then(|streams| streams.iter().find(|stream| stream["codec_type"] == "video"))
+    else {
         return Ok(fallback);
     };
 
@@ -103,10 +97,7 @@ fn probe_media_blocking(path: String) -> Result<MediaMetadata, String> {
 #[tauri::command]
 async fn probe_images(paths: Vec<String>) -> Result<Vec<ImageProbe>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        paths
-            .into_iter()
-            .map(probe_image_blocking)
-            .collect::<Result<Vec<_>, _>>()
+        paths.into_iter().map(probe_image_blocking).collect::<Result<Vec<_>, _>>()
     })
     .await
     .map_err(|err| format!("Failed to probe images: {err}"))?
@@ -123,18 +114,11 @@ fn probe_image_blocking(path: String) -> Result<ImageProbe, String> {
         .into_dimensions()
         .map_err(|err| format!("Failed to read image dimensions for {path}: {err}"))?;
 
-    Ok(ImageProbe {
-        path,
-        width,
-        height,
-        size: metadata.len(),
-    })
+    Ok(ImageProbe { path, width, height, size: metadata.len() })
 }
 
 fn parse_duration_value(value: &serde_json::Value) -> Option<f64> {
-    value
-        .as_f64()
-        .or_else(|| value.as_str().and_then(parse_duration_string))
+    value.as_f64().or_else(|| value.as_str().and_then(parse_duration_string))
 }
 
 fn parse_duration_string(duration: &str) -> Option<f64> {
@@ -204,9 +188,7 @@ pub(crate) fn generate_video_thumbnail_blocking<R: tauri::Runtime>(
             "1",
             "-vf",
             "scale=320:-1",
-            thumbnail_path
-                .to_str()
-                .ok_or("Thumbnail cache path is not valid UTF-8")?,
+            thumbnail_path.to_str().ok_or("Thumbnail cache path is not valid UTF-8")?,
         ])
         .output();
 
@@ -271,14 +253,9 @@ pub(crate) fn generate_image_preview_blocking<R: tauri::Runtime>(
         .map_err(|err| format!("Failed to open image for preview: {err}"))?
         .with_guessed_format()
         .map_err(|err| format!("Failed to detect image format for preview: {err}"))?;
-    let image = reader
-        .decode()
-        .map_err(|err| format!("Failed to decode image for preview: {err}"))?;
-    let preview = image.resize(
-        max_dimension,
-        max_dimension,
-        image::imageops::FilterType::Triangle,
-    );
+    let image =
+        reader.decode().map_err(|err| format!("Failed to decode image for preview: {err}"))?;
+    let preview = image.resize(max_dimension, max_dimension, image::imageops::FilterType::Triangle);
 
     preview
         .save_with_format(&preview_path, image::ImageFormat::Png)
@@ -355,26 +332,14 @@ fn save_media_screenshot_blocking(
         .map_err(|err| format!("Failed to create screenshot directory: {err}"))?;
 
     let output_path = output_dir.join(screenshot_filename(&path)?);
-    let output_path_str = output_path
-        .to_str()
-        .ok_or("Screenshot output path is not valid UTF-8")?;
+    let output_path_str =
+        output_path.to_str().ok_or("Screenshot output path is not valid UTF-8")?;
 
-    let mut args = vec![
-        "-y".to_string(),
-        "-loglevel".to_string(),
-        "error".to_string(),
-    ];
+    let mut args = vec!["-y".to_string(), "-loglevel".to_string(), "error".to_string()];
     if media_type == "video" {
         let seconds = current_time.unwrap_or(0.0);
         args.push("-ss".to_string());
-        args.push(format!(
-            "{:.3}",
-            if seconds.is_finite() {
-                seconds.max(0.0)
-            } else {
-                0.0
-            }
-        ));
+        args.push(format!("{:.3}", if seconds.is_finite() { seconds.max(0.0) } else { 0.0 }));
     }
     args.push("-i".to_string());
     args.push(path);
@@ -414,9 +379,7 @@ fn export_video_blocking(
     }
 
     if path == output_path {
-        return Err(
-            "Choose an export location that is different from the source video".to_string(),
-        );
+        return Err("Choose an export location that is different from the source video".to_string());
     }
 
     let metadata = probe_media_blocking(path.clone())?;
@@ -437,31 +400,20 @@ fn export_video_blocking(
     video_filters.push("format=yuv420p".to_string());
 
     let output_path = PathBuf::from(output_path);
-    if let Some(parent) = output_path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-    {
+    if let Some(parent) = output_path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
         fs::create_dir_all(parent)
             .map_err(|err| format!("Failed to create export directory: {err}"))?;
     }
 
-    let output_path_str = output_path
-        .to_str()
-        .ok_or("Export output path is not valid UTF-8")?;
+    let output_path_str = output_path.to_str().ok_or("Export output path is not valid UTF-8")?;
 
-    let start = start_time
-        .filter(|seconds| seconds.is_finite())
-        .map(|seconds| seconds.max(0.0));
+    let start = start_time.filter(|seconds| seconds.is_finite()).map(|seconds| seconds.max(0.0));
     let duration = match (start, end_time.filter(|seconds| seconds.is_finite())) {
         (Some(start), Some(end)) if end > start => Some(end - start),
         _ => None,
     };
 
-    let mut args = vec![
-        "-y".to_string(),
-        "-loglevel".to_string(),
-        "error".to_string(),
-    ];
+    let mut args = vec!["-y".to_string(), "-loglevel".to_string(), "error".to_string()];
 
     if let Some(start) = start {
         args.push("-ss".to_string());
@@ -520,12 +472,8 @@ fn crop_pixels(crop: &CropRatio, source_width: u32, source_height: u32) -> (u32,
     let (source_x, source_y, visible_source_width, visible_source_height) =
         cover_crop_source_rect(crop, source_width, source_height);
 
-    let x = (source_x + crop.x.clamp(0.0, 1.0) * visible_source_width)
-        .floor()
-        .max(0.0) as u32;
-    let y = (source_y + crop.y.clamp(0.0, 1.0) * visible_source_height)
-        .floor()
-        .max(0.0) as u32;
+    let x = (source_x + crop.x.clamp(0.0, 1.0) * visible_source_width).floor().max(0.0) as u32;
+    let y = (source_y + crop.y.clamp(0.0, 1.0) * visible_source_height).floor().max(0.0) as u32;
     let x = x.min(source_width - 1);
     let y = y.min(source_height - 1);
     let width = (crop.width.clamp(0.0, 1.0) * visible_source_width).round() as u32;
@@ -543,14 +491,10 @@ fn cover_crop_source_rect(
 ) -> (f64, f64, f64, f64) {
     let source_width = source_width as f64;
     let source_height = source_height as f64;
-    let box_width = crop
-        .box_width
-        .filter(|value| value.is_finite() && *value > 0.0)
-        .unwrap_or(source_width);
-    let box_height = crop
-        .box_height
-        .filter(|value| value.is_finite() && *value > 0.0)
-        .unwrap_or(source_height);
+    let box_width =
+        crop.box_width.filter(|value| value.is_finite() && *value > 0.0).unwrap_or(source_width);
+    let box_height =
+        crop.box_height.filter(|value| value.is_finite() && *value > 0.0).unwrap_or(source_height);
     let source_aspect = source_width / source_height;
     let box_aspect = box_width / box_height;
 
@@ -568,10 +512,7 @@ fn cover_crop_source_rect(
 }
 
 fn screenshot_filename(path: &str) -> Result<String, String> {
-    let stem = Path::new(path)
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .unwrap_or("media");
+    let stem = Path::new(path).file_stem().and_then(|stem| stem.to_str()).unwrap_or("media");
     let sanitized_stem: String = stem
         .chars()
         .map(|character| {
@@ -605,10 +546,7 @@ pub fn configure_tauri_builder<R: tauri::Runtime>(builder: tauri::Builder<R>) ->
             let max_parallel = std::thread::available_parallelism()
                 .map(|threads| threads.get().saturating_sub(1).clamp(1, 4))
                 .unwrap_or(2);
-            app.manage(decode_arbiter::DecodeArbiter::spawn(
-                app_handle,
-                max_parallel,
-            ));
+            app.manage(decode_arbiter::DecodeArbiter::spawn(app_handle, max_parallel));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -657,14 +595,7 @@ mod tests {
     }
 
     fn crop(x: f64, y: f64, width: f64, height: f64, box_width: f64, box_height: f64) -> CropRatio {
-        CropRatio {
-            x,
-            y,
-            width,
-            height,
-            box_width: Some(box_width),
-            box_height: Some(box_height),
-        }
+        CropRatio { x, y, width, height, box_width: Some(box_width), box_height: Some(box_height) }
     }
 
     #[test]
@@ -701,10 +632,8 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system clock should be after Unix epoch")
             .as_nanos();
-        let temp_dir = std::env::temp_dir().join(format!(
-            "sigma-crop-export-{}-{test_id}",
-            std::process::id()
-        ));
+        let temp_dir = std::env::temp_dir()
+            .join(format!("sigma-crop-export-{}-{test_id}", std::process::id()));
         fs::create_dir_all(&temp_dir).expect("failed to create temp test directory");
 
         let source_path = temp_dir.join("source.png");
@@ -742,14 +671,7 @@ mod tests {
             String::from_utf8_lossy(&generate.stderr)
         );
 
-        let crop = crop(
-            24.0 / 128.0,
-            18.0 / 72.0,
-            80.0 / 128.0,
-            42.0 / 72.0,
-            128.0,
-            72.0,
-        );
+        let crop = crop(24.0 / 128.0, 18.0 / 72.0, 80.0 / 128.0, 42.0 / 72.0, 128.0, 72.0);
         let (crop_x, crop_y, crop_width, crop_height) = crop_pixels(&crop, 192, 108);
         let crop_geometry = format!("{crop_width}x{crop_height}+{crop_x}+{crop_y}");
 
@@ -761,9 +683,7 @@ mod tests {
                 "+repage",
                 "-depth",
                 "8",
-                reference_path
-                    .to_str()
-                    .expect("reference path should be UTF-8"),
+                reference_path.to_str().expect("reference path should be UTF-8"),
             ])
             .output()
             .expect("failed to run ImageMagick reference crop");
@@ -788,9 +708,7 @@ mod tests {
                 "-metric",
                 "AE",
                 &exported_path,
-                reference_path
-                    .to_str()
-                    .expect("reference path should be UTF-8"),
+                reference_path.to_str().expect("reference path should be UTF-8"),
                 "null:",
             ])
             .output()

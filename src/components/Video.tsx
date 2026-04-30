@@ -30,6 +30,7 @@ export function VideoMedia({
   item,
   isInViewport,
   zoom,
+  onReadyChange,
   onThumbnailNeeded,
 }: VideoMediaProps) {
   const [isLoadRequested, setIsLoadRequested] = useState(false);
@@ -62,6 +63,25 @@ export function VideoMedia({
       onThumbnailNeeded?.(item);
     }
   }, [item, onThumbnailNeeded, zoom]);
+
+  useEffect(() => {
+    if (shouldDeferVideoLoad) {
+      onReadyChange?.(true);
+      return;
+    }
+
+    if (lod === "thumbnail") {
+      onReadyChange?.(false);
+      return;
+    }
+
+    if (lod === "proxy") {
+      onReadyChange?.(false);
+      return;
+    }
+
+    onReadyChange?.(false);
+  }, [lod, onReadyChange, shouldDeferVideoLoad]);
 
   const {
     currentTime,
@@ -144,6 +164,7 @@ export function VideoMedia({
       <VideoThumbnail
         cropBoxStyle={cropBoxStyle}
         thumbnailUrl={item.thumbnailUrl}
+        onReadyChange={onReadyChange}
       />
     );
   }
@@ -167,6 +188,7 @@ export function VideoMedia({
           draggable={false}
           onLoadedMetadata={() => updateVideoMetadata(playVideo)}
           onCanPlay={() => {
+            onReadyChange?.(true);
             playVideo();
             startTimelineAnimation();
           }}
@@ -189,6 +211,7 @@ export function VideoMedia({
             }
           }}
           onError={() => {
+            onReadyChange?.(false);
             setPlaybackError(
               "Playback failed. This file may need transcoding.",
             );

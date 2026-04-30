@@ -455,6 +455,35 @@ export default function InfiniteCanvas() {
     }
   };
 
+  const handlePointerCancel = (e: React.PointerEvent) => {
+    const interactionState = useInteractionStore.getState();
+    const activeItemId = interactionState.getActiveItemId();
+
+    if (activeItemId) {
+      handleItemPointerUp(activeItemId, e);
+      return;
+    }
+
+    if (interactionState.isPanning) {
+      stopPanning();
+      startDragRef.current = null;
+      commitViewport(getViewport(), {
+        flushDomNow: true,
+        syncReact: true,
+      });
+    }
+
+    if (interactionState.selectionBox) {
+      clearSelectionBox();
+    }
+
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // Pointer capture may already be gone if the browser cancelled the gesture.
+    }
+  };
+
   const handleWheel = (e: ReactWheelEvent) => {
     e.preventDefault();
     cancelViewportAnimation();
@@ -837,6 +866,9 @@ export default function InfiniteCanvas() {
     selectedVideoItems.length === 1 ? selectedVideoItems[0] : null;
   const [isNativeImageSurfaceReady, setIsNativeImageSurfaceReady] =
     useState(false);
+  const [nativeImageReadyPaths, setNativeImageReadyPaths] = useState<
+    Record<string, string>
+  >({});
   const isNativeImageSurfaceSupported = useMemo(
     () => supportsNativeImageSurface(),
     [],
@@ -878,6 +910,7 @@ export default function InfiniteCanvas() {
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
       onWheel={handleWheel}
       onContextMenu={(e) => e.preventDefault()}
     >
@@ -898,6 +931,11 @@ export default function InfiniteCanvas() {
         croppingItemId={croppingItem}
         editingCropItemId={editingCropItem}
         onReadyChange={setIsNativeImageSurfaceReady}
+        onAssetReadyChange={(itemId, path) => {
+          setNativeImageReadyPaths((current) =>
+            current[itemId] === path ? current : { ...current, [itemId]: path },
+          );
+        }}
         requestImagePreview={requestImagePreview}
       />
       <NativeVideoSurface
@@ -925,6 +963,7 @@ export default function InfiniteCanvas() {
               isCropping={isActive(croppingItem)}
               isCropEditing={editingCropItem === item.id}
               isDragging={isActive(draggingItem)}
+              nativeImageReadyPath={nativeImageReadyPaths[item.id]}
               isResizing={isActive(resizingItem)}
               isSelected={selectedItems.has(item.id)}
               requestImagePreview={requestImagePreview}

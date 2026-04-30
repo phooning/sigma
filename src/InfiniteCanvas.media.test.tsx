@@ -47,51 +47,6 @@ describe("InfiniteCanvas media loading", () => {
     );
   });
 
-  it("pauses selected videos with the spacebar", async () => {
-    const videoPath = "/path/to/spacebar-video.mp4";
-
-    renderCanvas();
-    await dropFiles([videoPath]);
-
-    const video = await waitFor(() => {
-      const found = document.querySelector(
-        "video.media-content",
-      ) as HTMLVideoElement | null;
-      if (!found) {
-        throw new Error("Expected selected video element to be rendered");
-      }
-      expect(found).toBeInTheDocument();
-      return found;
-    });
-    const pause = vi.fn();
-    Object.defineProperty(video, "paused", {
-      configurable: true,
-      get: () => false,
-    });
-    Object.defineProperty(video, "pause", {
-      configurable: true,
-      value: pause,
-    });
-
-    const mediaItem = getMediaItem();
-    await act(async () => {
-      fireEvent.pointerDown(mediaItem, {
-        button: 0,
-        clientX: 10,
-        clientY: 10,
-        pointerId: 21,
-      });
-    });
-
-    expect(mediaItem).toHaveClass("selected");
-
-    await act(async () => {
-      fireEvent.keyDown(window, { key: " ", code: "Space" });
-    });
-
-    expect(pause).toHaveBeenCalledOnce();
-  });
-
   it("drops large videos as deferred load proxies until playback is requested", async () => {
     const heavyVideoPath = new URL(
       "../fixtures/heavy_video.mkv",

@@ -209,6 +209,10 @@ describe("VideoMedia timeline", () => {
     const video = document.querySelector("video");
     expect(video).toBeInTheDocument();
 
+    if (!(video instanceof HTMLVideoElement)) {
+      throw new Error("Expected video element to be rendered");
+    }
+
     Object.defineProperty(video, "duration", {
       configurable: true,
       get: () => 20,
@@ -253,5 +257,53 @@ describe("VideoMedia timeline", () => {
     expect(
       screen.getByRole("button", { name: /pause video/i }),
     ).toBeInTheDocument();
+  });
+
+  it("reports readiness only after the playable video can render", () => {
+    const onReadyChange = vi.fn();
+
+    render(
+      <VideoMedia
+        url="asset:///tmp/video.mp4"
+        crop={crop}
+        item={videoItem}
+        isInViewport
+        zoom={1}
+        onReadyChange={onReadyChange}
+      />,
+    );
+
+    const video = document.querySelector("video");
+    if (!(video instanceof HTMLVideoElement)) {
+      throw new Error("Expected video element to be rendered");
+    }
+
+    expect(onReadyChange).toHaveBeenLastCalledWith(false);
+
+    fireEvent.canPlay(video);
+
+    expect(onReadyChange).toHaveBeenLastCalledWith(true);
+  });
+
+  it("reports readiness when a thumbnail-sized video image loads", () => {
+    const onReadyChange = vi.fn();
+
+    render(
+      <VideoMedia
+        url="asset:///tmp/video.mp4"
+        crop={crop}
+        item={{ ...videoItem, thumbnailUrl: "asset:///tmp/video-thumb.jpg" }}
+        isInViewport
+        zoom={0.11}
+        onReadyChange={onReadyChange}
+      />,
+    );
+
+    const image = screen.getByAltText("video thumbnail");
+    expect(onReadyChange).toHaveBeenLastCalledWith(false);
+
+    fireEvent.load(image);
+
+    expect(onReadyChange).toHaveBeenLastCalledWith(true);
   });
 });

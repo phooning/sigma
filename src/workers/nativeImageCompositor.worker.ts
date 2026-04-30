@@ -227,6 +227,11 @@ async function loadAsset(asset: NativeImageManifestAsset) {
     current.bitmap = bitmap;
     current.byteSize = bitmap.width * bitmap.height * 4;
     current.status = "ready";
+    self.postMessage({
+      type: "asset-ready",
+      itemId: asset.id,
+      path: asset.path,
+    });
     scheduleRender();
   } catch {
     const current = cache.get(asset.id);

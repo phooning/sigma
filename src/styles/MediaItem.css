@@ -17,6 +17,16 @@
   -webkit-user-drag: none;
 }
 
+.media-visibility-mask {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.2), rgba(15, 23, 42, 0.44)),
+    rgba(15, 23, 42, 0.16);
+  pointer-events: none;
+  z-index: 1;
+}
+
 .media-item.is-transforming {
   will-change: transform;
   transition: box-shadow var(--duration-medium) ease;
