@@ -25,7 +25,7 @@ export const CanvasMinimap = memo(function CanvasMinimap({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [dpr, setDpr] = useState(() => window.devicePixelRatio || 1);
   const selectedCount = selectedItems.size;
-  const zoomLabel = `${viewport.zoom.toFixed(1)}x`;
+  const zoomLabel = `${viewport.zoom.toFixed(2)}x`;
 
   const layout = useMemo(
     () =>
@@ -40,6 +40,7 @@ export const CanvasMinimap = memo(function CanvasMinimap({
     [canvasSize, items, viewport],
   );
 
+  // Create devicePixelRatio listeners.
   useEffect(() => {
     let removeMediaQueryListener = () => {};
 
@@ -63,15 +64,9 @@ export const CanvasMinimap = memo(function CanvasMinimap({
         subscribeToDprChanges();
       };
 
-      if ("addEventListener" in mediaQuery) {
-        mediaQuery.addEventListener("change", handleChange);
-        removeMediaQueryListener = () =>
-          mediaQuery.removeEventListener("change", handleChange);
-        return;
-      }
-
-      mediaQuery.addListener(handleChange);
-      removeMediaQueryListener = () => mediaQuery.removeListener(handleChange);
+      mediaQuery.addEventListener("change", handleChange);
+      removeMediaQueryListener = () =>
+        mediaQuery.removeEventListener("change", handleChange);
     };
 
     window.addEventListener("resize", updateDpr);
@@ -83,6 +78,7 @@ export const CanvasMinimap = memo(function CanvasMinimap({
     };
   }, []);
 
+  // Draw minimap.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;

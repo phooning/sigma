@@ -7,5 +7,8 @@ cd "$repo_root"
 echo "Running project lint before test..."
 pnpm lint
 
-echo "Running project tests before push..."
+echo "Running project tests before build..."
 pnpm test && pnpm test:e2e
+
+echo "Running project build before push..."
+pnpm build

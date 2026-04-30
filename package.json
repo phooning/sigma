@@ -15,6 +15,7 @@
     "bench:check": "pnpm bench && node ./scripts/check-vitest-bench-baseline.mjs",
     "bench:ipc:rust": "cargo bench --manifest-path src-tauri/Cargo.toml --bench ipc_latency",
     "test:e2e": "playwright test",
+    "check": "./.githooks/pre-push",
     "tauri": "tauri"
   },
   "dependencies": {

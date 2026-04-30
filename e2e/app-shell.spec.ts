@@ -62,7 +62,7 @@ test("renders a minimap summary after media is loaded", async ({ page }) => {
   const canvas = page.locator(".canvas-minimap__canvas");
 
   await expect(minimap).toBeVisible();
-  await expect(minimap.locator(".canvas-minimap__label")).toHaveText("1.0x");
+  await expect(minimap.locator(".canvas-minimap__label")).toHaveText("1.00x");
   await expect(minimap.locator(".canvas-minimap__count")).toHaveText(
     "0 of 6 selected",
   );
