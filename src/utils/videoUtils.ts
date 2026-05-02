@@ -53,10 +53,22 @@ export const clampVideoTime = (time: number, duration: number) => {
   return Math.min(Math.max(time, 0), duration);
 };
 
-export const formatVideoTime = (time: number) => {
-  const safeTime = Number.isFinite(time) ? Math.max(0, Math.floor(time)) : 0;
-  const minutes = Math.floor(safeTime / 60);
-  const seconds = safeTime % 60;
+export const formatVideoTime = (
+  time: number,
+  { includeSubseconds = false }: { includeSubseconds?: boolean } = {},
+) => {
+  const safeTime = Number.isFinite(time) ? Math.max(0, time) : 0;
+  const roundedTime = includeSubseconds
+    ? Number(safeTime.toFixed(1))
+    : Math.floor(safeTime);
+  const wholeSeconds = Math.floor(roundedTime);
+  const minutes = Math.floor(wholeSeconds / 60);
+  const seconds = wholeSeconds % 60;
+  const tenths = Math.round(roundedTime * 10) % 10;
+
+  if (includeSubseconds && tenths > 0) {
+    return `${minutes}:${seconds.toString().padStart(2, "0")}.${tenths}`;
+  }
 
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 };

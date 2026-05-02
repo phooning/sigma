@@ -35,6 +35,11 @@ export function useVideoLoop({
 }: UseVideoLoopArgs) {
   const [loop, loopRef, setLoop] = useRefState<LoopState>(initialLoop);
   externalLoopRef.current = loopRef.current;
+  const formatLoopPercent = useCallback(
+    (time: number, duration: number) =>
+      `${Number(((clampVideoTime(time, duration) / duration) * 100).toFixed(3))}%`,
+    [],
+  );
 
   const writeLoopPosition = useCallback(
     (nextLoop: LoopState) => {
@@ -43,29 +48,21 @@ export function useVideoLoop({
       if (duration <= 0 || !timeline) return;
 
       const aPosition =
-        nextLoop.a === null
-          ? "-100%"
-          : `${(clampVideoTime(nextLoop.a, duration) / duration) * 100}%`;
+        nextLoop.a === null ? "-100%" : formatLoopPercent(nextLoop.a, duration);
       const bPosition =
-        nextLoop.b === null
-          ? "-100%"
-          : `${(clampVideoTime(nextLoop.b, duration) / duration) * 100}%`;
+        nextLoop.b === null ? "-100%" : formatLoopPercent(nextLoop.b, duration);
       const range = getLoopRange(nextLoop);
       const rangeStart =
-        range === null
-          ? "0%"
-          : `${(clampVideoTime(range.start, duration) / duration) * 100}%`;
+        range === null ? "0%" : formatLoopPercent(range.start, duration);
       const rangeEnd =
-        range === null
-          ? "0%"
-          : `${(clampVideoTime(range.end, duration) / duration) * 100}%`;
+        range === null ? "0%" : formatLoopPercent(range.end, duration);
 
       timeline.style.setProperty("--video-loop-a-position", aPosition);
       timeline.style.setProperty("--video-loop-b-position", bPosition);
       timeline.style.setProperty("--video-loop-start-position", rangeStart);
       timeline.style.setProperty("--video-loop-end-position", rangeEnd);
     },
-    [durationRef, timelineRef],
+    [durationRef, formatLoopPercent, timelineRef],
   );
 
   const updateLoop = useCallback(

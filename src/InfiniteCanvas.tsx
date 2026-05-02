@@ -35,6 +35,8 @@ import { NativeVideoSurface } from "./components/native-video/NativeVideoSurface
 import { SelectionBox } from "./components/SelectionBox";
 import { useActiveAudioSelection } from "./components/useActiveAudioSelection";
 import { useCanvasViewport } from "./components/useCanvasViewport";
+import type { VideoTimelineController } from "./components/Video.types";
+import { VideoControlFooter } from "./components/VideoControlFooter";
 import { useAudioPlaybackStore } from "./stores/useAudioPlaybackStore";
 import { useCanvasSessionStore } from "./stores/useCanvasSessionStore";
 import { useInteractionStore } from "./stores/useInteractionStore";
@@ -68,6 +70,9 @@ import { getViewBounds, pushItemToTop } from "./utils/viewport";
 
 export default function InfiniteCanvas() {
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [videoTimelineControllers, setVideoTimelineControllers] = useState<
+    Record<string, VideoTimelineController>
+  >({});
   const [transientItemIds, setTransientItemIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -793,6 +798,32 @@ export default function InfiniteCanvas() {
     revealItem({ e, id, items: useCanvasSessionStore.getState().items });
   }, []);
 
+  const handleVideoTimelineControllerChange = useCallback(
+    (itemId: string, controller: VideoTimelineController | null) => {
+      setVideoTimelineControllers((current) => {
+        if (controller === null) {
+          if (!(itemId in current)) {
+            return current;
+          }
+
+          const nextControllers = { ...current };
+          delete nextControllers[itemId];
+          return nextControllers;
+        }
+
+        if (current[itemId] === controller) {
+          return current;
+        }
+
+        return {
+          ...current,
+          [itemId]: controller,
+        };
+      });
+    },
+    [],
+  );
+
   const exportSelectedVideo = useCallback(async () => {
     const selectedVideoItems = useCanvasSessionStore
       .getState()
@@ -865,6 +896,9 @@ export default function InfiniteCanvas() {
   );
   const selectedVideoExportItem =
     selectedVideoItems.length === 1 ? selectedVideoItems[0] : null;
+  const selectedVideoTimelineController = selectedVideoExportItem
+    ? (videoTimelineControllers[selectedVideoExportItem.id] ?? null)
+    : null;
   const [isNativeImageSurfaceReady, setIsNativeImageSurfaceReady] =
     useState(false);
   const [nativeImageReadyPaths, setNativeImageReadyPaths] = useState<
@@ -974,6 +1008,9 @@ export default function InfiniteCanvas() {
               screenshotItem={screenshotItem}
               startCropEdit={startCropEdit}
               toggleAudioPlayback={toggleAudioPlayback}
+              onVideoTimelineControllerChange={
+                handleVideoTimelineControllerChange
+              }
               useNativeImageSurface={isNativeImageSurfaceEnabled}
               viewBounds={viewBounds}
               zoom={renderViewport.zoom}
@@ -1004,6 +1041,10 @@ export default function InfiniteCanvas() {
         isExportingSelectedVideo={exportingItemId !== null}
         onSelectActiveAudioItem={selectActiveAudioItem}
         onExportSelectedVideo={exportSelectedVideo}
+      />
+      <VideoControlFooter
+        selectedVideoItem={selectedVideoExportItem}
+        timelineController={selectedVideoTimelineController}
       />
     </div>
   );

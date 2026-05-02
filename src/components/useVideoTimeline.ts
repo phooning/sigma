@@ -27,6 +27,13 @@ export function useVideoTimeline({
   item,
   loopRef,
 }: UseVideoTimelineArgs) {
+  const normalizeTimelineTime = useCallback(
+    (time: number, duration: number) => {
+      return Number(clampVideoTime(time, duration).toFixed(3));
+    },
+    [],
+  );
+
   const [duration, durationStateRef, setDuration] = useRefState(() =>
     getFiniteDuration(item.duration),
   );
@@ -81,7 +88,7 @@ export function useVideoTimeline({
 
       const state = timelineStateRef.current;
       const elapsed = (timestamp - state.anchorTimestamp) / 1000;
-      const nextTime = clampVideoTime(
+      const nextTime = normalizeTimelineTime(
         state.anchorTime + elapsed * state.playbackRate,
         duration,
       );
@@ -111,6 +118,7 @@ export function useVideoTimeline({
       durationStateRef,
       isScrubbingRef,
       loopRef,
+      normalizeTimelineTime,
       setCurrentTime,
       videoRef,
       writePlayheadPosition,
@@ -137,7 +145,7 @@ export function useVideoTimeline({
   const syncTimelineFromVideo = useCallback(
     (time: number, nextDuration = durationStateRef.current) => {
       const safeDuration = Number.isFinite(nextDuration) ? nextDuration : 0;
-      const nextTime = clampVideoTime(time, safeDuration);
+      const nextTime = normalizeTimelineTime(time, safeDuration);
       const video = videoRef.current;
 
       durationStateRef.current = safeDuration;
@@ -150,7 +158,13 @@ export function useVideoTimeline({
       setCurrentTime(nextTime);
       writePlayheadPosition(nextTime);
     },
-    [durationStateRef, setCurrentTime, videoRef, writePlayheadPosition],
+    [
+      durationStateRef,
+      normalizeTimelineTime,
+      setCurrentTime,
+      videoRef,
+      writePlayheadPosition,
+    ],
   );
 
   const updateVideoMetadata = useCallback(
@@ -184,11 +198,11 @@ export function useVideoTimeline({
       const duration = durationStateRef.current;
       if (!video || duration <= 0) return;
 
-      const nextTime = clampVideoTime(ratio * duration, duration);
+      const nextTime = normalizeTimelineTime(ratio * duration, duration);
       video.currentTime = nextTime;
       syncTimelineFromVideo(nextTime, duration);
     },
-    [durationStateRef, syncTimelineFromVideo, videoRef],
+    [durationStateRef, normalizeTimelineTime, syncTimelineFromVideo, videoRef],
   );
 
   const seekFromPointer = useCallback(

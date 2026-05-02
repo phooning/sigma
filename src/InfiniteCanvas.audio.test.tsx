@@ -133,14 +133,6 @@ describe("InfiniteCanvas audio and export workflows", () => {
       },
     });
 
-    fireEvent.loadedMetadata(video);
-    currentTime = 2;
-    fireEvent.timeUpdate(video);
-    fireEvent.click(screen.getByRole("button", { name: /set loop a point/i }));
-    currentTime = 5;
-    fireEvent.timeUpdate(video);
-    fireEvent.click(screen.getByRole("button", { name: /set loop b point/i }));
-
     const mediaItem = getMediaItem();
     await act(async () => {
       fireEvent.pointerDown(mediaItem, {
@@ -151,6 +143,19 @@ describe("InfiniteCanvas audio and export workflows", () => {
       });
       fireEvent.pointerUp(mediaItem, { pointerId: 21 });
     });
+
+    await act(async () => {
+      fireEvent.loadedMetadata(video);
+      currentTime = 2;
+      fireEvent.timeUpdate(video);
+    });
+    fireEvent.click(screen.getByRole("button", { name: /set loop a point/i }));
+
+    await act(async () => {
+      currentTime = 5;
+      fireEvent.timeUpdate(video);
+    });
+    fireEvent.click(screen.getByRole("button", { name: /set loop b point/i }));
 
     await act(async () => {
       fireEvent.click(

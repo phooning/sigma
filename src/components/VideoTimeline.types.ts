@@ -6,6 +6,8 @@ import type {
 } from "react";
 import type { LoopState } from "../utils/videoUtils";
 
+export type VideoTimelineLayout = "inline" | "footer";
+
 export type StopCanvasGestureHandler = (
   event: ReactPointerEvent<HTMLElement> | ReactMouseEvent<HTMLElement>,
 ) => void;
@@ -17,6 +19,7 @@ export type VideoTimelineProps = {
   isPaused: boolean;
   isScrubbing: boolean;
   isScrubbingRef: MutableRefObject<boolean>;
+  layout?: VideoTimelineLayout;
   loop: LoopState;
   playbackError: string | null;
   seekFromPointer: (clientX: number) => void;

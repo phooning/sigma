@@ -62,6 +62,7 @@ export function useVideoPlayback({
   }, [onPause, onPlay, playVideo, setIsPaused, videoRef]);
 
   const handlePlay = useCallback(() => {
+    isPausedByUserRef.current = false;
     setIsPaused(false);
     onPlay();
   }, [onPlay, setIsPaused]);

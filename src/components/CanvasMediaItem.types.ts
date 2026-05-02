@@ -1,6 +1,7 @@
 import type { MediaQueueOptions } from "../utils/media";
 import type { MediaItem } from "../utils/media.types";
 import type { ViewBounds } from "../utils/viewport.types";
+import type { VideoTimelineController } from "./Video.types";
 
 export type MediaPointerHandler = (
   id: string,
@@ -34,6 +35,10 @@ export type CanvasMediaItemProps = {
   screenshotItem: MediaActionHandler;
   startCropEdit: MediaActionHandler;
   toggleAudioPlayback: MediaActionHandler;
+  onVideoTimelineControllerChange?: (
+    itemId: string,
+    controller: VideoTimelineController | null,
+  ) => void;
   viewBounds: Pick<
     ViewBounds,
     "viewLeft" | "viewTop" | "viewRight" | "viewBottom"
