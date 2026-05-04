@@ -84,15 +84,25 @@ export function useVideoLoop({
       if (!video || duration <= 0) return;
 
       const nextPoint = clampVideoTime(video.currentTime, duration);
-      updateLoop((previous) => ({
-        ...previous,
-        [point]: nextPoint,
-        enabled:
+      updateLoop((previous) => {
+        const nextLoop = { ...previous, [point]: nextPoint };
+
+        if (point === "b" && previous.a !== null && nextPoint < previous.a) {
+          nextLoop.a = null;
+        }
+
+        if (point === "a" && previous.b !== null && nextPoint > previous.b) {
+          nextLoop.b = null;
+        }
+
+        nextLoop.enabled =
           previous.enabled &&
           (point === "a"
-            ? previous.b !== null && previous.b !== nextPoint
-            : previous.a !== null && previous.a !== nextPoint),
-      }));
+            ? nextLoop.b !== null && nextLoop.b !== nextPoint
+            : nextLoop.a !== null && nextLoop.a !== nextPoint);
+
+        return nextLoop;
+      });
     },
     [durationRef, updateLoop, videoRef],
   );
