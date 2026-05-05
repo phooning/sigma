@@ -3,6 +3,7 @@ import {
   type RefObject,
   useCallback,
   useEffect,
+  useRef,
 } from "react";
 import {
   clampVideoTime,
@@ -20,7 +21,11 @@ interface UseVideoLoopArgs {
   initialLoop?: LoopState;
   duration: number;
   url: string;
-  syncTimelineFromVideo: (time: number, nextDuration?: number) => void;
+  syncTimelineFromVideo: (
+    time: number,
+    nextDuration?: number,
+    options?: { writePlayhead?: boolean },
+  ) => void;
 }
 
 export function useVideoLoop({
@@ -95,6 +100,8 @@ export function useVideoLoop({
           nextLoop.b = null;
         }
 
+        // Note: If the loop was previously disabled, it remains disabled even after setting a valid A/B pair.
+        // This requires an explicit toggleLoop call to enable it, which is intentional UX.
         nextLoop.enabled =
           previous.enabled &&
           (point === "a"
@@ -108,36 +115,31 @@ export function useVideoLoop({
   );
 
   const toggleLoop = useCallback(() => {
-    const previous = loopRef.current;
-    const range = getLoopRange(previous);
-    const nextLoop = {
-      ...previous,
-      enabled: range === null ? false : !previous.enabled,
-    };
+    updateLoop((previous) => {
+      const range = getLoopRange(previous);
+      const nextLoop = {
+        ...previous,
+        enabled: range === null ? false : !previous.enabled,
+      };
 
-    externalLoopRef.current = nextLoop;
-    setLoop(nextLoop);
-    writeLoopPosition(nextLoop);
-
-    if (nextLoop.enabled && range !== null && videoRef.current) {
-      const video = videoRef.current;
-      if (video.currentTime < range.start || video.currentTime > range.end) {
-        video.currentTime = range.start;
-        syncTimelineFromVideo(range.start);
+      if (nextLoop.enabled && range !== null && videoRef.current) {
+        const video = videoRef.current;
+        if (video.currentTime < range.start || video.currentTime > range.end) {
+          video.currentTime = range.start;
+          syncTimelineFromVideo(range.start);
+        }
       }
-    }
-  }, [
-    externalLoopRef,
-    loopRef,
-    setLoop,
-    syncTimelineFromVideo,
-    videoRef,
-    writeLoopPosition,
-  ]);
+
+      return nextLoop;
+    });
+  }, [syncTimelineFromVideo, updateLoop, videoRef]);
 
   const clearLoop = useCallback(() => {
     updateLoop(() => initialLoopState);
   }, [updateLoop]);
+
+  const initialLoopRef = useRef(initialLoop);
+  const previousUrlRef = useRef(url);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: duration intentionally retriggers loop marker writes after ref-backed metadata changes.
   useEffect(() => {
@@ -145,11 +147,16 @@ export function useVideoLoop({
     writeLoopPosition(loop);
   }, [duration, externalLoopRef, loop, writeLoopPosition]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: url intentionally resets loop state when the video source changes without a remount.
   useEffect(() => {
-    externalLoopRef.current = initialLoop;
-    setLoop(initialLoop);
-  }, [externalLoopRef, initialLoop, setLoop, url]);
+    initialLoopRef.current = initialLoop;
+    if (previousUrlRef.current === url) return;
+
+    previousUrlRef.current = url;
+    initialLoopRef.current = initialLoop;
+    externalLoopRef.current = initialLoopRef.current;
+    setLoop(initialLoopRef.current);
+    writeLoopPosition(initialLoopRef.current);
+  }, [externalLoopRef, initialLoop, setLoop, url, writeLoopPosition]);
 
   return {
     loop,

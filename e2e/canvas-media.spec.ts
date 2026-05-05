@@ -320,3 +320,77 @@ test("passes a real non-zero currentTime when saving a video screenshot", async 
     (screenshotCall?.args as { currentTime?: number }).currentTime ?? 0,
   ).toBeGreaterThan(2);
 });
+
+test("keeps playback aligned after dragging the playhead during active playback", async ({
+  page,
+}) => {
+  await gotoApp(page);
+  await dropFiles(page, [videoFixturePath]);
+
+  const mediaItem = mediaItems(page).first();
+  const video = page.locator("video.media-content").first();
+  const timeline = page.getByRole("slider", { name: /video timeline/i });
+
+  await waitForVideoReady(video);
+  await waitForVideoPlaybackState(video, false);
+  await mediaItem.click({ position: { x: 400, y: 200 } });
+  await expect(mediaItem).toHaveClass(/selected/);
+  await expect(timeline).toBeVisible();
+
+  const box = await timeline.boundingBox();
+  if (!box) {
+    throw new Error("Video timeline is not visible.");
+  }
+
+  await expect
+    .poll(async () =>
+      video.evaluate((node) => (node as HTMLVideoElement).currentTime),
+    )
+    .toBeGreaterThan(0.2);
+
+  const duration = await video.evaluate(
+    (node) => (node as HTMLVideoElement).duration,
+  );
+  const targetRatio = 0.65;
+  const targetTime = duration * targetRatio;
+  const y = box.y + box.height / 2;
+  const startX = box.x + box.width * 0.2;
+  const targetX = box.x + box.width * targetRatio;
+
+  await page.mouse.move(startX, y);
+  await page.mouse.down();
+  await page.mouse.move(targetX, y, { steps: 8 });
+
+  await expect
+    .poll(async () =>
+      Number((await timeline.getAttribute("aria-valuenow")) ?? "0"),
+    )
+    .toBeGreaterThan(targetTime - 0.4);
+
+  await page.mouse.up();
+
+  await expect
+    .poll(async () =>
+      video.evaluate((node) => (node as HTMLVideoElement).paused),
+    )
+    .toBe(false);
+
+  await expect
+    .poll(async () =>
+      video.evaluate((node) => (node as HTMLVideoElement).currentTime),
+    )
+    .toBeGreaterThan(targetTime - 0.5);
+
+  const settledTime = await video.evaluate(
+    (node) => (node as HTMLVideoElement).currentTime,
+  );
+  expect(settledTime).toBeGreaterThan(targetTime - 0.5);
+
+  await waitForAnimationFrames(page, 12);
+
+  await expect
+    .poll(async () =>
+      video.evaluate((node) => (node as HTMLVideoElement).currentTime),
+    )
+    .toBeGreaterThan(settledTime + 0.1);
+});

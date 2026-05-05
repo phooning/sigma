@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useVideoExportStore } from "../stores/useVideoExportStore";
 import type { MediaItem } from "../utils/media.types";
@@ -225,6 +231,7 @@ describe("VideoMedia timeline", () => {
 
     setTime(15);
     fireEvent.click(screen.getByRole("button", { name: /set loop b point/i }));
+    fireEvent.seeked(video);
 
     const loopButton = screen.getByRole("button", {
       name: /toggle a\/b loop/i,
@@ -321,6 +328,53 @@ describe("VideoMedia timeline", () => {
     expect(timeline).toHaveStyle("--video-loop-b-position: 70%");
     expect(timeline).toHaveStyle("--video-loop-start-position: 30%");
     expect(timeline).toHaveStyle("--video-loop-end-position: 70%");
+  });
+
+  it("loops active playback back to point A after setting A/B through the controls", async () => {
+    const animationFrames: FrameRequestCallback[] = [];
+    let animationFrameHandle = 0;
+    const requestAnimationFrameSpy = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        animationFrames.push(callback);
+        animationFrameHandle += 1;
+        return animationFrameHandle;
+      });
+    const cancelAnimationFrameSpy = vi
+      .spyOn(window, "cancelAnimationFrame")
+      .mockImplementation(() => {});
+    const performanceNowSpy = vi
+      .spyOn(performance, "now")
+      .mockImplementation(() => 0);
+    const { setTime, video } = await renderVideoTimeline();
+
+    setTime(5);
+    fireEvent.click(screen.getByRole("button", { name: /set loop a point/i }));
+
+    setTime(15);
+    fireEvent.click(screen.getByRole("button", { name: /set loop b point/i }));
+    fireEvent.click(screen.getByRole("button", { name: /toggle a\/b loop/i }));
+
+    setTime(14.5);
+    fireEvent.seeked(video);
+
+    expect(animationFrames.length).toBeGreaterThan(0);
+
+    act(() => {
+      animationFrames.at(-1)?.(1000);
+    });
+
+    expect(video.currentTime).toBe(14.5);
+
+    act(() => {
+      animationFrames.at(-1)?.(1500);
+    });
+
+    expect(video.currentTime).toBe(5);
+
+    requestAnimationFrameSpy.mockRestore();
+    cancelAnimationFrameSpy.mockRestore();
+    performanceNowSpy.mockRestore();
   });
 
   it("allows redundant A and B points at the beginning and end", async () => {

@@ -260,7 +260,11 @@ export function VideoMedia({
           }}
           onTimeUpdate={(e) => {
             if (!isScrubbingRef.current) {
-              syncTimelineFromVideo(e.currentTarget.currentTime);
+              syncTimelineFromVideo(e.currentTarget.currentTime, undefined, {
+                alignToRafTimestamp: true,
+                writePlayhead: false,
+                writeState: false,
+              });
             }
           }}
           onError={() => {
