@@ -2,6 +2,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  getCanvasConfigData,
   getProjectRootForConfig,
   loadFromStorage,
   resolveProjectPath,
@@ -65,6 +66,8 @@ describe("canvas config storage", () => {
       [baseItem],
       { x: 1, y: 2, zoom: 3 },
       "/Users/test/project/canvas.json",
+      { screenshotDirectory: "/shots", canvasBackgroundPattern: "grid" },
+      true,
     );
 
     expect(result).toEqual({
@@ -80,6 +83,11 @@ describe("canvas config storage", () => {
     expect(config.items[0].filePath).toBe("assets/photo.png");
     expect(config.items[0].url).toBeUndefined();
     expect(config.viewport).toEqual({ x: 1, y: 2, zoom: 3 });
+    expect(config.settings).toEqual({
+      screenshotDirectory: "/shots",
+      canvasBackgroundPattern: "grid",
+    });
+    expect(config.devMode).toBe(true);
   });
 
   it("opens a picker for save as and returns the selected path", async () => {
@@ -103,12 +111,38 @@ describe("canvas config storage", () => {
     });
   });
 
+  it("builds config data with session settings and debug mode", () => {
+    const config = JSON.parse(
+      getCanvasConfigData(
+        [baseItem],
+        { x: 1, y: 2, zoom: 3 },
+        "/Users/test/project/canvas.json",
+        {
+          screenshotDirectory: "/shots",
+          canvasBackgroundPattern: "grid",
+        },
+        true,
+      ),
+    );
+
+    expect(config.settings).toEqual({
+      screenshotDirectory: "/shots",
+      canvasBackgroundPattern: "grid",
+    });
+    expect(config.devMode).toBe(true);
+  });
+
   it("loads project-relative media file paths from the selected config folder", async () => {
     vi.mocked(open).mockResolvedValue("/Users/test/project/canvas.json");
     vi.mocked(readTextFile).mockResolvedValue(
       JSON.stringify({
         items: [{ ...baseItem, filePath: "assets/photo.png", url: undefined }],
         viewport: { x: 1, y: 2, zoom: 3 },
+        settings: {
+          screenshotDirectory: "/shots",
+          canvasBackgroundPattern: "grid",
+        },
+        devMode: true,
       }),
     );
 
@@ -123,6 +157,11 @@ describe("canvas config storage", () => {
     );
     expect(result.data.items[0].url).toBe("");
     expect(result.data.viewport).toEqual({ x: 1, y: 2, zoom: 3 });
+    expect(result.data.settings).toEqual({
+      screenshotDirectory: "/shots",
+      canvasBackgroundPattern: "grid",
+    });
+    expect(result.data.devMode).toBe(true);
   });
 
   it("keeps legacy absolute media file paths loadable", async () => {

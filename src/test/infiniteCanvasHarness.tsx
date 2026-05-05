@@ -4,6 +4,7 @@ import { createJSONStorage } from "zustand/middleware";
 import InfiniteCanvas from "../InfiniteCanvas";
 import { useAudioPlaybackStore } from "../stores/useAudioPlaybackStore";
 import { useCanvasSessionStore } from "../stores/useCanvasSessionStore";
+import { useDevStore } from "../stores/useDevStore";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import { useVideoExportStore } from "../stores/useVideoExportStore";
 import type { DropCallback, ViewportSize } from "./infiniteCanvasHarness.types";
@@ -227,6 +228,7 @@ beforeEach(() => {
   useCanvasSessionStore.setState(useCanvasSessionStore.getInitialState(), true);
   setViewportSize(defaultViewport);
   useSettingsStore.getState().resetSettings();
+  useDevStore.getState().resetStats();
   useAudioPlaybackStore.getState().resetAudioPlayback();
   useVideoExportStore.getState().resetVideoExportState();
   dragDropState.callback = null;

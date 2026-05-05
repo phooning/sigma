@@ -21,6 +21,7 @@ type DevStore = FrameStats &
   GpuStats & {
     devMode: boolean;
     toggleDevMode: () => void;
+    setDevMode: (devMode: boolean) => void;
     setFrameStats: (stats: FrameStats) => void;
     setVideoStats: (stats: VideoStats) => void;
     setGpuStats: (stats: GpuStats) => void;
@@ -41,8 +42,9 @@ export const useDevStore = create<DevStore>((set) => ({
   devMode: false,
   ...initialStats,
   toggleDevMode: () => set((state) => ({ devMode: !state.devMode })),
+  setDevMode: (devMode) => set({ devMode }),
   setFrameStats: (stats) => set(stats),
   setVideoStats: (stats) => set(stats),
   setGpuStats: (stats) => set(stats),
-  resetStats: () => set(initialStats),
+  resetStats: () => set({ devMode: false, ...initialStats }),
 }));

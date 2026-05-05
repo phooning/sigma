@@ -1,8 +1,10 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import packageJson from "../package.json";
+import { useDevStore } from "./stores/useDevStore";
 import {
   dropFiles,
+  getCanvasContainer,
   open,
   renderCanvas,
   save,
@@ -123,6 +125,18 @@ describe("Settings and persistence", () => {
     vi.mocked(save).mockClear();
     vi.mocked(writeTextFile).mockClear();
 
+    const canvas = getCanvasContainer();
+    await act(async () => {
+      fireEvent.wheel(canvas, {
+        ctrlKey: true,
+        deltaY: -200,
+        clientX: 10,
+        clientY: 10,
+      });
+    });
+
+    expect(saveButton).toBeDisabled();
+
     await dropFiles(["/path/to/test.png"]);
 
     await waitFor(() => {
@@ -140,6 +154,56 @@ describe("Settings and persistence", () => {
       );
     });
     expect(save).not.toHaveBeenCalled();
+  });
+
+  it("marks debug setting changes as dirty and persists them on save", async () => {
+    vi.mocked(save).mockResolvedValue("/tmp/debug-session.json");
+
+    renderCanvas();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save As" }));
+    });
+
+    await waitFor(() => {
+      expect(writeTextFile).toHaveBeenCalledWith(
+        "/tmp/debug-session.json",
+        expect.stringContaining('"devMode":false'),
+      );
+    });
+
+    vi.mocked(writeTextFile).mockClear();
+
+    const saveButton = screen.getByRole("button", { name: "Save" });
+    expect(saveButton).toBeDisabled();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /open settings/i }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("tab", { name: "Debug" }));
+    });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("switch", { name: /development mode/i }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(saveButton).toBeEnabled();
+    });
+    expect(useDevStore.getState().devMode).toBe(true);
+
+    await act(async () => {
+      fireEvent.click(saveButton);
+    });
+
+    await waitFor(() => {
+      expect(writeTextFile).toHaveBeenCalledWith(
+        "/tmp/debug-session.json",
+        expect.stringContaining('"devMode":true'),
+      );
+    });
   });
 
   it("switches the canvas background from dots to grid", async () => {

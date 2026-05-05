@@ -39,6 +39,7 @@ import type { VideoTimelineController } from "./components/Video.types";
 import { VideoControlFooter } from "./components/VideoControlFooter";
 import { useAudioPlaybackStore } from "./stores/useAudioPlaybackStore";
 import { useCanvasSessionStore } from "./stores/useCanvasSessionStore";
+import { useDevStore } from "./stores/useDevStore";
 import { useInteractionStore } from "./stores/useInteractionStore";
 import { useSettingsStore } from "./stores/useSettingsStore";
 import {
@@ -86,6 +87,9 @@ export default function InfiniteCanvas() {
   const setItems = useCanvasSessionStore((state) => state.setItems);
   const saveSessionToFile = useCanvasSessionStore(
     (state) => state.saveSessionToFile,
+  );
+  const refreshCanvasSaveDirtyState = useCanvasSessionStore(
+    (state) => state.refreshDirtyState,
   );
   const canSaveSessionToFile = useCanvasSessionStore(
     (state) => state.saveFilePath !== null && state.isDirty,
@@ -142,6 +146,8 @@ export default function InfiniteCanvas() {
   const clearAllVideoExportState = useVideoExportStore(
     (s) => s.clearAllItemState,
   );
+  const devMode = useDevStore((s) => s.devMode);
+  const settingsDirtyKey = `${canvasBackgroundPattern}:${screenshotDirectory}:${devMode}`;
 
   // Refs mirrored for async callbacks and global pointer gestures.
   const worldRef = useRef<HTMLDivElement>(null);
@@ -300,6 +306,11 @@ export default function InfiniteCanvas() {
       clearAudioItem(activeAudioItemId);
     }
   }, [activeAudioItemId, clearAudioItem, items]);
+
+  useEffect(() => {
+    void settingsDirtyKey;
+    refreshCanvasSaveDirtyState();
+  }, [refreshCanvasSaveDirtyState, settingsDirtyKey]);
 
   useEffect(() => {
     const handleResize = () => {
