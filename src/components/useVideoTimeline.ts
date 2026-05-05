@@ -160,6 +160,9 @@ export function useVideoTimeline({
         anchorTimestamp: timestamp,
         playbackRate: video.playbackRate || 1,
       };
+      // Loop jumps are the deliberate exception to the animation write throttle:
+      // React state needs to reflect the wrapped playhead immediately so timeline
+      // consumers do not spend a frame observing the stale pre-loop position.
       syncCurrentTimeState(loopRange.start, duration, {
         force: true,
         timestamp,
