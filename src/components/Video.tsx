@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAudioPlaybackStore } from "../stores/useAudioPlaybackStore";
 import {
   getStoredVideoLoop,
@@ -13,7 +13,7 @@ import {
 import { useVideoLoop } from "./useVideoLoop";
 import { useVideoPlayback } from "./useVideoPlayback";
 import { useVideoTimeline } from "./useVideoTimeline";
-import type { VideoMediaProps } from "./Video.types";
+import type { VideoMediaProps, VideoTimelineController } from "./Video.types";
 import { VideoLoadProxy, VideoProxy, VideoThumbnail } from "./VideoLodViews";
 import { VideoTimeline } from "./VideoTimeline";
 import type { StopCanvasGestureHandler } from "./VideoTimeline.types";
@@ -30,8 +30,10 @@ export function VideoMedia({
   item,
   isInViewport,
   zoom,
+  onTimelineControllerChange,
   onReadyChange,
   onThumbnailNeeded,
+  showTimelineInline = true,
 }: VideoMediaProps) {
   const [isLoadRequested, setIsLoadRequested] = useState(false);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
@@ -51,9 +53,9 @@ export function VideoMedia({
     : getVideoLod(zoom, !!item.thumbnailUrl, item);
   const shouldDeferVideoLoad = !!item.deferVideoLoad && !isVideoRequested;
 
-  const stopCanvasGesture: StopCanvasGestureHandler = (e) => {
+  const stopCanvasGesture = useCallback<StopCanvasGestureHandler>((e) => {
     e.stopPropagation();
-  };
+  }, []);
 
   useEffect(() => {
     if (
@@ -143,6 +145,57 @@ export function VideoMedia({
     }
   }, [audioVolume, isAudioActive, isAudioMuted, playVideo]);
 
+  const timelineController = useMemo<VideoTimelineController>(
+    () => ({
+      clearLoop,
+      currentTime,
+      duration,
+      isPaused,
+      isScrubbing,
+      isScrubbingRef,
+      loop,
+      playbackError,
+      seekFromPointer,
+      seekToRatio,
+      setLoopPoint,
+      setTimelineScrubbing,
+      startTimelineAnimation,
+      stopCanvasGesture,
+      stopTimelineAnimation,
+      timelineRef,
+      toggleLoop,
+      togglePlayback,
+    }),
+    [
+      clearLoop,
+      currentTime,
+      duration,
+      isPaused,
+      isScrubbing,
+      isScrubbingRef,
+      loop,
+      playbackError,
+      seekFromPointer,
+      seekToRatio,
+      setLoopPoint,
+      setTimelineScrubbing,
+      startTimelineAnimation,
+      stopCanvasGesture,
+      stopTimelineAnimation,
+      timelineRef,
+      toggleLoop,
+      togglePlayback,
+    ],
+  );
+
+  useEffect(() => {
+    onTimelineControllerChange?.(item.id, timelineController);
+
+    return () => {
+      onTimelineControllerChange?.(item.id, null);
+    };
+  }, [item.id, onTimelineControllerChange, timelineController]);
+
   const cropBoxStyle = getCropBoxStyle(item, crop);
 
   // TODO: Interaction for massive video loads.
@@ -207,7 +260,11 @@ export function VideoMedia({
           }}
           onTimeUpdate={(e) => {
             if (!isScrubbingRef.current) {
-              syncTimelineFromVideo(e.currentTarget.currentTime);
+              syncTimelineFromVideo(e.currentTarget.currentTime, undefined, {
+                alignToRafTimestamp: true,
+                writePlayhead: false,
+                writeState: false,
+              });
             }
           }}
           onError={() => {
@@ -219,26 +276,7 @@ export function VideoMedia({
           onDragStart={(e) => e.preventDefault()}
         />
       </div>
-      <VideoTimeline
-        clearLoop={clearLoop}
-        currentTime={currentTime}
-        duration={duration}
-        isPaused={isPaused}
-        isScrubbing={isScrubbing}
-        isScrubbingRef={isScrubbingRef}
-        loop={loop}
-        playbackError={playbackError}
-        seekFromPointer={seekFromPointer}
-        seekToRatio={seekToRatio}
-        setLoopPoint={setLoopPoint}
-        setTimelineScrubbing={setTimelineScrubbing}
-        startTimelineAnimation={startTimelineAnimation}
-        stopCanvasGesture={stopCanvasGesture}
-        stopTimelineAnimation={stopTimelineAnimation}
-        timelineRef={timelineRef}
-        toggleLoop={toggleLoop}
-        togglePlayback={togglePlayback}
-      />
+      {showTimelineInline && <VideoTimeline {...timelineController} />}
     </>
   );
 }

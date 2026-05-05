@@ -103,6 +103,7 @@ export const CanvasMediaItem = memo(function CanvasMediaItem({
   screenshotItem,
   startCropEdit,
   toggleAudioPlayback,
+  onVideoTimelineControllerChange,
   viewBounds,
   zoom,
 }: CanvasMediaItemProps) {
@@ -195,8 +196,10 @@ export const CanvasMediaItem = memo(function CanvasMediaItem({
             item={item}
             isInViewport={isInViewport}
             zoom={zoom}
+            onTimelineControllerChange={onVideoTimelineControllerChange}
             onReadyChange={setIsMediaReady}
             onThumbnailNeeded={requestThumbnail}
+            showTimelineInline={false}
           />
           {isCropEditing && (
             <CropOverlay

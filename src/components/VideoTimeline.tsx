@@ -8,6 +8,7 @@ export function VideoTimeline({
   isPaused,
   isScrubbing,
   isScrubbingRef,
+  layout = "inline",
   loop,
   playbackError,
   seekFromPointer,
@@ -22,11 +23,18 @@ export function VideoTimeline({
   togglePlayback,
 }: VideoTimelineProps) {
   const loopRange = getLoopRange(loop);
+  const timelineClassName = [
+    "video-timeline",
+    layout === "footer" && "video-timeline-footer",
+    isScrubbing && "is-scrubbing",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <>
       {duration > 0 && (
-        <div className={`video-timeline ${isScrubbing ? "is-scrubbing" : ""}`}>
+        <div className={timelineClassName}>
           <button
             type="button"
             className="video-playback-btn"
@@ -47,9 +55,11 @@ export function VideoTimeline({
             role="slider"
             aria-label="Video timeline"
             aria-valuemin={0}
-            aria-valuemax={Math.round(duration)}
-            aria-valuenow={Math.round(currentTime)}
-            aria-valuetext={`${formatVideoTime(currentTime)} of ${formatVideoTime(duration)}`}
+            aria-valuemax={duration}
+            aria-valuenow={currentTime}
+            aria-valuetext={`${formatVideoTime(currentTime, {
+              includeSubseconds: true,
+            })} of ${formatVideoTime(duration)}`}
             tabIndex={0}
             onPointerDown={(e) => {
               e.preventDefault();
@@ -122,7 +132,10 @@ export function VideoTimeline({
             <div className="video-timeline-thumb" />
           </div>
           <div className="video-timeline-time">
-            {formatVideoTime(currentTime)} / {formatVideoTime(duration)}
+            {formatVideoTime(currentTime, {
+              includeSubseconds: isScrubbing,
+            })}{" "}
+            / {formatVideoTime(duration)}
           </div>
           <div className="video-loop-controls">
             <button

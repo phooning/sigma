@@ -3,6 +3,7 @@ import {
   type RefObject,
   useCallback,
   useEffect,
+  useRef,
 } from "react";
 import {
   clampVideoTime,
@@ -20,7 +21,11 @@ interface UseVideoLoopArgs {
   initialLoop?: LoopState;
   duration: number;
   url: string;
-  syncTimelineFromVideo: (time: number, nextDuration?: number) => void;
+  syncTimelineFromVideo: (
+    time: number,
+    nextDuration?: number,
+    options?: { writePlayhead?: boolean },
+  ) => void;
 }
 
 export function useVideoLoop({
@@ -35,6 +40,11 @@ export function useVideoLoop({
 }: UseVideoLoopArgs) {
   const [loop, loopRef, setLoop] = useRefState<LoopState>(initialLoop);
   externalLoopRef.current = loopRef.current;
+  const formatLoopPercent = useCallback(
+    (time: number, duration: number) =>
+      `${Number(((clampVideoTime(time, duration) / duration) * 100).toFixed(3))}%`,
+    [],
+  );
 
   const writeLoopPosition = useCallback(
     (nextLoop: LoopState) => {
@@ -43,29 +53,21 @@ export function useVideoLoop({
       if (duration <= 0 || !timeline) return;
 
       const aPosition =
-        nextLoop.a === null
-          ? "-100%"
-          : `${(clampVideoTime(nextLoop.a, duration) / duration) * 100}%`;
+        nextLoop.a === null ? "-100%" : formatLoopPercent(nextLoop.a, duration);
       const bPosition =
-        nextLoop.b === null
-          ? "-100%"
-          : `${(clampVideoTime(nextLoop.b, duration) / duration) * 100}%`;
+        nextLoop.b === null ? "-100%" : formatLoopPercent(nextLoop.b, duration);
       const range = getLoopRange(nextLoop);
       const rangeStart =
-        range === null
-          ? "0%"
-          : `${(clampVideoTime(range.start, duration) / duration) * 100}%`;
+        range === null ? "0%" : formatLoopPercent(range.start, duration);
       const rangeEnd =
-        range === null
-          ? "0%"
-          : `${(clampVideoTime(range.end, duration) / duration) * 100}%`;
+        range === null ? "0%" : formatLoopPercent(range.end, duration);
 
       timeline.style.setProperty("--video-loop-a-position", aPosition);
       timeline.style.setProperty("--video-loop-b-position", bPosition);
       timeline.style.setProperty("--video-loop-start-position", rangeStart);
       timeline.style.setProperty("--video-loop-end-position", rangeEnd);
     },
-    [durationRef, timelineRef],
+    [durationRef, formatLoopPercent, timelineRef],
   );
 
   const updateLoop = useCallback(
@@ -87,50 +89,57 @@ export function useVideoLoop({
       if (!video || duration <= 0) return;
 
       const nextPoint = clampVideoTime(video.currentTime, duration);
-      updateLoop((previous) => ({
-        ...previous,
-        [point]: nextPoint,
-        enabled:
+      updateLoop((previous) => {
+        const nextLoop = { ...previous, [point]: nextPoint };
+
+        if (point === "b" && previous.a !== null && nextPoint < previous.a) {
+          nextLoop.a = null;
+        }
+
+        if (point === "a" && previous.b !== null && nextPoint > previous.b) {
+          nextLoop.b = null;
+        }
+
+        // Note: If the loop was previously disabled, it remains disabled even after setting a valid A/B pair.
+        // This requires an explicit toggleLoop call to enable it, which is intentional UX.
+        nextLoop.enabled =
           previous.enabled &&
           (point === "a"
-            ? previous.b !== null && previous.b !== nextPoint
-            : previous.a !== null && previous.a !== nextPoint),
-      }));
+            ? nextLoop.b !== null && nextLoop.b !== nextPoint
+            : nextLoop.a !== null && nextLoop.a !== nextPoint);
+
+        return nextLoop;
+      });
     },
     [durationRef, updateLoop, videoRef],
   );
 
   const toggleLoop = useCallback(() => {
-    const previous = loopRef.current;
-    const range = getLoopRange(previous);
-    const nextLoop = {
-      ...previous,
-      enabled: range === null ? false : !previous.enabled,
-    };
+    updateLoop((previous) => {
+      const range = getLoopRange(previous);
+      const nextLoop = {
+        ...previous,
+        enabled: range === null ? false : !previous.enabled,
+      };
 
-    externalLoopRef.current = nextLoop;
-    setLoop(nextLoop);
-    writeLoopPosition(nextLoop);
-
-    if (nextLoop.enabled && range !== null && videoRef.current) {
-      const video = videoRef.current;
-      if (video.currentTime < range.start || video.currentTime > range.end) {
-        video.currentTime = range.start;
-        syncTimelineFromVideo(range.start);
+      if (nextLoop.enabled && range !== null && videoRef.current) {
+        const video = videoRef.current;
+        if (video.currentTime < range.start || video.currentTime > range.end) {
+          video.currentTime = range.start;
+          syncTimelineFromVideo(range.start);
+        }
       }
-    }
-  }, [
-    externalLoopRef,
-    loopRef,
-    setLoop,
-    syncTimelineFromVideo,
-    videoRef,
-    writeLoopPosition,
-  ]);
+
+      return nextLoop;
+    });
+  }, [syncTimelineFromVideo, updateLoop, videoRef]);
 
   const clearLoop = useCallback(() => {
     updateLoop(() => initialLoopState);
   }, [updateLoop]);
+
+  const initialLoopRef = useRef(initialLoop);
+  const previousUrlRef = useRef(url);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: duration intentionally retriggers loop marker writes after ref-backed metadata changes.
   useEffect(() => {
@@ -138,11 +147,16 @@ export function useVideoLoop({
     writeLoopPosition(loop);
   }, [duration, externalLoopRef, loop, writeLoopPosition]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: url intentionally resets loop state when the video source changes without a remount.
   useEffect(() => {
-    externalLoopRef.current = initialLoop;
-    setLoop(initialLoop);
-  }, [externalLoopRef, initialLoop, setLoop, url]);
+    initialLoopRef.current = initialLoop;
+    if (previousUrlRef.current === url) return;
+
+    previousUrlRef.current = url;
+    initialLoopRef.current = initialLoop;
+    externalLoopRef.current = initialLoopRef.current;
+    setLoop(initialLoopRef.current);
+    writeLoopPosition(initialLoopRef.current);
+  }, [externalLoopRef, initialLoop, setLoop, url, writeLoopPosition]);
 
   return {
     loop,

@@ -420,6 +420,69 @@ describe("InfiniteCanvas media item interactions", () => {
     expect(revealItemInDirMock).toHaveBeenCalledWith("/path/to/test.png");
   });
 
+  it("shows the fixed video footer only for a single selected video", async () => {
+    const videoPath = new URL(
+      "../fixtures/generated-lod-test-1080p.mp4",
+      import.meta.url,
+    ).pathname;
+
+    await dropFiles([videoPath]);
+
+    await waitFor(() => {
+      expect(document.querySelectorAll(".media-item")).toHaveLength(2);
+      expect(document.querySelector("video.media-content")).toBeInTheDocument();
+      expect(screen.getByAltText("canvas item")).toBeInTheDocument();
+    });
+
+    const mediaItems = Array.from(
+      document.querySelectorAll(".media-item"),
+    ) as HTMLElement[];
+    const videoItem = mediaItems.find((item) =>
+      item.querySelector("video.media-content"),
+    );
+    const imageItem = mediaItems.find((item) =>
+      item.querySelector('img[alt="canvas item"]'),
+    );
+
+    expect(videoItem).toBeDefined();
+    expect(imageItem).toBeDefined();
+
+    if (!videoItem || !imageItem) {
+      throw new Error("Expected both video and image media items");
+    }
+
+    await act(async () => {
+      fireEvent.pointerDown(videoItem, {
+        button: 0,
+        clientX: 0,
+        clientY: 0,
+        pointerId: 41,
+      });
+      fireEvent.pointerUp(videoItem, { pointerId: 41, button: 0 });
+    });
+
+    expect(screen.getByText("Selected Video")).toBeInTheDocument();
+    expect(
+      screen.getByText("generated-lod-test-1080p.mp4"),
+    ).toBeInTheDocument();
+    expect(document.querySelector(".ui-overlay-footer")).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.pointerDown(imageItem, {
+        button: 0,
+        clientX: 0,
+        clientY: 0,
+        pointerId: 42,
+      });
+      fireEvent.pointerUp(imageItem, { pointerId: 42, button: 0 });
+    });
+
+    expect(screen.queryByText("Selected Video")).not.toBeInTheDocument();
+    expect(
+      document.querySelector(".ui-overlay-footer"),
+    ).not.toBeInTheDocument();
+  });
+
   it("saves a cropped screenshot using source-size crop ratios", async () => {
     vi.mocked(open).mockResolvedValue("/shots");
 
