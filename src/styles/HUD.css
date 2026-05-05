@@ -32,7 +32,6 @@
   font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .toolbar {
