@@ -6,6 +6,7 @@ import {
   loadFromStorage,
   resolveProjectPath,
   saveToStorage,
+  saveToStorageAs,
   toProjectRelativePath,
 } from "./fs";
 import type { MediaItem } from "./media.types";
@@ -60,11 +61,16 @@ describe("canvas config storage", () => {
   });
 
   it("saves media file paths relative to the config folder", async () => {
-    vi.mocked(save).mockResolvedValue("/Users/test/project/canvas.json");
+    const result = await saveToStorage(
+      [baseItem],
+      { x: 1, y: 2, zoom: 3 },
+      "/Users/test/project/canvas.json",
+    );
 
-    const result = await saveToStorage([baseItem], { x: 1, y: 2, zoom: 3 });
-
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({
+      ok: true,
+      filePath: "/Users/test/project/canvas.json",
+    });
     expect(writeTextFile).toHaveBeenCalledOnce();
 
     const [filePath, contents] = vi.mocked(writeTextFile).mock.calls[0];
@@ -74,6 +80,27 @@ describe("canvas config storage", () => {
     expect(config.items[0].filePath).toBe("assets/photo.png");
     expect(config.items[0].url).toBeUndefined();
     expect(config.viewport).toEqual({ x: 1, y: 2, zoom: 3 });
+  });
+
+  it("opens a picker for save as and returns the selected path", async () => {
+    vi.mocked(save).mockResolvedValue("/Users/test/project/scene.json");
+
+    const result = await saveToStorageAs([baseItem], { x: 1, y: 2, zoom: 3 });
+
+    expect(result).toEqual({
+      ok: true,
+      filePath: "/Users/test/project/scene.json",
+    });
+    expect(save).toHaveBeenCalledWith({
+      title: "Save canvas",
+      defaultPath: "canvas.json",
+      filters: [
+        {
+          name: "Canvas Config",
+          extensions: ["json"],
+        },
+      ],
+    });
   });
 
   it("loads project-relative media file paths from the selected config folder", async () => {
@@ -90,6 +117,7 @@ describe("canvas config storage", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
+    expect(result.filePath).toBe("/Users/test/project/canvas.json");
     expect(result.data.items[0].filePath).toBe(
       "/Users/test/project/assets/photo.png",
     );
@@ -111,6 +139,7 @@ describe("canvas config storage", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
+    expect(result.filePath).toBe("/Users/test/project/canvas.json");
     expect(result.data.items[0].filePath).toBe(baseItem.filePath);
   });
 });

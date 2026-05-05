@@ -7,7 +7,10 @@ import { getMediaFileName } from "./utils";
 type HudToolbarProps = {
   items: MediaItem[];
   saveConfig: () => void;
+  canSaveConfig: boolean;
+  saveAsConfig: () => void;
   loadConfig: () => void;
+  clearCanvas: () => void;
   selectedVideoExportItem: MediaItem | null;
   selectedVideoExportCount: number;
   isExportingSelectedVideo: boolean;
@@ -18,7 +21,10 @@ type HudToolbarProps = {
 export function HudToolbar({
   items,
   saveConfig,
+  canSaveConfig,
+  saveAsConfig,
   loadConfig,
+  clearCanvas,
   selectedVideoExportItem,
   selectedVideoExportCount,
   isExportingSelectedVideo,
@@ -44,7 +50,11 @@ export function HudToolbar({
       <div className="toolbar">
         <HudToolbarActions
           saveConfig={saveConfig}
+          canSaveConfig={canSaveConfig}
+          saveAsConfig={saveAsConfig}
           loadConfig={loadConfig}
+          clearCanvas={clearCanvas}
+          hasItems={items.length > 0}
           selectedVideoExportItem={selectedVideoExportItem}
           selectedVideoExportCount={selectedVideoExportCount}
           isExportingSelectedVideo={isExportingSelectedVideo}

@@ -87,6 +87,12 @@ export default function InfiniteCanvas() {
   const saveSessionToFile = useCanvasSessionStore(
     (state) => state.saveSessionToFile,
   );
+  const canSaveSessionToFile = useCanvasSessionStore(
+    (state) => state.saveFilePath !== null && state.isDirty,
+  );
+  const saveSessionToNewFile = useCanvasSessionStore(
+    (state) => state.saveSessionToNewFile,
+  );
   const loadSessionFromFile = useCanvasSessionStore(
     (state) => state.loadSessionFromFile,
   );
@@ -331,6 +337,24 @@ export default function InfiniteCanvas() {
     clearAudioItem();
     clearAllVideoExportState();
   };
+
+  const clearCanvas = useCallback(() => {
+    cancelViewportAnimation();
+    clearTransientItemMotion();
+    setItems([]);
+    setSelectedItems(new Set());
+    clearSelectionBox();
+    useInteractionStore.getState().clearInteractionState();
+    clearAudioItem();
+    clearAllVideoExportState();
+  }, [
+    cancelViewportAnimation,
+    clearAllVideoExportState,
+    clearAudioItem,
+    clearSelectionBox,
+    clearTransientItemMotion,
+    setItems,
+  ]);
 
   const selectActiveAudioItem = useActiveAudioSelection({
     activeAudioItemId,
@@ -1033,7 +1057,10 @@ export default function InfiniteCanvas() {
       <Hud
         items={items}
         saveConfig={saveSessionToFile}
+        canSaveConfig={canSaveSessionToFile}
+        saveAsConfig={saveSessionToNewFile}
         loadConfig={loadConfig}
+        clearCanvas={clearCanvas}
         settingsMenuItems={SETTINGS_MENU_ITEMS}
         settingsVersion={appVersion}
         selectedVideoExportItem={selectedVideoExportItem}

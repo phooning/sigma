@@ -2,10 +2,10 @@ import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import packageJson from "../package.json";
 import {
+  dropFiles,
   open,
   renderCanvas,
   save,
-  toast,
   writeTextFile,
 } from "./test/infiniteCanvasHarness";
 
@@ -88,24 +88,58 @@ describe("Settings and persistence", () => {
   });
 
   it("saves from the keyboard shortcut", async () => {
-    vi.mocked(save).mockResolvedValue("/tmp/canvas.json");
-
     renderCanvas();
 
     await act(async () => {
       fireEvent.keyDown(window, { key: "s", ctrlKey: true });
     });
 
+    expect(save).not.toHaveBeenCalled();
+    expect(writeTextFile).not.toHaveBeenCalled();
+  });
+
+  it("uses Save As for a new path and then quick-saves to the same file only after changes", async () => {
+    vi.mocked(save).mockResolvedValue("/tmp/scene.json");
+
+    renderCanvas();
+
+    const saveButton = screen.getByRole("button", { name: "Save" });
+    const saveAsButton = screen.getByRole("button", { name: "Save As" });
+    expect(saveButton).toBeDisabled();
+    expect(saveAsButton).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(saveAsButton);
+    });
+
     await waitFor(() => {
-      expect(writeTextFile).toHaveBeenCalledOnce();
+      expect(writeTextFile).toHaveBeenCalledWith(
+        "/tmp/scene.json",
+        expect.stringContaining('"items"'),
+      );
     });
-    expect(writeTextFile).toHaveBeenCalledWith(
-      "/tmp/canvas.json",
-      expect.stringContaining('"items"'),
-    );
-    expect(toast.success).toHaveBeenCalledWith("Save completed", {
-      description: "Config saved successfully.",
+    expect(saveButton).toBeDisabled();
+
+    vi.mocked(save).mockClear();
+    vi.mocked(writeTextFile).mockClear();
+
+    await dropFiles(["/path/to/test.png"]);
+
+    await waitFor(() => {
+      expect(saveButton).toBeEnabled();
     });
+
+    await act(async () => {
+      fireEvent.click(saveButton);
+    });
+
+    await waitFor(() => {
+      expect(writeTextFile).toHaveBeenCalledWith(
+        "/tmp/scene.json",
+        expect.stringContaining('"items"'),
+      );
+    });
+    expect(save).not.toHaveBeenCalled();
   });
 
   it("switches the canvas background from dots to grid", async () => {
@@ -134,5 +168,29 @@ describe("Settings and persistence", () => {
     expect(localStorage.getItem("sigma:canvas-background-pattern")).toBe(
       "grid",
     );
+  });
+
+  it("clears all canvas items from the toolbar", async () => {
+    renderCanvas();
+
+    const clearButton = screen.getByRole("button", { name: "Clear" });
+    expect(clearButton).toBeDisabled();
+
+    await dropFiles(["/path/to/test.png", "/path/to/portrait.webp"]);
+
+    await waitFor(() => {
+      expect(screen.getByText("2 items")).toBeInTheDocument();
+      expect(clearButton).toBeEnabled();
+    });
+
+    await act(async () => {
+      fireEvent.click(clearButton);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("0 items")).toBeInTheDocument();
+      expect(clearButton).toBeDisabled();
+      expect(document.querySelectorAll(".media-item")).toHaveLength(0);
+    });
   });
 });

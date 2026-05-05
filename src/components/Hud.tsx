@@ -5,7 +5,10 @@ import type { HudProps } from "./hud/types";
 function Hud({
   items,
   saveConfig,
+  canSaveConfig,
+  saveAsConfig,
   loadConfig,
+  clearCanvas,
   settingsMenuItems,
   settingsVersion,
   selectedVideoExportItem,
@@ -19,7 +22,10 @@ function Hud({
       <HudToolbar
         items={items}
         saveConfig={saveConfig}
+        canSaveConfig={canSaveConfig}
+        saveAsConfig={saveAsConfig}
         loadConfig={loadConfig}
+        clearCanvas={clearCanvas}
         selectedVideoExportItem={selectedVideoExportItem}
         selectedVideoExportCount={selectedVideoExportCount}
         isExportingSelectedVideo={isExportingSelectedVideo}

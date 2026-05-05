@@ -4,7 +4,10 @@ import type { SettingsMenuItem } from "../HudActions";
 export type HudProps = {
   items: MediaItem[];
   saveConfig: () => void;
+  canSaveConfig: boolean;
+  saveAsConfig: () => void;
   loadConfig: () => void;
+  clearCanvas: () => void;
   settingsMenuItems: readonly SettingsMenuItem[];
   settingsVersion: string;
   selectedVideoExportItem: MediaItem | null;
