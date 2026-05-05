@@ -139,7 +139,6 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
             viewport,
             isDirty: resolveDirtyState({
               items: state.items,
-              viewport,
               saveFilePath: state.saveFilePath,
               lastSavedSignature: state.lastSavedSignature,
             }),
@@ -152,7 +151,6 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
             items,
             isDirty: resolveDirtyState({
               items,
-              viewport: state.viewport,
               saveFilePath: state.saveFilePath,
               lastSavedSignature: state.lastSavedSignature,
             }),
@@ -162,7 +160,6 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
         set((state) => ({
           isDirty: resolveDirtyState({
             items: state.items,
-            viewport: state.viewport,
             saveFilePath: state.saveFilePath,
             lastSavedSignature: state.lastSavedSignature,
           }),
@@ -186,7 +183,6 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
             lastSavedSignature,
             isDirty: resolveDirtyState({
               items,
-              viewport,
               saveFilePath,
               lastSavedSignature,
             }),
@@ -331,7 +327,6 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
           lastSavedSignature,
           isDirty: resolveDirtyState({
             items,
-            viewport,
             saveFilePath,
             lastSavedSignature,
           }),
