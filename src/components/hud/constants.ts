@@ -10,6 +10,10 @@ export const SETTINGS_PANEL_DESCRIPTIONS: Record<SettingsMenuItem, string> = {
 
 export const HOTKEY_ROWS = [
   {
+    keys: "F1",
+    description: "Toggle development mode.",
+  },
+  {
     keys: "Ctrl/Cmd+S",
     description: "Save the current canvas configuration.",
   },

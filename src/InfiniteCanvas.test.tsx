@@ -53,6 +53,8 @@ describe("Settings and persistence", () => {
       fireEvent.click(screen.getByRole("tab", { name: "Hotkeys" }));
     });
 
+    expect(screen.getByText("F1")).toBeInTheDocument();
+    expect(screen.getByText("Toggle development mode.")).toBeInTheDocument();
     expect(screen.getByText("Ctrl/Cmd+S")).toBeInTheDocument();
     expect(
       screen.getByText("Save the current canvas configuration."),
@@ -67,6 +69,28 @@ describe("Settings and persistence", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Delete/Backspace")).toBeInTheDocument();
     expect(screen.getByText("Delete the selected items.")).toBeInTheDocument();
+  });
+
+  it("toggles development mode from the F1 hotkey", async () => {
+    renderCanvas();
+
+    expect(useDevStore.getState().devMode).toBe(false);
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "F1" });
+    });
+
+    expect(useDevStore.getState().devMode).toBe(true);
+    expect(screen.getByLabelText("Development stats")).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "F1" });
+    });
+
+    expect(useDevStore.getState().devMode).toBe(false);
+    expect(
+      screen.queryByLabelText("Development stats"),
+    ).not.toBeInTheDocument();
   });
 
   it("chooses a screenshot directory from general settings", async () => {

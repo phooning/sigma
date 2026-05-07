@@ -189,6 +189,7 @@ export default function InfiniteCanvas() {
     containerRef,
     getItems: () => useCanvasSessionStore.getState().items,
     onSave: saveSessionToFile,
+    onToggleDevMode: useDevStore.getState().toggleDevMode,
     selectedItemsRef,
     setItems,
     setSelectedItems,
