@@ -114,6 +114,10 @@ const DevelopmentOverlay = ({
     framesQueued,
     framesDropped,
     framesMissedVsync,
+    rustBackendFrameUpdateTimeMs,
+    webviewJsFrameTimeMs,
+    ipcRoundtripTimeMs,
+    serializationDeserializationTimeMs,
   } = useDevStore();
 
   useEffect(() => {
@@ -242,6 +246,22 @@ const DevelopmentOverlay = ({
       <div>
         <span>Frames missed vsync</span>
         <strong>{formatCount(framesMissedVsync)}</strong>
+      </div>
+      <div>
+        <span>Rust backend frame/update time</span>
+        <strong>{formatTiming(rustBackendFrameUpdateTimeMs)}</strong>
+      </div>
+      <div>
+        <span>WebView JS frame time</span>
+        <strong>{formatTiming(webviewJsFrameTimeMs)}</strong>
+      </div>
+      <div>
+        <span>IPC roundtrip time</span>
+        <strong>{formatTiming(ipcRoundtripTimeMs)}</strong>
+      </div>
+      <div>
+        <span>Serialization/deserialization time</span>
+        <strong>{formatTiming(serializationDeserializationTimeMs)}</strong>
       </div>
       <div>
         <span>Video count</span>

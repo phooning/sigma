@@ -8,6 +8,7 @@ import type {
   NativeVideoManifest,
   NativeVideoProfile,
   NativeVideoSurfaceProps,
+  NativeVideoTelemetrySnapshot,
 } from "./types";
 import {
   computeNativeVideoBounds,
@@ -119,7 +120,10 @@ export function NativeVideoSurface({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const workerRef = useRef<Worker | null>(null);
   const frameChannelRef = useRef<Channel<ArrayBuffer> | null>(null);
+  const telemetryChannelRef =
+    useRef<Channel<NativeVideoTelemetrySnapshot> | null>(null);
   const lastMetricsAtRef = useRef(0);
+  const lastIpcRoundtripTimeMsRef = useRef<number | null>(null);
   const isBaseValidatedRef = useRef(false);
   const baseProbeStartedRef = useRef(false);
   const geometryItemIdsRef = useRef<Set<string>>(new Set());
@@ -203,6 +207,28 @@ export function NativeVideoSurface({
   }, []);
 
   useEffect(() => {
+    const telemetryChannel = new Channel<NativeVideoTelemetrySnapshot>();
+    telemetryChannelRef.current = telemetryChannel;
+    telemetryChannel.onmessage = (snapshot) => {
+      useDevStore.getState().setPipelineStats({
+        rustBackendFrameUpdateTimeMs: snapshot.rustBackendFrameUpdateTimeMs,
+        webviewJsFrameTimeMs: snapshot.webviewJsFrameTimeMs,
+        ipcRoundtripTimeMs: snapshot.ipcRoundtripTimeMs,
+        serializationDeserializationTimeMs:
+          snapshot.serializationDeserializationTimeMs,
+      });
+    };
+
+    void invoke("native_video_subscribe_telemetry", {
+      onEvent: telemetryChannel,
+    }).catch(() => {});
+
+    return () => {
+      telemetryChannelRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
     if (isEnabled) return;
 
     useDevStore.getState().setPipelineStats({
@@ -212,6 +238,10 @@ export function NativeVideoSurface({
       swapPresentTimeMs: null,
       framesQueued: null,
       framesDropped: null,
+      rustBackendFrameUpdateTimeMs: null,
+      webviewJsFrameTimeMs: null,
+      ipcRoundtripTimeMs: null,
+      serializationDeserializationTimeMs: null,
     });
   }, [isEnabled]);
 
@@ -238,6 +268,7 @@ export function NativeVideoSurface({
       const now = performance.now();
       if (now - lastMetricsAtRef.current < 2_000) return;
       lastMetricsAtRef.current = now;
+      const jsFrameTimeMs = useDevStore.getState().cpuFrameTimeMs;
       useDevStore.getState().setPipelineStats({
         gpuFrameTimeMs: message.metrics.gpuFrameTimeP95Ms,
         renderThreadTimeMs: message.metrics.renderThreadTimeP95Ms,
@@ -247,11 +278,20 @@ export function NativeVideoSurface({
         framesDropped: message.metrics.framesDropped,
       });
 
+      const ipcStartedAt = performance.now();
       void invoke("native_video_record_frontend_metrics", {
-        metrics: message.metrics,
-      }).catch(() => {
-        // Metrics are advisory; presentation should continue if persistence fails.
-      });
+        metrics: {
+          ...message.metrics,
+          webviewJsFrameTimeMs: jsFrameTimeMs,
+          ipcRoundtripTimeMs: lastIpcRoundtripTimeMsRef.current,
+        } satisfies NativeVideoFrontendMetrics,
+      })
+        .then(() => {
+          lastIpcRoundtripTimeMsRef.current = performance.now() - ipcStartedAt;
+        })
+        .catch(() => {
+          // Metrics are advisory; presentation should continue if persistence fails.
+        });
     };
 
     const offscreen = canvas.transferControlToOffscreen();
@@ -290,6 +330,10 @@ export function NativeVideoSurface({
         swapPresentTimeMs: null,
         framesQueued: null,
         framesDropped: null,
+        rustBackendFrameUpdateTimeMs: null,
+        webviewJsFrameTimeMs: null,
+        ipcRoundtripTimeMs: null,
+        serializationDeserializationTimeMs: null,
       });
       void invoke("native_video_stop_all").catch(() => {});
     };

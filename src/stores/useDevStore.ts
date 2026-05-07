@@ -26,6 +26,10 @@ type PipelineStats = {
   framesQueued: number | null;
   framesDropped: number | null;
   framesMissedVsync: number | null;
+  rustBackendFrameUpdateTimeMs: number | null;
+  webviewJsFrameTimeMs: number | null;
+  ipcRoundtripTimeMs: number | null;
+  serializationDeserializationTimeMs: number | null;
 };
 
 type DevStore = FrameStats &
@@ -59,6 +63,10 @@ const initialStats: FrameStats & VideoStats & GpuStats & PipelineStats = {
   framesQueued: null,
   framesDropped: null,
   framesMissedVsync: null,
+  rustBackendFrameUpdateTimeMs: null,
+  webviewJsFrameTimeMs: null,
+  ipcRoundtripTimeMs: null,
+  serializationDeserializationTimeMs: null,
 };
 
 export const useDevStore = create<DevStore>((set) => ({

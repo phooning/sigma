@@ -63,7 +63,16 @@ export type NativeVideoFrontendMetrics = {
   framesQueued: number;
   framesDropped: number;
   framesMissedVsync: number;
+  webviewJsFrameTimeMs: number | null;
+  ipcRoundtripTimeMs: number | null;
   measuredIpcBytesPerSec: number;
+};
+
+export type NativeVideoTelemetrySnapshot = {
+  rustBackendFrameUpdateTimeMs: number | null;
+  webviewJsFrameTimeMs: number | null;
+  ipcRoundtripTimeMs: number | null;
+  serializationDeserializationTimeMs: number | null;
 };
 
 export type NativeVideoSurfaceProps = {

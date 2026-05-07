@@ -49,6 +49,14 @@ describe("Settings and persistence", () => {
     expect(screen.getByText("Frames queued")).toBeInTheDocument();
     expect(screen.getByText("Frames dropped")).toBeInTheDocument();
     expect(screen.getByText("Frames missed vsync")).toBeInTheDocument();
+    expect(
+      screen.getByText("Rust backend frame/update time"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("WebView JS frame time")).toBeInTheDocument();
+    expect(screen.getByText("IPC roundtrip time")).toBeInTheDocument();
+    expect(
+      screen.getByText("Serialization/deserialization time"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Video count")).toBeInTheDocument();
   });
 
@@ -128,6 +136,10 @@ describe("Settings and persistence", () => {
         framesQueued: 2,
         framesDropped: 1,
         framesMissedVsync: 3,
+        rustBackendFrameUpdateTimeMs: 6.7,
+        webviewJsFrameTimeMs: 11.2,
+        ipcRoundtripTimeMs: 1.4,
+        serializationDeserializationTimeMs: 0.6,
       });
     });
 
@@ -137,6 +149,10 @@ describe("Settings and persistence", () => {
     expect(screen.getByText("5.4 ms")).toBeInTheDocument();
     expect(screen.getByText("3.8 ms")).toBeInTheDocument();
     expect(screen.getByText("8.9 ms")).toBeInTheDocument();
+    expect(screen.getByText("6.7 ms")).toBeInTheDocument();
+    expect(screen.getByText("11.2 ms")).toBeInTheDocument();
+    expect(screen.getByText("1.4 ms")).toBeInTheDocument();
+    expect(screen.getByText("0.6 ms")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("1")).toBeInTheDocument();
     expect(screen.getByText("3")).toBeInTheDocument();

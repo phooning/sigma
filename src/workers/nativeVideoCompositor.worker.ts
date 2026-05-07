@@ -1,6 +1,5 @@
-import type { NativeVideoFrontendMetrics } from "../components/native-video/types";
-
 /// <reference types="@webgpu/types" />
+import type { NativeVideoFrontendMetrics } from "../components/native-video/types";
 
 type NativeVisibleAsset = {
   id: string;
@@ -988,6 +987,8 @@ function maybePostMetrics() {
     framesQueued: metricsWindow.maxQueuedFrames,
     framesDropped: droppedFrames,
     framesMissedVsync: metricsWindow.missedVsync,
+    webviewJsFrameTimeMs: null,
+    ipcRoundtripTimeMs: null,
     measuredIpcBytesPerSec:
       elapsedMs > 0
         ? Math.round((metricsWindow.receivedBytes / elapsedMs) * 1_000)

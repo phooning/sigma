@@ -209,7 +209,7 @@
   --settings-sidebar-width: 13.75rem;
   --settings-sidebar-min-height: 11.25rem;
   --settings-copy-max-width: 28.75rem;
-  --dev-stats-width: 11.875rem;
+  --dev-stats-width: 18rem;
   --media-action-size: var(--space-12);
   --media-action-offset: var(--space-4);
   --media-action-step: calc(var(--media-action-size) + var(--space-3));
