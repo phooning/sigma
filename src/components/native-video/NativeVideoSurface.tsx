@@ -1,8 +1,10 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useDevStore } from "../../stores/useDevStore";
 import type { MediaItem, Viewport } from "../../utils/media.types";
 import type {
   NativeControllerSnapshot,
+  NativeVideoFrontendMetrics,
   NativeVideoManifest,
   NativeVideoProfile,
   NativeVideoSurfaceProps,
@@ -201,6 +203,19 @@ export function NativeVideoSurface({
   }, []);
 
   useEffect(() => {
+    if (isEnabled) return;
+
+    useDevStore.getState().setPipelineStats({
+      gpuFrameTimeMs: null,
+      renderThreadTimeMs: null,
+      compositorTimeMs: null,
+      swapPresentTimeMs: null,
+      framesQueued: null,
+      framesDropped: null,
+    });
+  }, [isEnabled]);
+
+  useEffect(() => {
     if (!isEnabled) return;
 
     const canvas = canvasRef.current;
@@ -216,24 +231,21 @@ export function NativeVideoSurface({
     worker.onmessage = (event: MessageEvent) => {
       const message = event.data as
         | { type: "ready"; renderer: string }
-        | {
-            type: "metrics";
-            metrics: {
-              renderer: string;
-              canvasWidth: number;
-              canvasHeight: number;
-              uploadLatencyP95Ms: number;
-              compositeLatencyP95Ms: number;
-              frameDropRate: number;
-              measuredIpcBytesPerSec: number;
-            };
-          };
+        | { type: "metrics"; metrics: NativeVideoFrontendMetrics };
 
       if (message.type !== "metrics") return;
 
       const now = performance.now();
       if (now - lastMetricsAtRef.current < 2_000) return;
       lastMetricsAtRef.current = now;
+      useDevStore.getState().setPipelineStats({
+        gpuFrameTimeMs: message.metrics.gpuFrameTimeP95Ms,
+        renderThreadTimeMs: message.metrics.renderThreadTimeP95Ms,
+        compositorTimeMs: message.metrics.compositeLatencyP95Ms,
+        swapPresentTimeMs: message.metrics.swapPresentTimeP95Ms,
+        framesQueued: message.metrics.framesQueued,
+        framesDropped: message.metrics.framesDropped,
+      });
 
       void invoke("native_video_record_frontend_metrics", {
         metrics: message.metrics,
@@ -271,6 +283,14 @@ export function NativeVideoSurface({
       workerRef.current = null;
       frameChannelRef.current = null;
       geometryItemIdsRef.current.clear();
+      useDevStore.getState().setPipelineStats({
+        gpuFrameTimeMs: null,
+        renderThreadTimeMs: null,
+        compositorTimeMs: null,
+        swapPresentTimeMs: null,
+        framesQueued: null,
+        framesDropped: null,
+      });
       void invoke("native_video_stop_all").catch(() => {});
     };
   }, [canvasSize.height, canvasSize.width, isEnabled]);

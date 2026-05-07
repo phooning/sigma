@@ -19,6 +19,8 @@ type SystemProfilerPayload = {
 };
 
 const UNKNOWN_VALUE = "n/a";
+const VSYNC_INTERVAL_MS = 1_000 / 60;
+const UI_SAMPLE_WINDOW_MS = 500;
 
 const parseGpuInfo = (stdout: string) => {
   try {
@@ -85,6 +87,12 @@ const pollGpuStats = async () => {
   useDevStore.getState().setGpuStats(nextStats);
 };
 
+const formatTiming = (value: number | null) =>
+  value === null ? UNKNOWN_VALUE : `${value.toFixed(1)} ms`;
+
+const formatCount = (value: number | null) =>
+  value === null ? UNKNOWN_VALUE : `${value}`;
+
 const DevelopmentOverlay = ({
   canvasRef,
   totalVideoCount,
@@ -97,6 +105,15 @@ const DevelopmentOverlay = ({
     gpuUsage,
     gpuName,
     vramUsage,
+    cpuFrameTimeMs,
+    gpuFrameTimeMs,
+    uiThreadTimeMs,
+    renderThreadTimeMs,
+    compositorTimeMs,
+    swapPresentTimeMs,
+    framesQueued,
+    framesDropped,
+    framesMissedVsync,
   } = useDevStore();
 
   useEffect(() => {
@@ -107,32 +124,54 @@ const DevelopmentOverlay = ({
 
     let animationFrameId = 0;
     let frames = 0;
-    let lastTime = performance.now();
+    let missedVsync = 0;
+    let uiThreadTotalMs = 0;
+    let lastWindowStartedAt = performance.now();
+    let lastFrameAt = lastWindowStartedAt;
 
     function rafLoop(now: number) {
+      const callbackStartedAt = performance.now();
+      const frameDelta = now - lastFrameAt;
+      lastFrameAt = now;
       frames++;
-      const delta = now - lastTime;
+      missedVsync += Math.max(
+        0,
+        Math.round(frameDelta / VSYNC_INTERVAL_MS) - 1,
+      );
+      const elapsedSinceWindowStart = now - lastWindowStartedAt;
+      let nextActiveVideoCount = 0;
 
-      if (delta >= 500) {
+      if (elapsedSinceWindowStart >= UI_SAMPLE_WINDOW_MS) {
         const videoElements =
           canvasRef.current?.querySelectorAll<HTMLVideoElement>(
             "video.media-content",
           ) ?? [];
-        const activeVideoCount = Array.from(videoElements).filter(
+        nextActiveVideoCount = Array.from(videoElements).filter(
           (video) => !video.paused && !video.ended && video.readyState > 2,
         ).length;
+      }
 
+      uiThreadTotalMs += performance.now() - callbackStartedAt;
+
+      if (elapsedSinceWindowStart >= UI_SAMPLE_WINDOW_MS) {
         useDevStore.getState().setFrameStats({
-          fps: Math.round((frames / delta) * 1000),
-          frameTimeMs: Number((delta / frames).toFixed(1)),
+          fps: Math.round((frames / elapsedSinceWindowStart) * 1000),
+          frameTimeMs: Number((elapsedSinceWindowStart / frames).toFixed(1)),
         });
         useDevStore.getState().setVideoStats({
-          activeVideoCount,
+          activeVideoCount: nextActiveVideoCount,
           totalVideoCount,
+        });
+        useDevStore.getState().setPipelineStats({
+          cpuFrameTimeMs: Number((elapsedSinceWindowStart / frames).toFixed(1)),
+          uiThreadTimeMs: Number((uiThreadTotalMs / frames).toFixed(1)),
+          framesMissedVsync: missedVsync,
         });
 
         frames = 0;
-        lastTime = now;
+        missedVsync = 0;
+        uiThreadTotalMs = 0;
+        lastWindowStartedAt = now;
       }
 
       animationFrameId = requestAnimationFrame(rafLoop);
@@ -167,6 +206,42 @@ const DevelopmentOverlay = ({
       <div>
         <span>Frame time (ms)</span>
         <strong>{frameTimeMs}</strong>
+      </div>
+      <div>
+        <span>CPU frame time</span>
+        <strong>{formatTiming(cpuFrameTimeMs)}</strong>
+      </div>
+      <div>
+        <span>GPU frame time</span>
+        <strong>{formatTiming(gpuFrameTimeMs)}</strong>
+      </div>
+      <div>
+        <span>UI thread time</span>
+        <strong>{formatTiming(uiThreadTimeMs)}</strong>
+      </div>
+      <div>
+        <span>Render thread time</span>
+        <strong>{formatTiming(renderThreadTimeMs)}</strong>
+      </div>
+      <div>
+        <span>Compositor time</span>
+        <strong>{formatTiming(compositorTimeMs)}</strong>
+      </div>
+      <div>
+        <span>Swap/present time</span>
+        <strong>{formatTiming(swapPresentTimeMs)}</strong>
+      </div>
+      <div>
+        <span>Frames queued</span>
+        <strong>{formatCount(framesQueued)}</strong>
+      </div>
+      <div>
+        <span>Frames dropped</span>
+        <strong>{formatCount(framesDropped)}</strong>
+      </div>
+      <div>
+        <span>Frames missed vsync</span>
+        <strong>{formatCount(framesMissedVsync)}</strong>
       </div>
       <div>
         <span>Video count</span>

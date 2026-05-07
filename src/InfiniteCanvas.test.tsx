@@ -40,6 +40,15 @@ describe("Settings and persistence", () => {
     expect(screen.getByLabelText("Development stats")).toBeInTheDocument();
     expect(screen.getByText("FPS")).toBeInTheDocument();
     expect(screen.getByText("Frame time (ms)")).toBeInTheDocument();
+    expect(screen.getByText("CPU frame time")).toBeInTheDocument();
+    expect(screen.getByText("GPU frame time")).toBeInTheDocument();
+    expect(screen.getByText("UI thread time")).toBeInTheDocument();
+    expect(screen.getByText("Render thread time")).toBeInTheDocument();
+    expect(screen.getByText("Compositor time")).toBeInTheDocument();
+    expect(screen.getByText("Swap/present time")).toBeInTheDocument();
+    expect(screen.getByText("Frames queued")).toBeInTheDocument();
+    expect(screen.getByText("Frames dropped")).toBeInTheDocument();
+    expect(screen.getByText("Frames missed vsync")).toBeInTheDocument();
     expect(screen.getByText("Video count")).toBeInTheDocument();
   });
 
@@ -91,6 +100,46 @@ describe("Settings and persistence", () => {
     expect(
       screen.queryByLabelText("Development stats"),
     ).not.toBeInTheDocument();
+  });
+
+  it("renders populated advanced development metrics", async () => {
+    renderCanvas();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /open settings/i }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("tab", { name: "Debug" }));
+    });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("switch", { name: /development mode/i }),
+      );
+    });
+
+    act(() => {
+      useDevStore.getState().setPipelineStats({
+        cpuFrameTimeMs: 12.3,
+        gpuFrameTimeMs: 4.6,
+        uiThreadTimeMs: 2.1,
+        renderThreadTimeMs: 5.4,
+        compositorTimeMs: 3.8,
+        swapPresentTimeMs: 8.9,
+        framesQueued: 2,
+        framesDropped: 1,
+        framesMissedVsync: 3,
+      });
+    });
+
+    expect(screen.getByText("12.3 ms")).toBeInTheDocument();
+    expect(screen.getByText("4.6 ms")).toBeInTheDocument();
+    expect(screen.getByText("2.1 ms")).toBeInTheDocument();
+    expect(screen.getByText("5.4 ms")).toBeInTheDocument();
+    expect(screen.getByText("3.8 ms")).toBeInTheDocument();
+    expect(screen.getByText("8.9 ms")).toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
   });
 
   it("chooses a screenshot directory from general settings", async () => {

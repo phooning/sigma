@@ -16,19 +16,33 @@ type VideoStats = {
   totalVideoCount: number;
 };
 
+type PipelineStats = {
+  cpuFrameTimeMs: number | null;
+  gpuFrameTimeMs: number | null;
+  uiThreadTimeMs: number | null;
+  renderThreadTimeMs: number | null;
+  compositorTimeMs: number | null;
+  swapPresentTimeMs: number | null;
+  framesQueued: number | null;
+  framesDropped: number | null;
+  framesMissedVsync: number | null;
+};
+
 type DevStore = FrameStats &
   VideoStats &
-  GpuStats & {
+  GpuStats &
+  PipelineStats & {
     devMode: boolean;
     toggleDevMode: () => void;
     setDevMode: (devMode: boolean) => void;
     setFrameStats: (stats: FrameStats) => void;
     setVideoStats: (stats: VideoStats) => void;
     setGpuStats: (stats: GpuStats) => void;
+    setPipelineStats: (stats: Partial<PipelineStats>) => void;
     resetStats: () => void;
   };
 
-const initialStats: FrameStats & VideoStats & GpuStats = {
+const initialStats: FrameStats & VideoStats & GpuStats & PipelineStats = {
   fps: 0,
   frameTimeMs: 0,
   activeVideoCount: 0,
@@ -36,6 +50,15 @@ const initialStats: FrameStats & VideoStats & GpuStats = {
   gpuUsage: "n/a",
   gpuName: "n/a",
   vramUsage: "n/a",
+  cpuFrameTimeMs: null,
+  gpuFrameTimeMs: null,
+  uiThreadTimeMs: null,
+  renderThreadTimeMs: null,
+  compositorTimeMs: null,
+  swapPresentTimeMs: null,
+  framesQueued: null,
+  framesDropped: null,
+  framesMissedVsync: null,
 };
 
 export const useDevStore = create<DevStore>((set) => ({
@@ -46,5 +69,6 @@ export const useDevStore = create<DevStore>((set) => ({
   setFrameStats: (stats) => set(stats),
   setVideoStats: (stats) => set(stats),
   setGpuStats: (stats) => set(stats),
+  setPipelineStats: (stats) => set(stats),
   resetStats: () => set({ devMode: false, ...initialStats }),
 }));

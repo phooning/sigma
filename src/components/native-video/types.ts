@@ -50,6 +50,22 @@ export type NativeControllerSnapshot = {
   allocations: NativeVideoAllocation[];
 };
 
+export type NativeVideoFrontendMetrics = {
+  renderer: string;
+  canvasWidth: number;
+  canvasHeight: number;
+  uploadLatencyP95Ms: number;
+  compositeLatencyP95Ms: number;
+  renderThreadTimeP95Ms: number;
+  gpuFrameTimeP95Ms: number | null;
+  swapPresentTimeP95Ms: number;
+  frameDropRate: number;
+  framesQueued: number;
+  framesDropped: number;
+  framesMissedVsync: number;
+  measuredIpcBytesPerSec: number;
+};
+
 export type NativeVideoSurfaceProps = {
   items: MediaItem[];
   viewport: Viewport;
