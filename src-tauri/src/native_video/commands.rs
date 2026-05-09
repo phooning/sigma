@@ -39,6 +39,7 @@ pub async fn native_video_update_manifest(
     state: State<'_, NativeVideoState>,
     manifest: CanvasManifest,
 ) -> Result<ControllerSnapshot, String> {
+    let started_at = Instant::now();
     let (respond_to, response) = oneshot::channel();
     state
         .control_tx
@@ -49,9 +50,15 @@ pub async fn native_video_update_manifest(
         .await
         .map_err(|_| "native video controller is not running".to_string())?;
 
-    response
+    let snapshot = response
         .await
-        .map_err(|_| "native video controller dropped the manifest response".to_string())
+        .map_err(|_| "native video controller dropped the manifest response".to_string())?;
+    let rust_backend_frame_update_time_ms = started_at.elapsed().as_secs_f64() * 1_000.0;
+    update_telemetry(&state.telemetry, &state.telemetry_tx, |telemetry| {
+        telemetry.rust_backend_frame_update_time_ms = Some(rust_backend_frame_update_time_ms);
+    });
+
+    Ok(snapshot)
 }
 
 #[tauri::command]
@@ -91,6 +98,15 @@ pub fn native_video_subscribe_telemetry(
     state: State<'_, NativeVideoState>,
     on_event: Channel<TelemetrySnapshot>,
 ) -> Result<(), String> {
+    let initial_snapshot = state
+        .telemetry
+        .lock()
+        .map_err(|_| "native video telemetry lock poisoned".to_string())?
+        .clone();
+    on_event
+        .send(initial_snapshot)
+        .map_err(|_| "native video telemetry subscriber dropped".to_string())?;
+
     let mut rx = state.telemetry_tx.subscribe();
 
     tauri::async_runtime::spawn(async move {
@@ -109,6 +125,13 @@ pub async fn native_video_record_frontend_metrics(
     state: State<'_, NativeVideoState>,
     metrics: FrontendMetrics,
 ) -> Result<PerformanceProfile, String> {
+    let serde_started_at = Instant::now();
+    let serialized_metrics = serde_json::to_vec(&metrics)
+        .map_err(|err| format!("failed to serialize frontend metrics: {err}"))?;
+    let _roundtripped_metrics: FrontendMetrics = serde_json::from_slice(&serialized_metrics)
+        .map_err(|err| format!("failed to deserialize frontend metrics: {err}"))?;
+    let serialization_deserialization_time_ms = serde_started_at.elapsed().as_secs_f64() * 1_000.0;
+
     let mut profile = state
         .profile
         .lock()
@@ -142,6 +165,10 @@ pub async fn native_video_record_frontend_metrics(
 
     update_telemetry(&state.telemetry, &state.telemetry_tx, |snapshot| {
         snapshot.safe_budget_bytes_per_sec = profile.safe_budget_bytes_per_sec;
+        snapshot.webview_js_frame_time_ms = metrics.webview_js_frame_time_ms;
+        snapshot.ipc_roundtrip_time_ms = metrics.ipc_roundtrip_time_ms;
+        snapshot.serialization_deserialization_time_ms =
+            Some(serialization_deserialization_time_ms);
     });
 
     Ok(profile)

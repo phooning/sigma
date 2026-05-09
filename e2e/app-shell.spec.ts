@@ -51,6 +51,8 @@ test("shows the development overlay when debug mode is enabled", async ({
 
   await expect(page.getByLabel("Development stats")).toBeVisible();
   await expect(page.getByText("FPS")).toBeVisible();
+  await expect(page.getByText("CPU frame time")).toBeVisible();
+  await expect(page.getByText("Rust backend frame/update time")).toBeVisible();
   await expect(page.getByText("GPU usage")).toBeVisible();
 });
 

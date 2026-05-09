@@ -103,3 +103,15 @@
     bottom: var(--space-3);
   }
 }
+
+.resize-handle {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+  cursor: nwse-resize;
+}
+
+.media-item:hover .resize-handle {
+  opacity: 1;
+  pointer-events: auto;
+}

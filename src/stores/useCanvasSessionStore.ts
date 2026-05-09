@@ -1,10 +1,12 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { loadFromStorage, saveToStorage } from "../utils/fs";
+import { loadFromStorage, saveToStorage, saveToStorageAs } from "../utils/fs";
 import type { MediaItem, Viewport } from "../utils/media.types";
 import { notify } from "../utils/notifications";
 import { markPerformance } from "../utils/performance";
+import { useDevStore } from "./useDevStore";
+import { getSessionSettings, useSettingsStore } from "./useSettingsStore";
 
 const SESSION_STORAGE_KEY = "sigma:canvas-session";
 
@@ -13,6 +15,9 @@ export const INITIAL_VIEWPORT: Viewport = { x: 0, y: 0, zoom: 1 };
 type CanvasSessionSnapshot = {
   items: MediaItem[];
   viewport: Viewport;
+  saveFilePath: string | null;
+  lastSavedSignature: string | null;
+  isDirty: boolean;
 };
 
 type CanvasSessionStore = CanvasSessionSnapshot & {
@@ -22,9 +27,37 @@ type CanvasSessionStore = CanvasSessionSnapshot & {
   setViewport: (
     value: Viewport | ((prevViewport: Viewport) => Viewport),
   ) => void;
+  refreshDirtyState: () => void;
   replaceSession: (snapshot: Partial<CanvasSessionSnapshot>) => void;
   saveSessionToFile: () => Promise<void>;
+  saveSessionToNewFile: () => Promise<void>;
   loadSessionFromFile: () => Promise<boolean>;
+};
+
+const getDirtySignature = (
+  items: MediaItem[],
+  settings = getSessionSettings(),
+  devMode = useDevStore.getState().devMode,
+) =>
+  JSON.stringify({
+    items,
+    settings,
+    devMode,
+  });
+
+const resolveDirtyState = ({
+  items,
+  saveFilePath,
+  lastSavedSignature,
+}: Pick<
+  CanvasSessionSnapshot,
+  "items" | "saveFilePath" | "lastSavedSignature"
+>) => {
+  if (lastSavedSignature !== null && saveFilePath !== null) {
+    return getDirtySignature(items) !== lastSavedSignature;
+  }
+
+  return getDirtySignature(items) !== getDirtySignature([]);
 };
 
 const resolveStateUpdate = <T>(value: T | ((prevState: T) => T), prev: T): T =>
@@ -96,22 +129,78 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
     (set, get) => ({
       items: [],
       viewport: INITIAL_VIEWPORT,
-      setItems: (value) =>
-        set((state) => ({
-          items: normalizeItems(resolveStateUpdate(value, state.items)),
-        })),
+      saveFilePath: null,
+      lastSavedSignature: null,
+      isDirty: false,
       setViewport: (value) =>
+        set((state) => {
+          const viewport = resolveStateUpdate(value, state.viewport);
+          return {
+            viewport,
+            isDirty: resolveDirtyState({
+              items: state.items,
+              saveFilePath: state.saveFilePath,
+              lastSavedSignature: state.lastSavedSignature,
+            }),
+          };
+        }),
+      setItems: (value) =>
+        set((state) => {
+          const items = normalizeItems(resolveStateUpdate(value, state.items));
+          return {
+            items,
+            isDirty: resolveDirtyState({
+              items,
+              saveFilePath: state.saveFilePath,
+              lastSavedSignature: state.lastSavedSignature,
+            }),
+          };
+        }),
+      refreshDirtyState: () =>
         set((state) => ({
-          viewport: resolveStateUpdate(value, state.viewport),
+          isDirty: resolveDirtyState({
+            items: state.items,
+            saveFilePath: state.saveFilePath,
+            lastSavedSignature: state.lastSavedSignature,
+          }),
         })),
       replaceSession: (snapshot) =>
-        set((state) => ({
-          items: normalizeItems(snapshot.items ?? state.items),
-          viewport: snapshot.viewport ?? state.viewport,
-        })),
+        set((state) => {
+          const items = normalizeItems(snapshot.items ?? state.items);
+          const viewport = snapshot.viewport ?? state.viewport;
+          const saveFilePath =
+            snapshot.saveFilePath === undefined
+              ? state.saveFilePath
+              : snapshot.saveFilePath;
+          const lastSavedSignature =
+            snapshot.lastSavedSignature === undefined
+              ? state.lastSavedSignature
+              : snapshot.lastSavedSignature;
+          return {
+            items,
+            viewport,
+            saveFilePath,
+            lastSavedSignature,
+            isDirty: resolveDirtyState({
+              items,
+              saveFilePath,
+              lastSavedSignature,
+            }),
+          };
+        }),
       saveSessionToFile: async () => {
-        const { items, viewport } = get();
-        const result = await saveToStorage(items, viewport);
+        const { items, viewport, saveFilePath, isDirty } = get();
+        if (!saveFilePath || !isDirty) {
+          return;
+        }
+
+        const result = await saveToStorage(
+          items,
+          viewport,
+          saveFilePath,
+          getSessionSettings(),
+          useDevStore.getState().devMode,
+        );
 
         if (!result.ok) {
           if (result.reason === "cancelled") return;
@@ -128,6 +217,45 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
           return;
         }
 
+        set({
+          saveFilePath: result.filePath,
+          lastSavedSignature: getDirtySignature(items),
+          isDirty: false,
+        });
+        notify.success("Save completed", {
+          description: "Config saved successfully.",
+        });
+      },
+      saveSessionToNewFile: async () => {
+        const { items, viewport, saveFilePath } = get();
+        const result = await saveToStorageAs(
+          items,
+          viewport,
+          saveFilePath ?? "canvas.json",
+          getSessionSettings(),
+          useDevStore.getState().devMode,
+        );
+
+        if (!result.ok) {
+          if (result.reason === "cancelled") return;
+
+          const text =
+            result.error instanceof Error
+              ? result.error.message
+              : "Unknown error while saving.";
+
+          console.error("Failed to save config:", result.error);
+          notify.error("Save failed", {
+            description: text,
+          });
+          return;
+        }
+
+        set({
+          saveFilePath: result.filePath,
+          lastSavedSignature: getDirtySignature(items),
+          isDirty: false,
+        });
         notify.success("Save completed", {
           description: "Config saved successfully.",
         });
@@ -151,9 +279,25 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
           return false;
         }
 
+        const nextViewport = result.data.viewport ?? INITIAL_VIEWPORT;
+        const nextSettings = result.data.settings ?? {
+          screenshotDirectory: "",
+          canvasBackgroundPattern: "dots" as const,
+        };
+        const nextDevMode = result.data.devMode ?? false;
+
+        useSettingsStore.getState().replaceSessionSettings(nextSettings);
+        useDevStore.getState().setDevMode(nextDevMode);
+
         get().replaceSession({
+          saveFilePath: result.filePath,
+          lastSavedSignature: getDirtySignature(
+            result.data.items,
+            nextSettings,
+            nextDevMode,
+          ),
           items: result.data.items,
-          viewport: result.data.viewport ?? INITIAL_VIEWPORT,
+          viewport: nextViewport,
         });
         return true;
       },
@@ -164,13 +308,28 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
       partialize: (state) => ({
         items: state.items,
         viewport: state.viewport,
+        saveFilePath: state.saveFilePath,
+        lastSavedSignature: state.lastSavedSignature,
       }),
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Partial<CanvasSessionSnapshot>;
+        const items = normalizeItems(persisted.items ?? currentState.items);
+        const viewport = persisted.viewport ?? currentState.viewport;
+        const saveFilePath =
+          persisted.saveFilePath ?? currentState.saveFilePath;
+        const lastSavedSignature =
+          persisted.lastSavedSignature ?? currentState.lastSavedSignature;
         return {
           ...currentState,
-          items: normalizeItems(persisted.items ?? currentState.items),
-          viewport: persisted.viewport ?? currentState.viewport,
+          items,
+          viewport,
+          saveFilePath,
+          lastSavedSignature,
+          isDirty: resolveDirtyState({
+            items,
+            saveFilePath,
+            lastSavedSignature,
+          }),
         };
       },
     },

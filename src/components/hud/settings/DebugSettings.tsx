@@ -22,7 +22,8 @@ export function DebugSettings({
         <FieldContent>
           <FieldLabel htmlFor="development-mode">Development Mode</FieldLabel>
           <FieldDescription>
-            Show development diagnostics while working on the canvas.
+            Show development diagnostics while working on the canvas. Hotkey:
+            F1.
           </FieldDescription>
         </FieldContent>
         <Switch

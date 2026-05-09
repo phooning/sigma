@@ -36,7 +36,15 @@ pub struct FrontendMetrics {
     pub canvas_height: u32,
     pub upload_latency_p95_ms: f64,
     pub composite_latency_p95_ms: f64,
+    pub render_thread_time_p95_ms: f64,
+    pub gpu_frame_time_p95_ms: Option<f64>,
+    pub swap_present_time_p95_ms: f64,
     pub frame_drop_rate: f64,
+    pub frames_queued: usize,
+    pub frames_dropped: u64,
+    pub frames_missed_vsync: u64,
+    pub webview_js_frame_time_ms: Option<f64>,
+    pub ipc_roundtrip_time_ms: Option<f64>,
     pub measured_ipc_bytes_per_sec: u64,
 }
 

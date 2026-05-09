@@ -50,6 +50,31 @@ export type NativeControllerSnapshot = {
   allocations: NativeVideoAllocation[];
 };
 
+export type NativeVideoFrontendMetrics = {
+  renderer: string;
+  canvasWidth: number;
+  canvasHeight: number;
+  uploadLatencyP95Ms: number;
+  compositeLatencyP95Ms: number;
+  renderThreadTimeP95Ms: number;
+  gpuFrameTimeP95Ms: number | null;
+  swapPresentTimeP95Ms: number;
+  frameDropRate: number;
+  framesQueued: number;
+  framesDropped: number;
+  framesMissedVsync: number;
+  webviewJsFrameTimeMs: number | null;
+  ipcRoundtripTimeMs: number | null;
+  measuredIpcBytesPerSec: number;
+};
+
+export type NativeVideoTelemetrySnapshot = {
+  rustBackendFrameUpdateTimeMs: number | null;
+  webviewJsFrameTimeMs: number | null;
+  ipcRoundtripTimeMs: number | null;
+  serializationDeserializationTimeMs: number | null;
+};
+
 export type NativeVideoSurfaceProps = {
   items: MediaItem[];
   viewport: Viewport;

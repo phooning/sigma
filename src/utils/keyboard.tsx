@@ -5,6 +5,7 @@ import type { MediaItem } from "./media.types";
 type CanvasHotkeyConfig = {
   containerRef: React.RefObject<HTMLDivElement | null>;
   getItems: () => MediaItem[];
+  onToggleDevMode: () => void;
   selectedItemsRef: React.RefObject<Set<string>>;
   onSave: () => void | Promise<void>;
   setItems: React.Dispatch<React.SetStateAction<MediaItem[]>>;
@@ -26,6 +27,7 @@ export function useCanvasHotkeys(config: CanvasHotkeyConfig) {
       containerRef,
       getItems,
       onSave,
+      onToggleDevMode,
       selectedItemsRef,
       setItems,
       setSelectedItems,
@@ -88,6 +90,12 @@ export function useCanvasHotkeys(config: CanvasHotkeyConfig) {
     if (isSave) {
       event.preventDefault();
       onSave();
+      return;
+    }
+
+    if (event.key === "F1") {
+      event.preventDefault();
+      onToggleDevMode();
       return;
     }
 

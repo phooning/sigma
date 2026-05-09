@@ -1,4 +1,5 @@
 /// <reference types="@webgpu/types" />
+import type { NativeVideoFrontendMetrics } from "../components/native-video/types";
 
 type NativeVisibleAsset = {
   id: string;
@@ -61,15 +62,9 @@ type Frame = {
   presented: boolean;
 };
 
-type Metrics = {
-  renderer: string;
-  canvasWidth: number;
-  canvasHeight: number;
-  uploadLatencyP95Ms: number;
-  compositeLatencyP95Ms: number;
-  frameDropRate: number;
-  measuredIpcBytesPerSec: number;
-};
+type Metrics = NativeVideoFrontendMetrics;
+
+const VSYNC_INTERVAL_MS = 1_000 / 60;
 
 const FRAME_PACKET_HEADER_LEN = 64;
 const FRAME_PACKET_MAGIC = "SVF1";
@@ -77,11 +72,19 @@ const PIXEL_FORMAT_YUV420 = 2;
 
 const metricsWindow = {
   uploadLatencyMs: [] as number[],
+  gpuFrameTimeMs: [] as number[],
   compositeLatencyMs: [] as number[],
+  renderThreadTimeMs: [] as number[],
+  swapPresentTimeMs: [] as number[],
   receivedFrames: 0,
   droppedFrames: 0,
   receivedBytes: 0,
+  missedVsync: 0,
+  maxQueuedFrames: 0,
+  gpuSamplePending: false,
   startedAt: performance.now(),
+  lastRenderAt: 0,
+  lastRenderEndedAt: null as number | null,
 };
 
 let renderer: Renderer | null = null;
@@ -96,6 +99,7 @@ interface Renderer {
   readonly name: string;
   resize(width: number, height: number, ratio: number): void;
   render(frames: Map<string, Frame>, layouts: Map<string, Layout>): void;
+  sampleGpuFrameTime?(): Promise<number> | null;
 }
 
 self.onmessage = (event: MessageEvent<WorkerMessage>) => {
@@ -182,12 +186,46 @@ function ingestFrame(packet: ArrayBuffer) {
 }
 
 function renderLoop() {
+  const loopStartedAt = performance.now();
+  if (metricsWindow.lastRenderAt > 0) {
+    metricsWindow.missedVsync += estimateMissedVsync(
+      loopStartedAt - metricsWindow.lastRenderAt,
+    );
+  }
+  if (metricsWindow.lastRenderEndedAt !== null) {
+    metricsWindow.swapPresentTimeMs.push(
+      loopStartedAt - metricsWindow.lastRenderEndedAt,
+    );
+  }
+  metricsWindow.lastRenderAt = loopStartedAt;
+
   if (renderer) {
     const started = performance.now();
     renderer.render(frames, layouts);
-    metricsWindow.compositeLatencyMs.push(performance.now() - started);
+    const renderCompletedAt = performance.now();
+    metricsWindow.compositeLatencyMs.push(renderCompletedAt - started);
+    metricsWindow.lastRenderEndedAt = renderCompletedAt;
+    if (!metricsWindow.gpuSamplePending) {
+      const gpuFrameTimeSample = renderer.sampleGpuFrameTime?.();
+      if (gpuFrameTimeSample) {
+        metricsWindow.gpuSamplePending = true;
+        void gpuFrameTimeSample
+          .then((duration) => {
+            metricsWindow.gpuFrameTimeMs.push(duration);
+          })
+          .catch(() => {})
+          .finally(() => {
+            metricsWindow.gpuSamplePending = false;
+          });
+      }
+    }
   }
 
+  metricsWindow.renderThreadTimeMs.push(performance.now() - loopStartedAt);
+  metricsWindow.maxQueuedFrames = Math.max(
+    metricsWindow.maxQueuedFrames,
+    countQueuedFrames(),
+  );
   maybePostMetrics();
   requestAnimationFrame(renderLoop);
 }
@@ -556,6 +594,13 @@ class WebGpuRenderer implements Renderer {
 
     pass.end();
     this.device.queue.submit([encoder.finish()]);
+  }
+
+  sampleGpuFrameTime() {
+    const startedAt = performance.now();
+    return this.device.queue
+      .onSubmittedWorkDone()
+      .then(() => performance.now() - startedAt);
   }
 
   private uploadYuvFrame(
@@ -931,8 +976,19 @@ function maybePostMetrics() {
     canvasWidth,
     canvasHeight,
     uploadLatencyP95Ms: percentile(metricsWindow.uploadLatencyMs, 0.95),
+    gpuFrameTimeP95Ms:
+      metricsWindow.gpuFrameTimeMs.length > 0
+        ? percentile(metricsWindow.gpuFrameTimeMs, 0.95)
+        : null,
     compositeLatencyP95Ms: percentile(metricsWindow.compositeLatencyMs, 0.95),
+    renderThreadTimeP95Ms: percentile(metricsWindow.renderThreadTimeMs, 0.95),
+    swapPresentTimeP95Ms: percentile(metricsWindow.swapPresentTimeMs, 0.95),
     frameDropRate: totalFrames === 0 ? 0 : droppedFrames / totalFrames,
+    framesQueued: metricsWindow.maxQueuedFrames,
+    framesDropped: droppedFrames,
+    framesMissedVsync: metricsWindow.missedVsync,
+    webviewJsFrameTimeMs: null,
+    ipcRoundtripTimeMs: null,
     measuredIpcBytesPerSec:
       elapsedMs > 0
         ? Math.round((metricsWindow.receivedBytes / elapsedMs) * 1_000)
@@ -940,10 +996,15 @@ function maybePostMetrics() {
   };
 
   metricsWindow.uploadLatencyMs = [];
+  metricsWindow.gpuFrameTimeMs = [];
   metricsWindow.compositeLatencyMs = [];
+  metricsWindow.renderThreadTimeMs = [];
+  metricsWindow.swapPresentTimeMs = [];
   metricsWindow.receivedFrames = 0;
   metricsWindow.droppedFrames = 0;
   metricsWindow.receivedBytes = 0;
+  metricsWindow.missedVsync = 0;
+  metricsWindow.maxQueuedFrames = 0;
   metricsWindow.startedAt = now;
   self.postMessage({ type: "metrics", metrics });
 }
@@ -972,6 +1033,22 @@ function stableStreamId(value: string) {
   return hash.toString();
 }
 
+function countQueuedFrames() {
+  let queued = 0;
+
+  for (const [streamId, frame] of frames) {
+    if (activeAssets.has(streamId) && !frame.presented) {
+      queued += 1;
+    }
+  }
+
+  return queued;
+}
+
+function estimateMissedVsync(frameDeltaMs: number) {
+  return Math.max(0, Math.round(frameDeltaMs / VSYNC_INTERVAL_MS) - 1);
+}
+
 function alignTo(value: number, alignment: number) {
   return Math.ceil(value / alignment) * alignment;
 }
@@ -992,5 +1069,3 @@ function padPlaneRows(
   }
   return padded;
 }
-
-export {};

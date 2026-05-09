@@ -32,7 +32,6 @@
   font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .toolbar {
@@ -41,6 +40,12 @@
   justify-content: flex-end;
   gap: var(--space-3);
   min-width: 0;
+}
+
+.hud-btn-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
 }
 
 .video-footer-heading {
@@ -125,6 +130,30 @@
   color: var(--text-strong);
   background: var(--surface-control-hover);
   border-color: var(--input);
+}
+
+.hud-btn-destructive {
+  color: color-mix(in srgb, var(--danger) 88%, white 12%);
+  border-color: color-mix(in srgb, var(--danger) 28%, var(--border));
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface-control));
+}
+
+.hud-btn-destructive:hover:not(:disabled) {
+  color: color-mix(in srgb, var(--danger) 96%, white 4%);
+  background: color-mix(
+    in srgb,
+    var(--danger) 16%,
+    var(--surface-control-hover)
+  );
+  border-color: color-mix(in srgb, var(--danger) 44%, var(--input));
+}
+
+.hud-btn-destructive:active {
+  background: color-mix(
+    in srgb,
+    var(--danger) 20%,
+    var(--surface-control-active)
+  );
 }
 
 .hud-btn:disabled {

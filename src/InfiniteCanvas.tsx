@@ -39,6 +39,7 @@ import type { VideoTimelineController } from "./components/Video.types";
 import { VideoControlFooter } from "./components/VideoControlFooter";
 import { useAudioPlaybackStore } from "./stores/useAudioPlaybackStore";
 import { useCanvasSessionStore } from "./stores/useCanvasSessionStore";
+import { useDevStore } from "./stores/useDevStore";
 import { useInteractionStore } from "./stores/useInteractionStore";
 import { useSettingsStore } from "./stores/useSettingsStore";
 import {
@@ -86,6 +87,15 @@ export default function InfiniteCanvas() {
   const setItems = useCanvasSessionStore((state) => state.setItems);
   const saveSessionToFile = useCanvasSessionStore(
     (state) => state.saveSessionToFile,
+  );
+  const refreshCanvasSaveDirtyState = useCanvasSessionStore(
+    (state) => state.refreshDirtyState,
+  );
+  const canSaveSessionToFile = useCanvasSessionStore(
+    (state) => state.saveFilePath !== null && state.isDirty,
+  );
+  const saveSessionToNewFile = useCanvasSessionStore(
+    (state) => state.saveSessionToNewFile,
   );
   const loadSessionFromFile = useCanvasSessionStore(
     (state) => state.loadSessionFromFile,
@@ -136,6 +146,8 @@ export default function InfiniteCanvas() {
   const clearAllVideoExportState = useVideoExportStore(
     (s) => s.clearAllItemState,
   );
+  const devMode = useDevStore((s) => s.devMode);
+  const settingsDirtyKey = `${canvasBackgroundPattern}:${screenshotDirectory}:${devMode}`;
 
   // Refs mirrored for async callbacks and global pointer gestures.
   const worldRef = useRef<HTMLDivElement>(null);
@@ -177,6 +189,7 @@ export default function InfiniteCanvas() {
     containerRef,
     getItems: () => useCanvasSessionStore.getState().items,
     onSave: saveSessionToFile,
+    onToggleDevMode: useDevStore.getState().toggleDevMode,
     selectedItemsRef,
     setItems,
     setSelectedItems,
@@ -296,6 +309,11 @@ export default function InfiniteCanvas() {
   }, [activeAudioItemId, clearAudioItem, items]);
 
   useEffect(() => {
+    void settingsDirtyKey;
+    refreshCanvasSaveDirtyState();
+  }, [refreshCanvasSaveDirtyState, settingsDirtyKey]);
+
+  useEffect(() => {
     const handleResize = () => {
       setCanvasSize({
         width: window.innerWidth,
@@ -331,6 +349,24 @@ export default function InfiniteCanvas() {
     clearAudioItem();
     clearAllVideoExportState();
   };
+
+  const clearCanvas = useCallback(() => {
+    cancelViewportAnimation();
+    clearTransientItemMotion();
+    setItems([]);
+    setSelectedItems(new Set());
+    clearSelectionBox();
+    useInteractionStore.getState().clearInteractionState();
+    clearAudioItem();
+    clearAllVideoExportState();
+  }, [
+    cancelViewportAnimation,
+    clearAllVideoExportState,
+    clearAudioItem,
+    clearSelectionBox,
+    clearTransientItemMotion,
+    setItems,
+  ]);
 
   const selectActiveAudioItem = useActiveAudioSelection({
     activeAudioItemId,
@@ -1033,7 +1069,10 @@ export default function InfiniteCanvas() {
       <Hud
         items={items}
         saveConfig={saveSessionToFile}
+        canSaveConfig={canSaveSessionToFile}
+        saveAsConfig={saveSessionToNewFile}
         loadConfig={loadConfig}
+        clearCanvas={clearCanvas}
         settingsMenuItems={SETTINGS_MENU_ITEMS}
         settingsVersion={appVersion}
         selectedVideoExportItem={selectedVideoExportItem}

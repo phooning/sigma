@@ -16,18 +16,37 @@ type VideoStats = {
   totalVideoCount: number;
 };
 
+type PipelineStats = {
+  cpuFrameTimeMs: number | null;
+  gpuFrameTimeMs: number | null;
+  uiThreadTimeMs: number | null;
+  renderThreadTimeMs: number | null;
+  compositorTimeMs: number | null;
+  swapPresentTimeMs: number | null;
+  framesQueued: number | null;
+  framesDropped: number | null;
+  framesMissedVsync: number | null;
+  rustBackendFrameUpdateTimeMs: number | null;
+  webviewJsFrameTimeMs: number | null;
+  ipcRoundtripTimeMs: number | null;
+  serializationDeserializationTimeMs: number | null;
+};
+
 type DevStore = FrameStats &
   VideoStats &
-  GpuStats & {
+  GpuStats &
+  PipelineStats & {
     devMode: boolean;
     toggleDevMode: () => void;
+    setDevMode: (devMode: boolean) => void;
     setFrameStats: (stats: FrameStats) => void;
     setVideoStats: (stats: VideoStats) => void;
     setGpuStats: (stats: GpuStats) => void;
+    setPipelineStats: (stats: Partial<PipelineStats>) => void;
     resetStats: () => void;
   };
 
-const initialStats: FrameStats & VideoStats & GpuStats = {
+const initialStats: FrameStats & VideoStats & GpuStats & PipelineStats = {
   fps: 0,
   frameTimeMs: 0,
   activeVideoCount: 0,
@@ -35,14 +54,29 @@ const initialStats: FrameStats & VideoStats & GpuStats = {
   gpuUsage: "n/a",
   gpuName: "n/a",
   vramUsage: "n/a",
+  cpuFrameTimeMs: null,
+  gpuFrameTimeMs: null,
+  uiThreadTimeMs: null,
+  renderThreadTimeMs: null,
+  compositorTimeMs: null,
+  swapPresentTimeMs: null,
+  framesQueued: null,
+  framesDropped: null,
+  framesMissedVsync: null,
+  rustBackendFrameUpdateTimeMs: null,
+  webviewJsFrameTimeMs: null,
+  ipcRoundtripTimeMs: null,
+  serializationDeserializationTimeMs: null,
 };
 
 export const useDevStore = create<DevStore>((set) => ({
   devMode: false,
   ...initialStats,
   toggleDevMode: () => set((state) => ({ devMode: !state.devMode })),
+  setDevMode: (devMode) => set({ devMode }),
   setFrameStats: (stats) => set(stats),
   setVideoStats: (stats) => set(stats),
   setGpuStats: (stats) => set(stats),
-  resetStats: () => set(initialStats),
+  setPipelineStats: (stats) => set(stats),
+  resetStats: () => set({ devMode: false, ...initialStats }),
 }));

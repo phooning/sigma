@@ -461,7 +461,6 @@ describe("InfiniteCanvas media item interactions", () => {
       fireEvent.pointerUp(videoItem, { pointerId: 41, button: 0 });
     });
 
-    expect(screen.getByText("Selected Video")).toBeInTheDocument();
     expect(
       screen.getByText("generated-lod-test-1080p.mp4"),
     ).toBeInTheDocument();
@@ -477,7 +476,6 @@ describe("InfiniteCanvas media item interactions", () => {
       fireEvent.pointerUp(imageItem, { pointerId: 42, button: 0 });
     });
 
-    expect(screen.queryByText("Selected Video")).not.toBeInTheDocument();
     expect(
       document.querySelector(".ui-overlay-footer"),
     ).not.toBeInTheDocument();

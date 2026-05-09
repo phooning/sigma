@@ -21,7 +21,6 @@ export function VideoControlFooter({
   return (
     <div className="ui-overlay ui-overlay-footer">
       <div className="video-footer-heading">
-        <div className="hud-title">Selected Video</div>
         <span className="item-count">{selectedVideoName}</span>
       </div>
 

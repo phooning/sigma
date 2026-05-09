@@ -1,6 +1,7 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import type { SessionSettings } from "../stores/useSettingsStore";
 import type { MediaItem, Viewport } from "./media.types";
 import { notify } from "./notifications";
 
@@ -9,11 +10,20 @@ type TErrorReason = "cancelled" | "invalid" | "error";
 type StoredMediaItem = Omit<MediaItem, "url"> & { url?: string };
 
 type TLoadResult =
-  | { ok: true; data: { items: MediaItem[]; viewport: Viewport } }
+  | {
+      ok: true;
+      filePath: string;
+      data: {
+        items: MediaItem[];
+        viewport: Viewport;
+        settings?: SessionSettings;
+        devMode?: boolean;
+      };
+    }
   | { ok: false; reason: TErrorReason; error?: unknown };
 
 type TSaveResult =
-  | { ok: true }
+  | { ok: true; filePath: string }
   | { ok: false; reason: TErrorReason; error?: unknown };
 
 type ParsedPath = {
@@ -223,14 +233,69 @@ const hydrateItemFromStorage = (
   url: "",
 });
 
+export const getCanvasConfigData = (
+  items: MediaItem[],
+  viewport: Viewport,
+  filePath: string,
+  sessionSettings?: SessionSettings,
+  devMode?: boolean,
+) => {
+  const projectRoot = getProjectRootForConfig(filePath);
+
+  return JSON.stringify({
+    items: items.map((item) => serializeItemForStorage(item, projectRoot)),
+    viewport,
+    ...(sessionSettings ? { settings: sessionSettings } : {}),
+    ...(typeof devMode === "boolean" ? { devMode } : {}),
+  });
+};
+
+const writeCanvasConfig = async (
+  items: MediaItem[],
+  viewport: Viewport,
+  filePath: string,
+  sessionSettings?: SessionSettings,
+  devMode?: boolean,
+): Promise<TSaveResult> => {
+  try {
+    const configData = getCanvasConfigData(
+      items,
+      viewport,
+      filePath,
+      sessionSettings,
+      devMode,
+    );
+
+    await writeTextFile(filePath, configData);
+
+    return { ok: true, filePath };
+  } catch (err) {
+    console.error("Failed to save:", err);
+    return { ok: false, reason: "error", error: err };
+  }
+};
+
 export const saveToStorage = async (
   items: MediaItem[],
   viewport: Viewport,
+  filePath: string,
+  sessionSettings?: SessionSettings,
+  devMode?: boolean,
+): Promise<TSaveResult> => {
+  return writeCanvasConfig(items, viewport, filePath, sessionSettings, devMode);
+};
+
+export const saveToStorageAs = async (
+  items: MediaItem[],
+  viewport: Viewport,
+  defaultPath = "canvas.json",
+  sessionSettings?: SessionSettings,
+  devMode?: boolean,
 ): Promise<TSaveResult> => {
   try {
     const filePath = await save({
       title: "Save canvas",
-      defaultPath: "canvas.json",
+      defaultPath,
       filters: [
         {
           name: "Canvas Config",
@@ -243,15 +308,13 @@ export const saveToStorage = async (
       return { ok: false, reason: "cancelled" };
     }
 
-    const projectRoot = getProjectRootForConfig(filePath);
-    const configData = JSON.stringify({
-      items: items.map((item) => serializeItemForStorage(item, projectRoot)),
+    return writeCanvasConfig(
+      items,
       viewport,
-    });
-
-    await writeTextFile(filePath, configData);
-
-    return { ok: true };
+      filePath,
+      sessionSettings,
+      devMode,
+    );
   } catch (err) {
     console.error("Failed to save:", err);
     return { ok: false, reason: "error", error: err };
@@ -283,6 +346,7 @@ export const loadFromStorage = async (): Promise<TLoadResult> => {
     const projectRoot = getProjectRootForConfig(selected);
     return {
       ok: true,
+      filePath: selected,
       data: {
         ...data,
         items: data.items.map((item: StoredMediaItem) =>

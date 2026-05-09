@@ -4,6 +4,7 @@ import { createJSONStorage } from "zustand/middleware";
 import InfiniteCanvas from "../InfiniteCanvas";
 import { useAudioPlaybackStore } from "../stores/useAudioPlaybackStore";
 import { useCanvasSessionStore } from "../stores/useCanvasSessionStore";
+import { useDevStore } from "../stores/useDevStore";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import { useVideoExportStore } from "../stores/useVideoExportStore";
 import type { DropCallback, ViewportSize } from "./infiniteCanvasHarness.types";
@@ -17,21 +18,13 @@ const {
   writeTextFileMock,
 } = vi.hoisted(() => {
   const invokeMock = vi.fn(
-    (
-      command: string,
-      args?: {
-        path?: string;
-        paths?: string[];
-        maxDimension?: number;
-        lod?: number;
-      },
-    ) => {
+    (command: string, args?: Record<string, unknown>) => {
       if (command === "probe_media") {
         return Promise.resolve({
-          width: args?.path?.includes("heavy_video.mkv") ? 3840 : 1920,
-          height: args?.path?.includes("heavy_video.mkv") ? 2160 : 1080,
-          duration: args?.path?.includes("heavy_video.mkv") ? 2400 : 8,
-          size: args?.path?.includes("heavy_video.mkv")
+          width: String(args?.path).includes("heavy_video.mkv") ? 3840 : 1920,
+          height: String(args?.path).includes("heavy_video.mkv") ? 2160 : 1080,
+          duration: String(args?.path).includes("heavy_video.mkv") ? 2400 : 8,
+          size: String(args?.path).includes("heavy_video.mkv")
             ? 373 * 1024 * 1024
             : 838 * 1024,
         });
@@ -39,7 +32,7 @@ const {
 
       if (command === "probe_images") {
         return Promise.resolve(
-          (args?.paths ?? []).map((path) => ({
+          ((args?.paths as string[] | undefined) ?? []).map((path) => ({
             path,
             width: path.includes("portrait") ? 1200 : 640,
             height: path.includes("portrait") ? 1800 : 480,
@@ -50,28 +43,32 @@ const {
 
       if (command === "generate_video_thumbnail") {
         return Promise.resolve(
-          `/tmp/${args?.path?.includes("heavy_video.mkv") ? "heavy" : "video"}-thumb.jpg`,
+          `/tmp/${
+            String(args?.path).includes("heavy_video.mkv") ? "heavy" : "video"
+          }-thumb.jpg`,
         );
       }
 
       if (command === "generate_image_preview") {
         return Promise.resolve(
           `/tmp/${
-            args?.path?.includes("portrait") ? "portrait" : "image"
+            String(args?.path).includes("portrait") ? "portrait" : "image"
           }-preview-${args?.maxDimension}.png`,
         );
       }
 
       if (command === "request_decode") {
-        if (args?.path?.match(/\.(mp4|webm|mov|mkv)$/i)) {
+        if (String(args?.path).match(/\.(mp4|webm|mov|mkv)$/i)) {
           return Promise.resolve(
-            `/tmp/${args?.path?.includes("heavy_video.mkv") ? "heavy" : "video"}-thumb.jpg`,
+            `/tmp/${
+              String(args?.path).includes("heavy_video.mkv") ? "heavy" : "video"
+            }-thumb.jpg`,
           );
         }
 
         return Promise.resolve(
           `/tmp/${
-            args?.path?.includes("portrait") ? "portrait" : "image"
+            String(args?.path).includes("portrait") ? "portrait" : "image"
           }-preview-${args?.lod}.png`,
         );
       }
@@ -227,6 +224,7 @@ beforeEach(() => {
   useCanvasSessionStore.setState(useCanvasSessionStore.getInitialState(), true);
   setViewportSize(defaultViewport);
   useSettingsStore.getState().resetSettings();
+  useDevStore.getState().resetStats();
   useAudioPlaybackStore.getState().resetAudioPlayback();
   useVideoExportStore.getState().resetVideoExportState();
   dragDropState.callback = null;
