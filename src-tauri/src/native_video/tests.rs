@@ -176,4 +176,23 @@ async fn frame_pool_dispatch_continues_past_98_frames_without_exhaustion() {
 
     assert_eq!(*received_frames.lock().unwrap(), 120);
     assert_eq!(pool.exhaustion_count(), 0);
+    assert_eq!(pool.channel_send_failure_count(), 0);
+}
+
+#[tokio::test]
+async fn frame_pool_counts_channel_send_failures_separately_from_exhaustion() {
+    let pool = FramePool::new(0, 16);
+    let mut packet = pool.try_borrow().expect("pooled packet");
+    let bytes = packet.bytes_mut().expect("unique pooled packet bytes");
+    bytes[..5].copy_from_slice(b"frame");
+    packet.set_len(5);
+
+    let on_frame = Channel::<InvokeResponseBody>::new(move |_body| {
+        Err(tauri::Error::FailedToReceiveMessage)
+    });
+
+    assert!(!pool.dispatch(packet, &on_frame).await);
+    assert_eq!(pool.exhaustion_count(), 0);
+    assert_eq!(pool.channel_send_failure_count(), 1);
+    assert!(pool.try_borrow().is_some());
 }

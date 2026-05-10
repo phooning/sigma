@@ -8,7 +8,8 @@ use tokio::sync::{mpsc, oneshot, watch};
 use super::{
     constants::{
         BASE_CASE_MAX_STREAMS_BEFORE_VALIDATION, DOWNGRADE_DROP_RATE, DOWNGRADE_QUEUE_PRESSURE,
-        MATERIAL_OVERSAMPLE, MIN_DOWNGRADE_DWELL_MS, MIN_UPGRADE_DWELL_MS,
+        GPU_FRAME_RESIDENCY_MULTIPLIER, MATERIAL_OVERSAMPLE, MIN_DOWNGRADE_DWELL_MS,
+        MIN_UPGRADE_DWELL_MS,
         SCALING_MAX_STREAMS_AFTER_VALIDATION, UPGRADE_HEADROOM, UPGRADE_QUEUE_PRESSURE,
     },
     frame_packet::yuv420_payload_len,
@@ -18,7 +19,7 @@ use super::{
         CanvasManifest, ControllerSnapshot, QualityDecision, QualityTier, StreamState,
         VisibleAsset, QUALITY_TIERS, SUSPENDED_TIER,
     },
-    util::{now_millis, stable_stream_id},
+    util::{even_dimension, now_millis, stable_stream_id},
     worker::{reconcile_workers, DecodedFrame, FramePool, WorkerHandle},
 };
 
@@ -91,6 +92,13 @@ pub(crate) fn spawn_controller(
                         .values()
                         .map(|allocation| allocation.predicted_cost_bytes_per_sec)
                         .sum();
+                    let predicted_vram = allocations
+                        .values()
+                        .filter(|allocation| allocation.state == StreamState::Active)
+                        .map(|allocation| {
+                            tier_vram_bytes(allocation.decode_width, allocation.decode_height)
+                        })
+                        .sum();
                     let active_streams = allocations
                         .values()
                         .filter(|allocation| allocation.state == StreamState::Active)
@@ -105,10 +113,13 @@ pub(crate) fn spawn_controller(
                         snapshot.active_streams = active_streams;
                         snapshot.suspended_streams = suspended_streams;
                         snapshot.predicted_cost_bytes_per_sec = predicted_cost;
+                        snapshot.predicted_vram_bytes = predicted_vram;
                         snapshot.safe_budget_bytes_per_sec =
                             profile_snapshot.safe_budget_bytes_per_sec;
+                        snapshot.vram_budget_bytes = profile_snapshot.vram_budget_bytes;
                         snapshot.over_budget =
-                            predicted_cost > profile_snapshot.safe_budget_bytes_per_sec;
+                            predicted_cost > profile_snapshot.safe_budget_bytes_per_sec
+                                || predicted_vram > profile_snapshot.vram_budget_bytes;
                     });
 
                     let snapshot = controller_snapshot(
@@ -133,6 +144,8 @@ pub(crate) fn spawn_controller(
                         snapshot.active_streams = 0;
                         snapshot.suspended_streams = 0;
                         snapshot.predicted_cost_bytes_per_sec = 0;
+                        snapshot.predicted_vram_bytes = 0;
+                        snapshot.vram_budget_bytes = profile_snapshot.vram_budget_bytes;
                         snapshot.over_budget = false;
                     });
                     let snapshot = controller_snapshot(&profile_snapshot, &telemetry, Vec::new());
@@ -161,8 +174,9 @@ impl Arbiter {
         } else {
             BASE_CASE_MAX_STREAMS_BEFORE_VALIDATION
         };
-        let overloaded = telemetry.broker_queue_pressure >= DOWNGRADE_QUEUE_PRESSURE
+        let overloaded = telemetry.broker_queue_pressure_smoothed >= DOWNGRADE_QUEUE_PRESSURE
             || telemetry.frame_drop_rate >= DOWNGRADE_DROP_RATE
+            || telemetry.predicted_vram_bytes > profile.vram_budget_bytes
             || telemetry.predicted_cost_bytes_per_sec > profile.safe_budget_bytes_per_sec;
         let headroom = if profile.safe_budget_bytes_per_sec == 0 {
             0.0
@@ -171,9 +185,10 @@ impl Arbiter {
                 / profile.safe_budget_bytes_per_sec as f64
         };
         let upgrades_allowed = headroom >= UPGRADE_HEADROOM
-            && telemetry.broker_queue_pressure <= UPGRADE_QUEUE_PRESSURE;
+            && telemetry.broker_queue_pressure_smoothed <= UPGRADE_QUEUE_PRESSURE;
 
         let mut total_cost = 0_u64;
+        let mut total_vram = 0_u64;
         let mut active_count = 0_usize;
         let mut decisions = Vec::with_capacity(assets.len());
 
@@ -181,13 +196,11 @@ impl Arbiter {
             let stream_id = stable_stream_id(&asset.id);
             let asset_priority = priority(&asset, manifest);
             let previous_decision = previous.get(&stream_id);
+            let remaining_budget = profile.safe_budget_bytes_per_sec.saturating_sub(total_cost);
+            let remaining_vram_budget = profile.vram_budget_bytes.saturating_sub(total_vram);
 
             let candidate = if active_count < max_active {
-                choose_candidate(
-                    &asset,
-                    profile,
-                    profile.safe_budget_bytes_per_sec.saturating_sub(total_cost),
-                )
+                choose_candidate(&asset, profile, remaining_budget, remaining_vram_budget)
             } else {
                 None
             };
@@ -236,6 +249,8 @@ impl Arbiter {
                     decision,
                     overloaded,
                     upgrades_allowed,
+                    remaining_budget,
+                    remaining_vram_budget,
                     now,
                     profile,
                 );
@@ -243,6 +258,10 @@ impl Arbiter {
 
             if decision.state == StreamState::Active {
                 total_cost = total_cost.saturating_add(decision.predicted_cost_bytes_per_sec);
+                total_vram = total_vram.saturating_add(tier_vram_bytes(
+                    decision.decode_width,
+                    decision.decode_height,
+                ));
                 active_count += 1;
             }
 
@@ -257,13 +276,15 @@ fn choose_candidate(
     asset: &VisibleAsset,
     profile: &PerformanceProfile,
     remaining_budget: u64,
+    remaining_vram_budget: u64,
 ) -> Option<(QualityTier, u32, u32, u64)> {
     for tier in QUALITY_TIERS.iter().rev().copied() {
         let Some((width, height)) = tier_dimensions(asset, tier) else {
             continue;
         };
         let cost = tier_cost_bytes_per_sec(width, height, asset.target_fps.clamp(1, 60), profile);
-        if cost <= remaining_budget {
+        let vram = tier_vram_bytes(width, height);
+        if cost <= remaining_budget && vram <= remaining_vram_budget {
             return Some((tier, width, height, cost));
         }
     }
@@ -276,6 +297,8 @@ fn apply_hysteresis(
     mut next: QualityDecision,
     overloaded: bool,
     upgrades_allowed: bool,
+    remaining_budget: u64,
+    remaining_vram_budget: u64,
     now: u64,
     profile: &PerformanceProfile,
 ) -> QualityDecision {
@@ -292,9 +315,16 @@ fn apply_hysteresis(
     let is_downgrade = next_rank < previous_rank || next.state != StreamState::Active;
 
     if is_upgrade && (!upgrades_allowed || dwell_ms < MIN_UPGRADE_DWELL_MS) {
-        let previous_cost = previous.predicted_cost_bytes_per_sec;
-        if previous_cost <= profile.safe_budget_bytes_per_sec {
+        let previous_cost = tier_cost_bytes_per_sec(
+            previous.decode_width,
+            previous.decode_height,
+            previous.fps,
+            profile,
+        );
+        let previous_vram = tier_vram_bytes(previous.decode_width, previous.decode_height);
+        if previous_cost <= remaining_budget && previous_vram <= remaining_vram_budget {
             let mut held = previous.clone();
+            held.predicted_cost_bytes_per_sec = previous_cost;
             held.reason =
                 "held by upgrade hysteresis until explicit headroom and dwell time".into();
             return held;
@@ -312,6 +342,154 @@ fn apply_hysteresis(
         next.reason = "downgraded after sustained queue, drop, or budget pressure".into();
     }
     next
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        apply_hysteresis, choose_candidate, tier_cost_bytes_per_sec, tier_vram_bytes,
+        MIN_UPGRADE_DWELL_MS, QUALITY_TIERS,
+    };
+    use crate::native_video::{
+        profile::PerformanceProfile,
+        types::{QualityDecision, StreamState, VisibleAsset},
+    };
+
+    fn profile_with_budget_and_factor(budget: u64, factor: f64) -> PerformanceProfile {
+        PerformanceProfile {
+            base_case_validated: true,
+            safe_budget_bytes_per_sec: budget,
+            cpu_decode_budget_bytes_per_sec: budget,
+            ipc_budget_bytes_per_sec: budget,
+            ram_bandwidth_bytes_per_sec: budget as f64,
+            ram_bandwidth_budget_bytes_per_sec: budget,
+            vram_budget_bytes: u64::MAX,
+            decode_cost_factor: factor,
+            upload_cost_factor: 0.0,
+            composite_cost_factor: 0.0,
+            ..PerformanceProfile::uncalibrated()
+        }
+    }
+
+    fn profile_with_cost_factors(decode: f64, upload: f64, composite: f64) -> PerformanceProfile {
+        PerformanceProfile {
+            decode_cost_factor: decode,
+            upload_cost_factor: upload,
+            composite_cost_factor: composite,
+            ..PerformanceProfile::uncalibrated()
+        }
+    }
+
+    fn decision(
+        tier_index: usize,
+        width: u32,
+        height: u32,
+        fps: u32,
+        predicted_cost_bytes_per_sec: u64,
+    ) -> QualityDecision {
+        QualityDecision {
+            asset_id: format!("asset-{tier_index}"),
+            stream_id: tier_index as u64,
+            state: StreamState::Active,
+            tier: QUALITY_TIERS[tier_index],
+            decode_width: width,
+            decode_height: height,
+            fps,
+            priority: 1.0,
+            predicted_cost_bytes_per_sec,
+            last_changed_at_ms: 1_000,
+            reason: String::new(),
+        }
+    }
+
+    #[test]
+    fn upgrade_hysteresis_recomputes_previous_cost_with_current_profile() {
+        let previous = decision(1, 256, 144, 60, 1);
+        let next = decision(2, 426, 240, 60, 10_000_000);
+        let profile = profile_with_budget_and_factor(4_000_000, 4.0);
+        let remaining_budget = profile.safe_budget_bytes_per_sec;
+        let now = previous.last_changed_at_ms + MIN_UPGRADE_DWELL_MS - 1;
+
+        let result = apply_hysteresis(
+            &previous,
+            next.clone(),
+            false,
+            false,
+            remaining_budget,
+            u64::MAX,
+            now,
+            &profile,
+        );
+        let current_previous_cost =
+            tier_cost_bytes_per_sec(previous.decode_width, previous.decode_height, previous.fps, &profile);
+
+        assert!(current_previous_cost > remaining_budget);
+        assert_eq!(result.tier.id, next.tier.id);
+    }
+
+    #[test]
+    fn upgrade_hysteresis_requires_previous_tier_to_fit_remaining_budget() {
+        let previous = decision(1, 256, 144, 60, 1);
+        let next = decision(2, 426, 240, 60, 10_000_000);
+        let profile = profile_with_budget_and_factor(10_000_000, 1.0);
+        let current_previous_cost =
+            tier_cost_bytes_per_sec(previous.decode_width, previous.decode_height, previous.fps, &profile);
+        let now = previous.last_changed_at_ms + MIN_UPGRADE_DWELL_MS - 1;
+
+        let result = apply_hysteresis(
+            &previous,
+            next,
+            false,
+            false,
+            current_previous_cost.saturating_sub(1),
+            u64::MAX,
+            now,
+            &profile,
+        );
+
+        assert_eq!(result.tier.id, QUALITY_TIERS[2].id);
+    }
+
+    #[test]
+    fn tier_cost_ignores_composite_factor_for_cpu_ipc_budgeting() {
+        let without_composite = profile_with_cost_factors(1.5, 0.5, 0.0);
+        let with_composite = profile_with_cost_factors(1.5, 0.5, 4.0);
+
+        let base_cost = tier_cost_bytes_per_sec(426, 240, 60, &without_composite);
+        let composite_cost = tier_cost_bytes_per_sec(426, 240, 60, &with_composite);
+
+        assert_eq!(base_cost, composite_cost);
+    }
+
+    #[test]
+    fn choose_candidate_respects_remaining_vram_budget() {
+        let asset = VisibleAsset {
+            id: "asset-1".into(),
+            path: "/tmp/video.mp4".into(),
+            source_width: 3840,
+            source_height: 2160,
+            screen_x: 0.0,
+            screen_y: 0.0,
+            rendered_width_px: 3840.0,
+            rendered_height_px: 2160.0,
+            visible_area_px: 3840.0 * 2160.0,
+            focus_weight: 1.0,
+            center_weight: 0.5,
+            target_fps: 60,
+        };
+        let profile = PerformanceProfile::uncalibrated();
+        let vram_for_240p = tier_vram_bytes(426, 240);
+
+        let candidate = choose_candidate(
+            &asset,
+            &profile,
+            u64::MAX,
+            vram_for_240p.saturating_sub(1),
+        )
+        .expect("candidate under tight vram budget");
+
+        assert_eq!(candidate.0.id, 1);
+    }
 }
 
 fn priority(asset: &VisibleAsset, manifest: &CanvasManifest) -> f64 {
@@ -355,18 +533,18 @@ fn tier_dimensions(asset: &VisibleAsset, tier: QualityTier) -> Option<(u32, u32)
     Some((width, height))
 }
 
-fn even_dimension(value: u32) -> u32 {
-    value.saturating_sub(value % 2).max(2)
-}
-
 fn tier_cost_bytes_per_sec(width: u32, height: u32, fps: u32, profile: &PerformanceProfile) -> u64 {
-    // Arbiter cost modeling follows YUV420 bandwidth instead of RGBA8.
+    // Cost modeling follows decode + upload bandwidth pressure on the CPU/IPC path.
+    // Composite is measured separately from frontend metrics but is not part of this budget until
+    // there is a distinct GPU/VRAM control path to spend it against.
     let raw_bytes = yuv420_payload_len(width, height) as u64 * fps.max(1) as u64;
-    let factor =
-        (profile.decode_cost_factor + profile.upload_cost_factor + profile.composite_cost_factor)
-            .max(1.0);
+    let factor = (profile.decode_cost_factor + profile.upload_cost_factor).max(1.0);
 
     (raw_bytes as f64 * factor) as u64
+}
+
+fn tier_vram_bytes(width: u32, height: u32) -> u64 {
+    yuv420_payload_len(width, height) as u64 * GPU_FRAME_RESIDENCY_MULTIPLIER
 }
 
 fn controller_snapshot(
@@ -387,7 +565,7 @@ fn controller_snapshot(
     } else {
         vec![
             "Scaling is gated until base-case calibration validates a 4K presentation path.".into(),
-            "CPU and memory samples are process-local rusage values; VRAM must be provided by platform telemetry.".into(),
+            "VRAM capacity is read from platform telemetry when available and otherwise falls back to the persisted profile default.".into(),
         ]
     };
 

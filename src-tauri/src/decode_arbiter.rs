@@ -141,7 +141,6 @@ impl DecodeArbiter {
                         };
 
                         let _ = respond_to.send(decoded);
-                        drop(_permit);
                         let _ = completion_tx.send(()).await;
                     });
                 }

@@ -1,5 +1,6 @@
 use std::{
     process::Stdio,
+    thread,
     time::{Duration, Instant},
 };
 
@@ -13,7 +14,10 @@ use super::{
     constants::PIXEL_FORMAT_YUV420,
     controller::ControlMessage,
     frame_packet::{make_frame_packet, make_frame_packet_from_payload, yuv420_payload_len},
-    profile::{bounded_factor, measure_ram_bandwidth, persist_profile, PerformanceProfile},
+    profile::{
+        bounded_factor, detect_max_vram_bytes, measure_ram_bandwidth, persist_profile,
+        PerformanceProfile,
+    },
     state::NativeVideoState,
     telemetry::{update_telemetry, TelemetrySnapshot},
     types::{
@@ -82,13 +86,12 @@ pub fn native_video_subscribe_frames(
     state: State<'_, NativeVideoState>,
     on_frame: Channel<InvokeResponseBody>,
 ) -> Result<(), String> {
-    // The broker dispatches the owned pool buffer directly; subscribers no longer clone broadcast frames.
-    let mut subscribers = state
+    // Native video maintains a single live frame subscriber at a time.
+    let mut subscriber = state
         .frame_subscribers
         .lock()
         .map_err(|_| "native video frame subscriber lock poisoned".to_string())?;
-    subscribers.clear();
-    subscribers.push(on_frame);
+    *subscriber = Some(on_frame);
 
     Ok(())
 }
@@ -388,9 +391,16 @@ async fn persist_base_case_probe_metrics(
         .should_measure_ram_bandwidth();
 
     let ram_bandwidth = if should_measure {
-        tokio::task::spawn_blocking(measure_ram_bandwidth)
+        let (tx, rx) = oneshot::channel();
+        thread::Builder::new()
+            .name("sigma-ram-bandwidth-probe".into())
+            .spawn(move || {
+                let _ = tx.send(measure_ram_bandwidth());
+            })
+            .map_err(|err| format!("failed to spawn RAM bandwidth probe thread: {err}"))?;
+        rx
             .await
-            .map_err(|err| format!("failed to join RAM bandwidth probe: {err}"))?
+            .map_err(|err| format!("RAM bandwidth probe thread dropped result: {err}"))?
     } else {
         state
             .profile
@@ -411,6 +421,9 @@ async fn persist_base_case_probe_metrics(
     profile.base_probe_ipc_latency_p95_ms = Some(report.send_latency_p95_ms);
     profile.base_probe_ram_bandwidth_bytes_per_sec = Some(ram_bandwidth);
     profile.ram_bandwidth_bytes_per_sec = ram_bandwidth;
+    if let Some(max_vram_bytes) = detect_max_vram_bytes() {
+        profile.max_vram_bytes = max_vram_bytes;
+    }
     profile.calibrated_at_ms = Some(now_millis());
     profile.notes = vec![
         format!("Base-case decode backend: {}", report.decode_backend),
@@ -427,6 +440,7 @@ async fn persist_base_case_probe_metrics(
 
     update_telemetry(&state.telemetry, &state.telemetry_tx, |snapshot| {
         snapshot.safe_budget_bytes_per_sec = profile.safe_budget_bytes_per_sec;
+        snapshot.vram_budget_bytes = profile.vram_budget_bytes;
     });
 
     Ok(())

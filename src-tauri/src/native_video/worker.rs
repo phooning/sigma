@@ -20,7 +20,8 @@ use super::{
     types::{QualityDecision, StreamState},
 };
 
-pub(crate) type FrameSubscribers = Arc<Mutex<Vec<Channel<InvokeResponseBody>>>>;
+pub(crate) type FrameSubscribers = Arc<Mutex<Option<Channel<InvokeResponseBody>>>>;
+const QUEUE_PRESSURE_WINDOW: usize = 3;
 
 #[derive(Clone, Debug)]
 pub(crate) enum WorkerAssignment {
@@ -44,6 +45,29 @@ pub(crate) struct DecodedFrame {
     packet: PooledFramePacket,
 }
 
+struct QueuePressureSmoother {
+    samples: [f64; QUEUE_PRESSURE_WINDOW],
+    next: usize,
+    len: usize,
+}
+
+impl QueuePressureSmoother {
+    fn new() -> Self {
+        Self {
+            samples: [0.0; QUEUE_PRESSURE_WINDOW],
+            next: 0,
+            len: 0,
+        }
+    }
+
+    fn push(&mut self, sample: f64) -> f64 {
+        self.samples[self.next] = sample;
+        self.next = (self.next + 1) % QUEUE_PRESSURE_WINDOW;
+        self.len = self.len.saturating_add(1).min(QUEUE_PRESSURE_WINDOW);
+        self.samples[..self.len].iter().sum::<f64>() / self.len as f64
+    }
+}
+
 // FramePool preallocates and recycles decode buffers.
 /// FramePool ownership contract.
 ///
@@ -63,6 +87,7 @@ pub(crate) struct FramePool {
     max_frame_bytes: usize,
     capacity: usize,
     exhaustion_count: AtomicU64,
+    channel_send_failure_count: AtomicU64,
 }
 
 pub(crate) struct PooledFramePacket {
@@ -81,6 +106,7 @@ impl FramePool {
             max_frame_bytes,
             capacity,
             exhaustion_count: AtomicU64::new(0),
+            channel_send_failure_count: AtomicU64::new(0),
         });
 
         for _ in 0..capacity {
@@ -98,6 +124,10 @@ impl FramePool {
 
     pub(crate) fn exhaustion_count(&self) -> u64 {
         self.exhaustion_count.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn channel_send_failure_count(&self) -> u64 {
+        self.channel_send_failure_count.load(Ordering::Relaxed)
     }
 
     pub(crate) fn try_borrow(self: &Arc<Self>) -> Option<PooledFramePacket> {
@@ -148,9 +178,19 @@ impl FramePool {
         let len = packet.len.min(buffer.len());
         let fresh_for_ipc = buffer[..len].to_vec();
         packet.len = 0;
-        let sent = on_frame
-            .send(InvokeResponseBody::Raw(fresh_for_ipc))
-            .is_ok();
+        let sent = match on_frame.send(InvokeResponseBody::Raw(fresh_for_ipc)) {
+            Ok(()) => true,
+            Err(error) => {
+                let count = self
+                    .channel_send_failure_count
+                    .fetch_add(1, Ordering::Relaxed)
+                    + 1;
+                eprintln!(
+                    "native-video: failed to dispatch frame to IPC channel; total_send_failures={count}; error={error}"
+                );
+                false
+            }
+        };
         self.recycle(buffer);
         sent
     }
@@ -268,6 +308,7 @@ fn spawn_decode_worker(
                                     update_telemetry(&telemetry, &telemetry_tx, |snapshot| {
                                         snapshot.frame_pool_capacity = frame_pool.capacity();
                                         snapshot.frame_pool_exhaustions = frame_pool.exhaustion_count();
+                                        snapshot.frame_channel_send_failures = frame_pool.channel_send_failure_count();
                                     });
                                     task::yield_now().await;
                                     continue;
@@ -310,14 +351,15 @@ pub(crate) fn spawn_frame_broker(
     tauri::async_runtime::spawn(async move {
         let mut delivered_frames = 0_u64;
         let mut dropped_frames = 0_u64;
+        let mut unsubscribed_drops = 0_u64;
+        let mut queue_pressure = QueuePressureSmoother::new();
 
         while let Some(frame) = frame_rx.recv().await {
             let queue_depth = frame_rx.len();
+            let queue_pressure_raw = queue_depth as f64 / BROKER_QUEUE_CAPACITY.max(1) as f64;
+            let queue_pressure_smoothed = queue_pressure.push(queue_pressure_raw);
             let frame_pool = frame.packet.pool.clone();
-            let subscriber = subscribers
-                .lock()
-                .ok()
-                .and_then(|subscribers| subscribers.last().cloned());
+            let subscriber = subscribers.lock().ok().and_then(|subscriber| subscriber.clone());
 
             match subscriber {
                 Some(on_frame) => {
@@ -325,13 +367,19 @@ pub(crate) fn spawn_frame_broker(
                         delivered_frames = delivered_frames.saturating_add(1);
                     } else {
                         dropped_frames = dropped_frames.saturating_add(1);
-                        if let Ok(mut subscribers) = subscribers.lock() {
-                            subscribers.retain(|candidate| candidate.id() != on_frame.id());
+                        if let Ok(mut subscriber) = subscribers.lock() {
+                            if subscriber
+                                .as_ref()
+                                .is_some_and(|candidate| candidate.id() == on_frame.id())
+                            {
+                                *subscriber = None;
+                            }
                         }
                     }
                 }
                 None => {
                     dropped_frames = dropped_frames.saturating_add(1);
+                    unsubscribed_drops = unsubscribed_drops.saturating_add(1);
                 }
             }
 
@@ -340,10 +388,12 @@ pub(crate) fn spawn_frame_broker(
                 snapshot.dropped_frames = dropped_frames;
                 snapshot.broker_queue_depth = queue_depth;
                 snapshot.broker_queue_capacity = BROKER_QUEUE_CAPACITY;
-                snapshot.broker_queue_pressure =
-                    queue_depth as f64 / BROKER_QUEUE_CAPACITY.max(1) as f64;
+                snapshot.broker_queue_pressure = queue_pressure_raw;
+                snapshot.broker_queue_pressure_smoothed = queue_pressure_smoothed;
                 snapshot.frame_pool_capacity = frame_pool.capacity();
                 snapshot.frame_pool_exhaustions = frame_pool.exhaustion_count();
+                snapshot.frame_channel_send_failures = frame_pool.channel_send_failure_count();
+                snapshot.frame_unsubscribed_drops = unsubscribed_drops;
                 let total = delivered_frames + dropped_frames;
                 snapshot.frame_drop_rate = if total == 0 {
                     0.0
@@ -353,4 +403,61 @@ pub(crate) fn spawn_frame_broker(
             });
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use tokio::sync::{mpsc, watch};
+
+    use super::{spawn_frame_broker, DecodedFrame, FramePool, FrameSubscribers, QueuePressureSmoother};
+    use crate::native_video::telemetry::TelemetrySnapshot;
+
+    #[test]
+    fn queue_pressure_smoother_averages_last_three_samples() {
+        let mut smoother = QueuePressureSmoother::new();
+
+        assert_eq!(smoother.push(0.25), 0.25);
+        assert_eq!(smoother.push(0.5), 0.375);
+        assert!((smoother.push(0.75) - 0.5).abs() < f64::EPSILON);
+        assert!((smoother.push(1.0) - 0.75).abs() < f64::EPSILON);
+    }
+
+    #[tokio::test]
+    async fn broker_counts_unsubscribed_drops_separately() {
+        let subscribers: FrameSubscribers = Arc::new(Mutex::new(None));
+        let telemetry = Arc::new(Mutex::new(TelemetrySnapshot::default()));
+        let (telemetry_tx, telemetry_rx) = watch::channel(TelemetrySnapshot::default());
+        let (broker_tx, broker_rx) = mpsc::channel(1);
+        let pool = FramePool::new(0, 16);
+        let mut packet = pool.try_borrow().expect("pooled packet");
+        packet.set_len(0);
+
+        spawn_frame_broker(
+            broker_rx,
+            subscribers,
+            telemetry.clone(),
+            telemetry_tx.clone(),
+        );
+
+        broker_tx
+            .send(DecodedFrame { packet })
+            .await
+            .expect("broker frame send");
+        drop(broker_tx);
+
+        let mut telemetry_rx = telemetry_rx;
+        telemetry_rx
+            .changed()
+            .await
+            .expect("telemetry update after unsubscribed drop");
+        let snapshot = telemetry_rx.borrow().clone();
+
+        assert_eq!(snapshot.delivered_frames, 0);
+        assert_eq!(snapshot.dropped_frames, 1);
+        assert_eq!(snapshot.frame_unsubscribed_drops, 1);
+        assert_eq!(snapshot.frame_channel_send_failures, 0);
+        assert_eq!(snapshot.frame_pool_exhaustions, 0);
+    }
 }
