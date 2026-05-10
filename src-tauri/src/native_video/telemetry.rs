@@ -24,6 +24,8 @@ pub struct TelemetrySnapshot {
     pub frame_drop_rate: f64,
     pub safe_budget_bytes_per_sec: u64,
     pub predicted_cost_bytes_per_sec: u64,
+    pub vram_budget_bytes: u64,
+    pub predicted_vram_bytes: u64,
     pub over_budget: bool,
     pub frame_pool_capacity: usize,
     pub frame_pool_exhaustions: u64,

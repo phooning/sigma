@@ -10,7 +10,7 @@ use super::{
     constants::{BROKER_QUEUE_CAPACITY, MAX_FRAME_HEIGHT, MAX_FRAME_WIDTH},
     controller::{spawn_controller, ControlMessage},
     frame_packet::frame_packet_len,
-    profile::{load_profile, profile_path, PerformanceProfile},
+    profile::{detect_max_vram_bytes, load_profile, profile_path, PerformanceProfile},
     resource_monitor::spawn_resource_monitor,
     telemetry::TelemetrySnapshot,
     worker::{spawn_frame_broker, FramePool, FrameSubscribers},
@@ -29,11 +29,16 @@ pub struct NativeVideoState {
 impl NativeVideoState {
     pub fn new<R: Runtime>(app: &AppHandle<R>) -> Self {
         let profile_path = profile_path(app);
-        let profile_snapshot =
+        let mut profile_snapshot =
             load_profile(&profile_path).unwrap_or_else(PerformanceProfile::uncalibrated);
+        if let Some(max_vram_bytes) = detect_max_vram_bytes() {
+            profile_snapshot.max_vram_bytes = max_vram_bytes;
+            profile_snapshot.recompute_safe_budget();
+        }
         let initial_telemetry = TelemetrySnapshot {
             broker_queue_capacity: BROKER_QUEUE_CAPACITY,
             safe_budget_bytes_per_sec: profile_snapshot.safe_budget_bytes_per_sec,
+            vram_budget_bytes: profile_snapshot.vram_budget_bytes,
             ..TelemetrySnapshot::default()
         };
         let profile = Arc::new(Mutex::new(profile_snapshot));

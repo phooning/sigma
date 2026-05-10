@@ -2,6 +2,7 @@ use super::constants::{
     FRAME_PACKET_HEADER_LEN, FRAME_PACKET_MAGIC, PIXEL_FORMAT_YUV420, YUV420_BYTES_PER_2_PIXELS,
     YUV420_PIXELS_PER_BYTE_GROUP,
 };
+use super::util::even_dimension;
 
 pub(crate) fn yuv420_payload_len(width: u32, height: u32) -> usize {
     let width = even_dimension(width) as u64;
@@ -176,10 +177,6 @@ fn fill_synthetic_yuv420(
             v_plane[row + x] = v_base.wrapping_sub((y as u8).wrapping_add(motion / 3));
         }
     }
-}
-
-fn even_dimension(value: u32) -> u32 {
-    value.saturating_sub(value % 2).max(2)
 }
 
 fn write_u16(packet: &mut [u8], offset: usize, value: u16) {

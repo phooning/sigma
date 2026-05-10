@@ -17,3 +17,4 @@ pub(crate) const UPGRADE_HEADROOM: f64 = 0.25;
 pub(crate) const MIN_UPGRADE_DWELL_MS: u64 = 2_000;
 pub(crate) const MIN_DOWNGRADE_DWELL_MS: u64 = 800;
 pub(crate) const MATERIAL_OVERSAMPLE: f64 = 1.15;
+pub(crate) const GPU_FRAME_RESIDENCY_MULTIPLIER: u64 = 3;

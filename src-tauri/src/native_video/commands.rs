@@ -14,7 +14,10 @@ use super::{
     constants::PIXEL_FORMAT_YUV420,
     controller::ControlMessage,
     frame_packet::{make_frame_packet, make_frame_packet_from_payload, yuv420_payload_len},
-    profile::{bounded_factor, measure_ram_bandwidth, persist_profile, PerformanceProfile},
+    profile::{
+        bounded_factor, detect_max_vram_bytes, measure_ram_bandwidth, persist_profile,
+        PerformanceProfile,
+    },
     state::NativeVideoState,
     telemetry::{update_telemetry, TelemetrySnapshot},
     types::{
@@ -418,6 +421,9 @@ async fn persist_base_case_probe_metrics(
     profile.base_probe_ipc_latency_p95_ms = Some(report.send_latency_p95_ms);
     profile.base_probe_ram_bandwidth_bytes_per_sec = Some(ram_bandwidth);
     profile.ram_bandwidth_bytes_per_sec = ram_bandwidth;
+    if let Some(max_vram_bytes) = detect_max_vram_bytes() {
+        profile.max_vram_bytes = max_vram_bytes;
+    }
     profile.calibrated_at_ms = Some(now_millis());
     profile.notes = vec![
         format!("Base-case decode backend: {}", report.decode_backend),
@@ -434,6 +440,7 @@ async fn persist_base_case_probe_metrics(
 
     update_telemetry(&state.telemetry, &state.telemetry_tx, |snapshot| {
         snapshot.safe_budget_bytes_per_sec = profile.safe_budget_bytes_per_sec;
+        snapshot.vram_budget_bytes = profile.vram_budget_bytes;
     });
 
     Ok(())
