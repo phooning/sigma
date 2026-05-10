@@ -181,13 +181,10 @@ impl Arbiter {
             let stream_id = stable_stream_id(&asset.id);
             let asset_priority = priority(&asset, manifest);
             let previous_decision = previous.get(&stream_id);
+            let remaining_budget = profile.safe_budget_bytes_per_sec.saturating_sub(total_cost);
 
             let candidate = if active_count < max_active {
-                choose_candidate(
-                    &asset,
-                    profile,
-                    profile.safe_budget_bytes_per_sec.saturating_sub(total_cost),
-                )
+                choose_candidate(&asset, profile, remaining_budget)
             } else {
                 None
             };
@@ -236,6 +233,7 @@ impl Arbiter {
                     decision,
                     overloaded,
                     upgrades_allowed,
+                    remaining_budget,
                     now,
                     profile,
                 );
@@ -276,6 +274,7 @@ fn apply_hysteresis(
     mut next: QualityDecision,
     overloaded: bool,
     upgrades_allowed: bool,
+    remaining_budget: u64,
     now: u64,
     profile: &PerformanceProfile,
 ) -> QualityDecision {
@@ -292,9 +291,15 @@ fn apply_hysteresis(
     let is_downgrade = next_rank < previous_rank || next.state != StreamState::Active;
 
     if is_upgrade && (!upgrades_allowed || dwell_ms < MIN_UPGRADE_DWELL_MS) {
-        let previous_cost = previous.predicted_cost_bytes_per_sec;
-        if previous_cost <= profile.safe_budget_bytes_per_sec {
+        let previous_cost = tier_cost_bytes_per_sec(
+            previous.decode_width,
+            previous.decode_height,
+            previous.fps,
+            profile,
+        );
+        if previous_cost <= remaining_budget {
             let mut held = previous.clone();
+            held.predicted_cost_bytes_per_sec = previous_cost;
             held.reason =
                 "held by upgrade hysteresis until explicit headroom and dwell time".into();
             return held;
@@ -312,6 +317,98 @@ fn apply_hysteresis(
         next.reason = "downgraded after sustained queue, drop, or budget pressure".into();
     }
     next
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{apply_hysteresis, tier_cost_bytes_per_sec, MIN_UPGRADE_DWELL_MS, QUALITY_TIERS};
+    use crate::native_video::{
+        profile::PerformanceProfile,
+        types::{QualityDecision, StreamState},
+    };
+
+    fn profile_with_budget_and_factor(budget: u64, factor: f64) -> PerformanceProfile {
+        PerformanceProfile {
+            base_case_validated: true,
+            safe_budget_bytes_per_sec: budget,
+            cpu_decode_budget_bytes_per_sec: budget,
+            ipc_budget_bytes_per_sec: budget,
+            ram_bandwidth_bytes_per_sec: budget as f64,
+            ram_bandwidth_budget_bytes_per_sec: budget,
+            decode_cost_factor: factor,
+            upload_cost_factor: 0.0,
+            composite_cost_factor: 0.0,
+            ..PerformanceProfile::uncalibrated()
+        }
+    }
+
+    fn decision(
+        tier_index: usize,
+        width: u32,
+        height: u32,
+        fps: u32,
+        predicted_cost_bytes_per_sec: u64,
+    ) -> QualityDecision {
+        QualityDecision {
+            asset_id: format!("asset-{tier_index}"),
+            stream_id: tier_index as u64,
+            state: StreamState::Active,
+            tier: QUALITY_TIERS[tier_index],
+            decode_width: width,
+            decode_height: height,
+            fps,
+            priority: 1.0,
+            predicted_cost_bytes_per_sec,
+            last_changed_at_ms: 1_000,
+            reason: String::new(),
+        }
+    }
+
+    #[test]
+    fn upgrade_hysteresis_recomputes_previous_cost_with_current_profile() {
+        let previous = decision(1, 256, 144, 60, 1);
+        let next = decision(2, 426, 240, 60, 10_000_000);
+        let profile = profile_with_budget_and_factor(4_000_000, 4.0);
+        let remaining_budget = profile.safe_budget_bytes_per_sec;
+        let now = previous.last_changed_at_ms + MIN_UPGRADE_DWELL_MS - 1;
+
+        let result = apply_hysteresis(
+            &previous,
+            next.clone(),
+            false,
+            false,
+            remaining_budget,
+            now,
+            &profile,
+        );
+        let current_previous_cost =
+            tier_cost_bytes_per_sec(previous.decode_width, previous.decode_height, previous.fps, &profile);
+
+        assert!(current_previous_cost > remaining_budget);
+        assert_eq!(result.tier.id, next.tier.id);
+    }
+
+    #[test]
+    fn upgrade_hysteresis_requires_previous_tier_to_fit_remaining_budget() {
+        let previous = decision(1, 256, 144, 60, 1);
+        let next = decision(2, 426, 240, 60, 10_000_000);
+        let profile = profile_with_budget_and_factor(10_000_000, 1.0);
+        let current_previous_cost =
+            tier_cost_bytes_per_sec(previous.decode_width, previous.decode_height, previous.fps, &profile);
+        let now = previous.last_changed_at_ms + MIN_UPGRADE_DWELL_MS - 1;
+
+        let result = apply_hysteresis(
+            &previous,
+            next,
+            false,
+            false,
+            current_previous_cost.saturating_sub(1),
+            now,
+            &profile,
+        );
+
+        assert_eq!(result.tier.id, QUALITY_TIERS[2].id);
+    }
 }
 
 fn priority(asset: &VisibleAsset, manifest: &CanvasManifest) -> f64 {

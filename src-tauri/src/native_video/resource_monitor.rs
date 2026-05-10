@@ -1,7 +1,9 @@
 use std::{
     sync::{Arc, Mutex},
-    time::{Duration, Instant},
+    time::Duration,
 };
+#[cfg(unix)]
+use std::time::Instant;
 
 use tokio::{sync::watch, time};
 
@@ -11,6 +13,7 @@ use super::{
     util::now_millis,
 };
 
+#[cfg(unix)]
 pub(crate) fn spawn_resource_monitor(
     telemetry: Arc<Mutex<TelemetrySnapshot>>,
     telemetry_tx: watch::Sender<TelemetrySnapshot>,
@@ -32,18 +35,29 @@ pub(crate) fn spawn_resource_monitor(
     });
 }
 
+#[cfg(not(unix))]
+pub(crate) fn spawn_resource_monitor(
+    _telemetry: Arc<Mutex<TelemetrySnapshot>>,
+    _telemetry_tx: watch::Sender<TelemetrySnapshot>,
+) {
+    eprintln!("native-video: resource monitor is only implemented on Unix platforms");
+}
+
+#[cfg(unix)]
 struct ResourceMonitor {
     last_at: Instant,
     last_cpu_us: u64,
     peak_cpu_core_fraction: f64,
 }
 
+#[cfg(unix)]
 struct ResourceSample {
     cpu_core_fraction: f64,
     peak_cpu_core_fraction: f64,
     peak_rss_bytes: u64,
 }
 
+#[cfg(unix)]
 impl ResourceMonitor {
     fn new() -> Self {
         let usage = process_usage();
@@ -72,11 +86,13 @@ impl ResourceMonitor {
     }
 }
 
+#[cfg(unix)]
 struct ProcessUsage {
     cpu_us: u64,
     peak_rss_bytes: u64,
 }
 
+#[cfg(unix)]
 fn process_usage() -> ProcessUsage {
     let mut usage = std::mem::MaybeUninit::<libc::rusage>::uninit();
     let result = unsafe { libc::getrusage(libc::RUSAGE_SELF, usage.as_mut_ptr()) };
@@ -102,6 +118,7 @@ fn process_usage() -> ProcessUsage {
     }
 }
 
+#[cfg(unix)]
 fn timeval_to_us(time: libc::timeval) -> u64 {
     (time.tv_sec.max(0) as u64)
         .saturating_mul(1_000_000)
