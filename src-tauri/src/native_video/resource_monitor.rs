@@ -61,11 +61,7 @@ struct ResourceSample {
 impl ResourceMonitor {
     fn new() -> Self {
         let usage = process_usage();
-        Self {
-            last_at: Instant::now(),
-            last_cpu_us: usage.cpu_us,
-            peak_cpu_core_fraction: 0.0,
-        }
+        Self { last_at: Instant::now(), last_cpu_us: usage.cpu_us, peak_cpu_core_fraction: 0.0 }
     }
 
     fn sample(&mut self) -> ResourceSample {
@@ -97,10 +93,7 @@ fn process_usage() -> ProcessUsage {
     let mut usage = std::mem::MaybeUninit::<libc::rusage>::uninit();
     let result = unsafe { libc::getrusage(libc::RUSAGE_SELF, usage.as_mut_ptr()) };
     if result != 0 {
-        return ProcessUsage {
-            cpu_us: 0,
-            peak_rss_bytes: 0,
-        };
+        return ProcessUsage { cpu_us: 0, peak_rss_bytes: 0 };
     }
 
     let usage = unsafe { usage.assume_init() };
@@ -112,15 +105,62 @@ fn process_usage() -> ProcessUsage {
     #[cfg(not(target_os = "macos"))]
     let peak_rss_bytes = usage.ru_maxrss.max(0) as u64 * 1024;
 
-    ProcessUsage {
-        cpu_us: user_us.saturating_add(system_us),
-        peak_rss_bytes,
-    }
+    ProcessUsage { cpu_us: user_us.saturating_add(system_us), peak_rss_bytes }
+}
+
+#[cfg(windows)]
+fn process_usage() -> ProcessUsage {
+    use std::mem::{size_of, zeroed};
+    use windows_sys::Win32::Foundation::FILETIME;
+    use windows_sys::Win32::System::ProcessStatus::{
+        GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS,
+    };
+    use windows_sys::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes};
+
+    let process = unsafe { GetCurrentProcess() };
+
+    let mut memory = unsafe { zeroed::<PROCESS_MEMORY_COUNTERS>() };
+    memory.cb = size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
+    let peak_rss_bytes = if unsafe { GetProcessMemoryInfo(process, &mut memory, memory.cb) } != 0 {
+        memory.PeakWorkingSetSize as u64
+    } else {
+        0
+    };
+
+    let mut creation_time = unsafe { zeroed::<FILETIME>() };
+    let mut exit_time = unsafe { zeroed::<FILETIME>() };
+    let mut kernel_time = unsafe { zeroed::<FILETIME>() };
+    let mut user_time = unsafe { zeroed::<FILETIME>() };
+    let cpu_us = if unsafe {
+        GetProcessTimes(
+            process,
+            &mut creation_time,
+            &mut exit_time,
+            &mut kernel_time,
+            &mut user_time,
+        )
+    } != 0
+    {
+        filetime_to_us(kernel_time).saturating_add(filetime_to_us(user_time))
+    } else {
+        0
+    };
+
+    ProcessUsage { cpu_us, peak_rss_bytes }
+}
+
+#[cfg(not(any(unix, windows)))]
+fn process_usage() -> ProcessUsage {
+    ProcessUsage { cpu_us: 0, peak_rss_bytes: 0 }
+}
+
+#[cfg(windows)]
+fn filetime_to_us(time: windows_sys::Win32::Foundation::FILETIME) -> u64 {
+    let ticks = ((time.dwHighDateTime as u64) << 32) | time.dwLowDateTime as u64;
+    ticks / 10
 }
 
 #[cfg(unix)]
 fn timeval_to_us(time: libc::timeval) -> u64 {
-    (time.tv_sec.max(0) as u64)
-        .saturating_mul(1_000_000)
-        .saturating_add(time.tv_usec.max(0) as u64)
+    (time.tv_sec.max(0) as u64).saturating_mul(1_000_000).saturating_add(time.tv_usec.max(0) as u64)
 }
