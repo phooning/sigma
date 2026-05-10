@@ -20,6 +20,7 @@ pub struct TelemetrySnapshot {
     pub broker_queue_depth: usize,
     pub broker_queue_capacity: usize,
     pub broker_queue_pressure: f64,
+    pub broker_queue_pressure_smoothed: f64,
     pub frame_drop_rate: f64,
     pub safe_budget_bytes_per_sec: u64,
     pub predicted_cost_bytes_per_sec: u64,

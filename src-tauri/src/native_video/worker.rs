@@ -21,6 +21,7 @@ use super::{
 };
 
 pub(crate) type FrameSubscribers = Arc<Mutex<Option<Channel<InvokeResponseBody>>>>;
+const QUEUE_PRESSURE_WINDOW: usize = 3;
 
 #[derive(Clone, Debug)]
 pub(crate) enum WorkerAssignment {
@@ -42,6 +43,29 @@ pub(crate) struct WorkerHandle {
 
 pub(crate) struct DecodedFrame {
     packet: PooledFramePacket,
+}
+
+struct QueuePressureSmoother {
+    samples: [f64; QUEUE_PRESSURE_WINDOW],
+    next: usize,
+    len: usize,
+}
+
+impl QueuePressureSmoother {
+    fn new() -> Self {
+        Self {
+            samples: [0.0; QUEUE_PRESSURE_WINDOW],
+            next: 0,
+            len: 0,
+        }
+    }
+
+    fn push(&mut self, sample: f64) -> f64 {
+        self.samples[self.next] = sample;
+        self.next = (self.next + 1) % QUEUE_PRESSURE_WINDOW;
+        self.len = self.len.saturating_add(1).min(QUEUE_PRESSURE_WINDOW);
+        self.samples[..self.len].iter().sum::<f64>() / self.len as f64
+    }
 }
 
 // FramePool preallocates and recycles decode buffers.
@@ -328,9 +352,12 @@ pub(crate) fn spawn_frame_broker(
         let mut delivered_frames = 0_u64;
         let mut dropped_frames = 0_u64;
         let mut unsubscribed_drops = 0_u64;
+        let mut queue_pressure = QueuePressureSmoother::new();
 
         while let Some(frame) = frame_rx.recv().await {
             let queue_depth = frame_rx.len();
+            let queue_pressure_raw = queue_depth as f64 / BROKER_QUEUE_CAPACITY.max(1) as f64;
+            let queue_pressure_smoothed = queue_pressure.push(queue_pressure_raw);
             let frame_pool = frame.packet.pool.clone();
             let subscriber = subscribers.lock().ok().and_then(|subscriber| subscriber.clone());
 
@@ -361,8 +388,8 @@ pub(crate) fn spawn_frame_broker(
                 snapshot.dropped_frames = dropped_frames;
                 snapshot.broker_queue_depth = queue_depth;
                 snapshot.broker_queue_capacity = BROKER_QUEUE_CAPACITY;
-                snapshot.broker_queue_pressure =
-                    queue_depth as f64 / BROKER_QUEUE_CAPACITY.max(1) as f64;
+                snapshot.broker_queue_pressure = queue_pressure_raw;
+                snapshot.broker_queue_pressure_smoothed = queue_pressure_smoothed;
                 snapshot.frame_pool_capacity = frame_pool.capacity();
                 snapshot.frame_pool_exhaustions = frame_pool.exhaustion_count();
                 snapshot.frame_channel_send_failures = frame_pool.channel_send_failure_count();
@@ -384,8 +411,18 @@ mod tests {
 
     use tokio::sync::{mpsc, watch};
 
-    use super::{spawn_frame_broker, DecodedFrame, FramePool, FrameSubscribers};
+    use super::{spawn_frame_broker, DecodedFrame, FramePool, FrameSubscribers, QueuePressureSmoother};
     use crate::native_video::telemetry::TelemetrySnapshot;
+
+    #[test]
+    fn queue_pressure_smoother_averages_last_three_samples() {
+        let mut smoother = QueuePressureSmoother::new();
+
+        assert_eq!(smoother.push(0.25), 0.25);
+        assert_eq!(smoother.push(0.5), 0.375);
+        assert!((smoother.push(0.75) - 0.5).abs() < f64::EPSILON);
+        assert!((smoother.push(1.0) - 0.75).abs() < f64::EPSILON);
+    }
 
     #[tokio::test]
     async fn broker_counts_unsubscribed_drops_separately() {

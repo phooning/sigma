@@ -1,5 +1,6 @@
 use std::{
     process::Stdio,
+    thread,
     time::{Duration, Instant},
 };
 
@@ -387,9 +388,16 @@ async fn persist_base_case_probe_metrics(
         .should_measure_ram_bandwidth();
 
     let ram_bandwidth = if should_measure {
-        tokio::task::spawn_blocking(measure_ram_bandwidth)
+        let (tx, rx) = oneshot::channel();
+        thread::Builder::new()
+            .name("sigma-ram-bandwidth-probe".into())
+            .spawn(move || {
+                let _ = tx.send(measure_ram_bandwidth());
+            })
+            .map_err(|err| format!("failed to spawn RAM bandwidth probe thread: {err}"))?;
+        rx
             .await
-            .map_err(|err| format!("failed to join RAM bandwidth probe: {err}"))?
+            .map_err(|err| format!("RAM bandwidth probe thread dropped result: {err}"))?
     } else {
         state
             .profile

@@ -161,7 +161,7 @@ impl Arbiter {
         } else {
             BASE_CASE_MAX_STREAMS_BEFORE_VALIDATION
         };
-        let overloaded = telemetry.broker_queue_pressure >= DOWNGRADE_QUEUE_PRESSURE
+        let overloaded = telemetry.broker_queue_pressure_smoothed >= DOWNGRADE_QUEUE_PRESSURE
             || telemetry.frame_drop_rate >= DOWNGRADE_DROP_RATE
             || telemetry.predicted_cost_bytes_per_sec > profile.safe_budget_bytes_per_sec;
         let headroom = if profile.safe_budget_bytes_per_sec == 0 {
@@ -171,7 +171,7 @@ impl Arbiter {
                 / profile.safe_budget_bytes_per_sec as f64
         };
         let upgrades_allowed = headroom >= UPGRADE_HEADROOM
-            && telemetry.broker_queue_pressure <= UPGRADE_QUEUE_PRESSURE;
+            && telemetry.broker_queue_pressure_smoothed <= UPGRADE_QUEUE_PRESSURE;
 
         let mut total_cost = 0_u64;
         let mut active_count = 0_usize;
