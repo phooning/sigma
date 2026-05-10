@@ -82,13 +82,12 @@ pub fn native_video_subscribe_frames(
     state: State<'_, NativeVideoState>,
     on_frame: Channel<InvokeResponseBody>,
 ) -> Result<(), String> {
-    // The broker dispatches the owned pool buffer directly; subscribers no longer clone broadcast frames.
-    let mut subscribers = state
+    // Native video maintains a single live frame subscriber at a time.
+    let mut subscriber = state
         .frame_subscribers
         .lock()
         .map_err(|_| "native video frame subscriber lock poisoned".to_string())?;
-    subscribers.clear();
-    subscribers.push(on_frame);
+    *subscriber = Some(on_frame);
 
     Ok(())
 }

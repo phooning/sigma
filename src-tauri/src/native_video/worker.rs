@@ -20,7 +20,7 @@ use super::{
     types::{QualityDecision, StreamState},
 };
 
-pub(crate) type FrameSubscribers = Arc<Mutex<Vec<Channel<InvokeResponseBody>>>>;
+pub(crate) type FrameSubscribers = Arc<Mutex<Option<Channel<InvokeResponseBody>>>>;
 
 #[derive(Clone, Debug)]
 pub(crate) enum WorkerAssignment {
@@ -332,10 +332,7 @@ pub(crate) fn spawn_frame_broker(
         while let Some(frame) = frame_rx.recv().await {
             let queue_depth = frame_rx.len();
             let frame_pool = frame.packet.pool.clone();
-            let subscriber = subscribers
-                .lock()
-                .ok()
-                .and_then(|subscribers| subscribers.last().cloned());
+            let subscriber = subscribers.lock().ok().and_then(|subscriber| subscriber.clone());
 
             match subscriber {
                 Some(on_frame) => {
@@ -343,8 +340,13 @@ pub(crate) fn spawn_frame_broker(
                         delivered_frames = delivered_frames.saturating_add(1);
                     } else {
                         dropped_frames = dropped_frames.saturating_add(1);
-                        if let Ok(mut subscribers) = subscribers.lock() {
-                            subscribers.retain(|candidate| candidate.id() != on_frame.id());
+                        if let Ok(mut subscriber) = subscribers.lock() {
+                            if subscriber
+                                .as_ref()
+                                .is_some_and(|candidate| candidate.id() == on_frame.id())
+                            {
+                                *subscriber = None;
+                            }
                         }
                     }
                 }
@@ -387,7 +389,7 @@ mod tests {
 
     #[tokio::test]
     async fn broker_counts_unsubscribed_drops_separately() {
-        let subscribers: FrameSubscribers = Arc::new(Mutex::new(Vec::new()));
+        let subscribers: FrameSubscribers = Arc::new(Mutex::new(None));
         let telemetry = Arc::new(Mutex::new(TelemetrySnapshot::default()));
         let (telemetry_tx, telemetry_rx) = watch::channel(TelemetrySnapshot::default());
         let (broker_tx, broker_rx) = mpsc::channel(1);
