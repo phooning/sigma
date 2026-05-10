@@ -26,6 +26,7 @@ pub struct TelemetrySnapshot {
     pub over_budget: bool,
     pub frame_pool_capacity: usize,
     pub frame_pool_exhaustions: u64,
+    pub frame_channel_send_failures: u64,
     pub rust_backend_frame_update_time_ms: Option<f64>,
     pub webview_js_frame_time_ms: Option<f64>,
     pub ipc_roundtrip_time_ms: Option<f64>,

@@ -63,6 +63,7 @@ pub(crate) struct FramePool {
     max_frame_bytes: usize,
     capacity: usize,
     exhaustion_count: AtomicU64,
+    channel_send_failure_count: AtomicU64,
 }
 
 pub(crate) struct PooledFramePacket {
@@ -81,6 +82,7 @@ impl FramePool {
             max_frame_bytes,
             capacity,
             exhaustion_count: AtomicU64::new(0),
+            channel_send_failure_count: AtomicU64::new(0),
         });
 
         for _ in 0..capacity {
@@ -98,6 +100,10 @@ impl FramePool {
 
     pub(crate) fn exhaustion_count(&self) -> u64 {
         self.exhaustion_count.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn channel_send_failure_count(&self) -> u64 {
+        self.channel_send_failure_count.load(Ordering::Relaxed)
     }
 
     pub(crate) fn try_borrow(self: &Arc<Self>) -> Option<PooledFramePacket> {
@@ -148,9 +154,19 @@ impl FramePool {
         let len = packet.len.min(buffer.len());
         let fresh_for_ipc = buffer[..len].to_vec();
         packet.len = 0;
-        let sent = on_frame
-            .send(InvokeResponseBody::Raw(fresh_for_ipc))
-            .is_ok();
+        let sent = match on_frame.send(InvokeResponseBody::Raw(fresh_for_ipc)) {
+            Ok(()) => true,
+            Err(error) => {
+                let count = self
+                    .channel_send_failure_count
+                    .fetch_add(1, Ordering::Relaxed)
+                    + 1;
+                eprintln!(
+                    "native-video: failed to dispatch frame to IPC channel; total_send_failures={count}; error={error}"
+                );
+                false
+            }
+        };
         self.recycle(buffer);
         sent
     }
@@ -268,6 +284,7 @@ fn spawn_decode_worker(
                                     update_telemetry(&telemetry, &telemetry_tx, |snapshot| {
                                         snapshot.frame_pool_capacity = frame_pool.capacity();
                                         snapshot.frame_pool_exhaustions = frame_pool.exhaustion_count();
+                                        snapshot.frame_channel_send_failures = frame_pool.channel_send_failure_count();
                                     });
                                     task::yield_now().await;
                                     continue;
@@ -344,6 +361,7 @@ pub(crate) fn spawn_frame_broker(
                     queue_depth as f64 / BROKER_QUEUE_CAPACITY.max(1) as f64;
                 snapshot.frame_pool_capacity = frame_pool.capacity();
                 snapshot.frame_pool_exhaustions = frame_pool.exhaustion_count();
+                snapshot.frame_channel_send_failures = frame_pool.channel_send_failure_count();
                 let total = delivered_frames + dropped_frames;
                 snapshot.frame_drop_rate = if total == 0 {
                     0.0
