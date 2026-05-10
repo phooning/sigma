@@ -1,17 +1,20 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = resolve(new URL("..", import.meta.url).pathname);
-const baselineJsonPath = resolve(root, "benchmarks/vitest-bench-baseline.json");
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const root = resolve(scriptDir, '..');
+const benchmarkDir = resolve(root, "benchmarks");
+const baselineJsonPath = resolve(benchmarkDir, "vitest-bench-baseline.json");
 const baselineLogPath = resolve(
-  root,
-  "benchmarks/vitest-bench-baseline.verbose.txt",
+  benchmarkDir,
+  "vitest-bench-baseline.verbose.txt",
 );
-const latestJsonPath = resolve(root, "benchmarks/vitest-bench-current.json");
+const latestJsonPath = resolve(benchmarkDir, "vitest-bench-current.json");
 const latestLogPath = resolve(
-  root,
-  "benchmarks/vitest-bench-current.verbose.txt",
+  benchmarkDir,
+  "vitest-bench-current.verbose.txt",
 );
 const updateBaseline = process.argv.includes("--update-baseline");
 
@@ -38,6 +41,7 @@ if (!updateBaseline && hasBaseline) {
 }
 
 const result = spawnSync("pnpm", vitestArgs, {
+  shell: process.platform === "win32",
   cwd: root,
   encoding: "utf8",
 });
