@@ -327,6 +327,7 @@ pub(crate) fn spawn_frame_broker(
     tauri::async_runtime::spawn(async move {
         let mut delivered_frames = 0_u64;
         let mut dropped_frames = 0_u64;
+        let mut unsubscribed_drops = 0_u64;
 
         while let Some(frame) = frame_rx.recv().await {
             let queue_depth = frame_rx.len();
@@ -349,6 +350,7 @@ pub(crate) fn spawn_frame_broker(
                 }
                 None => {
                     dropped_frames = dropped_frames.saturating_add(1);
+                    unsubscribed_drops = unsubscribed_drops.saturating_add(1);
                 }
             }
 
@@ -362,6 +364,7 @@ pub(crate) fn spawn_frame_broker(
                 snapshot.frame_pool_capacity = frame_pool.capacity();
                 snapshot.frame_pool_exhaustions = frame_pool.exhaustion_count();
                 snapshot.frame_channel_send_failures = frame_pool.channel_send_failure_count();
+                snapshot.frame_unsubscribed_drops = unsubscribed_drops;
                 let total = delivered_frames + dropped_frames;
                 snapshot.frame_drop_rate = if total == 0 {
                     0.0
@@ -371,4 +374,51 @@ pub(crate) fn spawn_frame_broker(
             });
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use tokio::sync::{mpsc, watch};
+
+    use super::{spawn_frame_broker, DecodedFrame, FramePool, FrameSubscribers};
+    use crate::native_video::telemetry::TelemetrySnapshot;
+
+    #[tokio::test]
+    async fn broker_counts_unsubscribed_drops_separately() {
+        let subscribers: FrameSubscribers = Arc::new(Mutex::new(Vec::new()));
+        let telemetry = Arc::new(Mutex::new(TelemetrySnapshot::default()));
+        let (telemetry_tx, telemetry_rx) = watch::channel(TelemetrySnapshot::default());
+        let (broker_tx, broker_rx) = mpsc::channel(1);
+        let pool = FramePool::new(0, 16);
+        let mut packet = pool.try_borrow().expect("pooled packet");
+        packet.set_len(0);
+
+        spawn_frame_broker(
+            broker_rx,
+            subscribers,
+            telemetry.clone(),
+            telemetry_tx.clone(),
+        );
+
+        broker_tx
+            .send(DecodedFrame { packet })
+            .await
+            .expect("broker frame send");
+        drop(broker_tx);
+
+        let mut telemetry_rx = telemetry_rx;
+        telemetry_rx
+            .changed()
+            .await
+            .expect("telemetry update after unsubscribed drop");
+        let snapshot = telemetry_rx.borrow().clone();
+
+        assert_eq!(snapshot.delivered_frames, 0);
+        assert_eq!(snapshot.dropped_frames, 1);
+        assert_eq!(snapshot.frame_unsubscribed_drops, 1);
+        assert_eq!(snapshot.frame_channel_send_failures, 0);
+        assert_eq!(snapshot.frame_pool_exhaustions, 0);
+    }
 }
