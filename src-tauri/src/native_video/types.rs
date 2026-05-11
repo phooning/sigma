@@ -86,6 +86,7 @@ pub struct ControllerSnapshot {
 #[serde(rename_all = "camelCase")]
 pub struct QualityDecision {
     pub asset_id: String,
+    pub source_path: String,
     pub stream_id: u64,
     pub state: StreamState,
     pub tier: QualityTier,
@@ -115,48 +116,14 @@ pub struct QualityTier {
     pub max_height: u32,
 }
 
-pub(crate) const SUSPENDED_TIER: QualityTier = QualityTier {
-    id: 0,
-    name: "suspended",
-    max_width: 0,
-    max_height: 0,
-};
+pub(crate) const SUSPENDED_TIER: QualityTier =
+    QualityTier { id: 0, name: "suspended", max_width: 0, max_height: 0 };
 
 pub(crate) const QUALITY_TIERS: [QualityTier; 6] = [
-    QualityTier {
-        id: 1,
-        name: "thumb-144p",
-        max_width: 256,
-        max_height: 144,
-    },
-    QualityTier {
-        id: 2,
-        name: "low-240p",
-        max_width: 426,
-        max_height: 240,
-    },
-    QualityTier {
-        id: 3,
-        name: "canvas-480p",
-        max_width: 854,
-        max_height: 480,
-    },
-    QualityTier {
-        id: 4,
-        name: "detail-720p",
-        max_width: 1280,
-        max_height: 720,
-    },
-    QualityTier {
-        id: 5,
-        name: "focus-1080p",
-        max_width: 1920,
-        max_height: 1080,
-    },
-    QualityTier {
-        id: 6,
-        name: "native-2160p",
-        max_width: 3840,
-        max_height: 2160,
-    },
+    QualityTier { id: 1, name: "thumb-144p", max_width: 256, max_height: 144 },
+    QualityTier { id: 2, name: "low-240p", max_width: 426, max_height: 240 },
+    QualityTier { id: 3, name: "canvas-480p", max_width: 854, max_height: 480 },
+    QualityTier { id: 4, name: "detail-720p", max_width: 1280, max_height: 720 },
+    QualityTier { id: 5, name: "focus-1080p", max_width: 1920, max_height: 1080 },
+    QualityTier { id: 6, name: "native-2160p", max_width: 3840, max_height: 2160 },
 ];

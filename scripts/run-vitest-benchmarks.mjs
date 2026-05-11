@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const root = resolve(scriptDir, '..');
+const root = resolve(scriptDir, "..");
 const benchmarkDir = resolve(root, "benchmarks");
 const baselineJsonPath = resolve(benchmarkDir, "vitest-bench-baseline.json");
 const baselineLogPath = resolve(
@@ -12,10 +12,7 @@ const baselineLogPath = resolve(
   "vitest-bench-baseline.verbose.txt",
 );
 const latestJsonPath = resolve(benchmarkDir, "vitest-bench-current.json");
-const latestLogPath = resolve(
-  benchmarkDir,
-  "vitest-bench-current.verbose.txt",
-);
+const latestLogPath = resolve(benchmarkDir, "vitest-bench-current.verbose.txt");
 const updateBaseline = process.argv.includes("--update-baseline");
 
 const jsonPath = updateBaseline ? baselineJsonPath : latestJsonPath;

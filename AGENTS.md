@@ -1,6 +1,6 @@
 # AGENTS
 
-Complete the task. After every task, **explicitly verify** using this repository's testing frameworks:
+Complete the task. After every task, **explicitly verify** using this repository's testing frameworks on Node 24:
 
 - Vitest: `pnpm test`
 - Playwright: `pnpm test:e2e`

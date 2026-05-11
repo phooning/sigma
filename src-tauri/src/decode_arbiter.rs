@@ -111,14 +111,8 @@ impl DecodeArbiter {
                     let generations = Arc::clone(&worker_generations);
                     tauri::async_runtime::spawn(async move {
                         let _permit = permit;
-                        let DecodeRequest {
-                            item_id,
-                            path,
-                            lod,
-                            generation,
-                            respond_to,
-                            ..
-                        } = queued.request;
+                        let DecodeRequest { item_id, path, lod, generation, respond_to, .. } =
+                            queued.request;
 
                         let decoded = if generations.read().await.get(&item_id).copied()
                             != Some(generation)
@@ -160,20 +154,11 @@ impl DecodeArbiter {
     ) -> DecodeResult {
         let (respond_to, response) = oneshot::channel();
         self.tx
-            .send(DecodeRequest {
-                item_id,
-                path,
-                lod,
-                generation,
-                priority,
-                respond_to,
-            })
+            .send(DecodeRequest { item_id, path, lod, generation, priority, respond_to })
             .await
             .map_err(|_| "Decode arbiter is not available".to_string())?;
 
-        response
-            .await
-            .map_err(|_| "Decode arbiter dropped the decode response".to_string())?
+        response.await.map_err(|_| "Decode arbiter dropped the decode response".to_string())?
     }
 
     #[allow(dead_code)]
@@ -182,11 +167,7 @@ impl DecodeArbiter {
     }
 }
 
-fn decode_preview_to_cache<R: Runtime>(
-    app: AppHandle<R>,
-    path: PathBuf,
-    lod: u32,
-) -> DecodeResult {
+fn decode_preview_to_cache<R: Runtime>(app: AppHandle<R>, path: PathBuf, lod: u32) -> DecodeResult {
     let path_string = path.to_string_lossy().into_owned();
 
     if is_video_path(&path) {

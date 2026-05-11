@@ -14,10 +14,10 @@
     "bench:update": "node ./scripts/run-vitest-benchmarks.mjs --update-baseline",
     "bench:check": "pnpm bench && node ./scripts/check-vitest-bench-baseline.mjs",
     "bench:ipc:rust": "cargo bench --manifest-path src-tauri/Cargo.toml --bench ipc_latency",
-    "check": "./.githooks/pre-push",
+    "check": "node ./scripts/run-pre-push.mjs",
     "tauri": "tauri",
-    "pw:install": "cross-env PLAYWRIGHT_BROWSERS_PATH=0 playwright install chromium",
-    "test:e2e": "cross-env PLAYWRIGHT_BROWSERS_PATH=0 playwright test"
+    "pw:install": "cross-env playwright install chromium",
+    "test:e2e": "cross-env playwright test"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.8",

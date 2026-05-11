@@ -70,7 +70,7 @@ impl PerformanceProfile {
             base_probe_ipc_latency_p95_ms: None,
             base_probe_ram_bandwidth_bytes_per_sec: None,
             notes: vec![
-                "Uncalibrated defaults only permit the highest-priority visible stream.".into(),
+                "Uncalibrated defaults only permit the highest-priority visible stream.".into()
             ],
         };
         profile.recompute_safe_budget();
@@ -202,16 +202,18 @@ fn detect_max_vram_bytes_inner() -> Option<u64> {
     })?;
 
     let result = (|| unsafe {
-        let init_v2: unsafe extern "C" fn() -> NvmlReturn =
-            load_symbol(handle, "nvmlInit_v2")?;
-        let shutdown: unsafe extern "C" fn() -> NvmlReturn =
-            load_symbol(handle, "nvmlShutdown")?;
+        let init_v2: unsafe extern "C" fn() -> NvmlReturn = load_symbol(handle, "nvmlInit_v2")?;
+        let shutdown: unsafe extern "C" fn() -> NvmlReturn = load_symbol(handle, "nvmlShutdown")?;
         let device_get_count_v2: unsafe extern "C" fn(*mut c_uint) -> NvmlReturn =
             load_symbol(handle, "nvmlDeviceGetCount_v2")?;
-        let device_get_handle_by_index_v2: unsafe extern "C" fn(c_uint, *mut NvmlDevice) -> NvmlReturn =
-            load_symbol(handle, "nvmlDeviceGetHandleByIndex_v2")?;
-        let device_get_memory_info: unsafe extern "C" fn(NvmlDevice, *mut NvmlMemory) -> NvmlReturn =
-            load_symbol(handle, "nvmlDeviceGetMemoryInfo")?;
+        let device_get_handle_by_index_v2: unsafe extern "C" fn(
+            c_uint,
+            *mut NvmlDevice,
+        ) -> NvmlReturn = load_symbol(handle, "nvmlDeviceGetHandleByIndex_v2")?;
+        let device_get_memory_info: unsafe extern "C" fn(
+            NvmlDevice,
+            *mut NvmlMemory,
+        ) -> NvmlReturn = load_symbol(handle, "nvmlDeviceGetMemoryInfo")?;
 
         if init_v2() != NVML_SUCCESS {
             return None;
@@ -230,11 +232,7 @@ fn detect_max_vram_bytes_inner() -> Option<u64> {
                 continue;
             }
 
-            let mut memory = NvmlMemory {
-                total: 0,
-                free: 0,
-                used: 0,
-            };
+            let mut memory = NvmlMemory { total: 0, free: 0, used: 0 };
             if device_get_memory_info(device, &mut memory) == NVML_SUCCESS {
                 max_total = max_total.max(memory.total);
             }

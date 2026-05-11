@@ -69,13 +69,6 @@ impl NativeVideoState {
             profile.clone(),
         );
 
-        Self {
-            control_tx,
-            frame_subscribers,
-            telemetry_tx,
-            telemetry,
-            profile,
-            profile_path,
-        }
+        Self { control_tx, frame_subscribers, telemetry_tx, telemetry, profile, profile_path }
     }
 }

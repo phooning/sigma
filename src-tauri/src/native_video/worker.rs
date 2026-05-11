@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    process::Stdio,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc, Mutex,
@@ -9,13 +10,15 @@ use std::{
 
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tokio::{
+    io::AsyncReadExt,
+    process::Command as TokioCommand,
     sync::{mpsc, watch},
     task, time,
 };
 
 use super::{
     constants::BROKER_QUEUE_CAPACITY,
-    frame_packet::write_synthetic_yuv420_packet,
+    frame_packet::{write_yuv420_packet_from_payload, yuv420_payload_len},
     telemetry::{update_telemetry, TelemetrySnapshot},
     types::{QualityDecision, StreamState},
 };
@@ -27,6 +30,7 @@ const QUEUE_PRESSURE_WINDOW: usize = 3;
 pub(crate) enum WorkerAssignment {
     Active {
         asset_id: String,
+        source_path: String,
         stream_id: u64,
         width: u32,
         height: u32,
@@ -53,11 +57,7 @@ struct QueuePressureSmoother {
 
 impl QueuePressureSmoother {
     fn new() -> Self {
-        Self {
-            samples: [0.0; QUEUE_PRESSURE_WINDOW],
-            next: 0,
-            len: 0,
-        }
+        Self { samples: [0.0; QUEUE_PRESSURE_WINDOW], next: 0, len: 0 }
     }
 
     fn push(&mut self, sample: f64) -> f64 {
@@ -110,9 +110,7 @@ impl FramePool {
         });
 
         for _ in 0..capacity {
-            let _ = pool
-                .recycle_tx
-                .try_send(Arc::new(vec![0_u8; max_frame_bytes]));
+            let _ = pool.recycle_tx.try_send(Arc::new(vec![0_u8; max_frame_bytes]));
         }
 
         pool
@@ -131,18 +129,13 @@ impl FramePool {
     }
 
     pub(crate) fn try_borrow(self: &Arc<Self>) -> Option<PooledFramePacket> {
-        let borrowed = self
-            .recycle_rx
-            .lock()
-            .ok()
-            .and_then(|mut recycle_rx| recycle_rx.try_recv().ok());
+        let borrowed =
+            self.recycle_rx.lock().ok().and_then(|mut recycle_rx| recycle_rx.try_recv().ok());
 
         match borrowed {
-            Some(buffer) => Some(PooledFramePacket {
-                buffer: Some(buffer),
-                pool: self.clone(),
-                len: 0,
-            }),
+            Some(buffer) => {
+                Some(PooledFramePacket { buffer: Some(buffer), pool: self.clone(), len: 0 })
+            }
             None => {
                 let count = self.exhaustion_count.fetch_add(1, Ordering::Relaxed) + 1;
                 eprintln!("native-video: frame pool exhausted; total_exhaustions={count}");
@@ -181,10 +174,7 @@ impl FramePool {
         let sent = match on_frame.send(InvokeResponseBody::Raw(fresh_for_ipc)) {
             Ok(()) => true,
             Err(error) => {
-                let count = self
-                    .channel_send_failure_count
-                    .fetch_add(1, Ordering::Relaxed)
-                    + 1;
+                let count = self.channel_send_failure_count.fetch_add(1, Ordering::Relaxed) + 1;
                 eprintln!(
                     "native-video: failed to dispatch frame to IPC channel; total_send_failures={count}; error={error}"
                 );
@@ -222,10 +212,8 @@ pub(crate) fn reconcile_workers(
     telemetry: Arc<Mutex<TelemetrySnapshot>>,
     telemetry_tx: watch::Sender<TelemetrySnapshot>,
 ) {
-    let active_ids: HashSet<u64> = allocations
-        .iter()
-        .map(|allocation| allocation.stream_id)
-        .collect();
+    let active_ids: HashSet<u64> =
+        allocations.iter().map(|allocation| allocation.stream_id).collect();
 
     workers.retain(|stream_id, worker| {
         if active_ids.contains(stream_id) {
@@ -240,6 +228,7 @@ pub(crate) fn reconcile_workers(
         let assignment = if allocation.state == StreamState::Active {
             WorkerAssignment::Active {
                 asset_id: allocation.asset_id.clone(),
+                source_path: allocation.source_path.clone(),
                 stream_id: allocation.stream_id,
                 width: allocation.decode_width,
                 height: allocation.decode_height,
@@ -287,23 +276,67 @@ fn spawn_decode_worker(
                 }
                 WorkerAssignment::Active {
                     asset_id: _asset_id,
+                    source_path,
                     stream_id,
                     width,
                     height,
                     fps,
                     tier_id,
                 } => {
+                    let source_path = source_path.trim().to_string();
+                    if source_path.is_empty() {
+                        if assignment_rx.changed().await.is_err() {
+                            break;
+                        }
+                        continue;
+                    }
+
+                    let payload_len = yuv420_payload_len(width, height);
+                    let mut child =
+                        match spawn_ffmpeg_rawvideo_decoder(&source_path, width, height, fps) {
+                            Ok(child) => child,
+                            Err(_) => {
+                                wait_for_reassignment_or_retry(&mut assignment_rx).await;
+                                continue;
+                            }
+                        };
+                    let Some(mut stdout) = child.stdout.take() else {
+                        let _ = child.kill().await;
+                        wait_for_reassignment_or_retry(&mut assignment_rx).await;
+                        continue;
+                    };
+                    let mut payload = vec![0_u8; payload_len];
                     let mut interval =
                         time::interval(Duration::from_secs_f64(1.0 / fps.max(1) as f64));
                     loop {
                         tokio::select! {
                             changed = assignment_rx.changed() => {
                                 if changed.is_err() {
+                                    let _ = child.kill().await;
                                     return;
                                 }
+                                let _ = child.kill().await;
                                 break;
                             }
                             _ = interval.tick() => {
+                                let read_result = tokio::select! {
+                                    changed = assignment_rx.changed() => {
+                                        if changed.is_err() {
+                                            let _ = child.kill().await;
+                                            return;
+                                        }
+                                        let _ = child.kill().await;
+                                        break;
+                                    }
+                                    read_result = stdout.read_exact(&mut payload) => read_result,
+                                };
+
+                                if read_result.is_err() {
+                                    let _ = child.wait().await;
+                                    wait_for_reassignment_or_retry(&mut assignment_rx).await;
+                                    break;
+                                }
+
                                 let Some(mut packet) = frame_pool.try_borrow() else {
                                     update_telemetry(&telemetry, &telemetry_tx, |snapshot| {
                                         snapshot.frame_pool_capacity = frame_pool.capacity();
@@ -319,7 +352,7 @@ fn spawn_decode_worker(
                                     continue;
                                 };
 
-                                let len = write_synthetic_yuv420_packet(
+                                let len = write_yuv420_packet_from_payload(
                                     bytes,
                                     stream_id,
                                     sequence,
@@ -327,6 +360,7 @@ fn spawn_decode_worker(
                                     width,
                                     height,
                                     tier_id,
+                                    &payload,
                                 );
                                 packet.set_len(len);
                                 sequence = sequence.wrapping_add(1);
@@ -340,6 +374,48 @@ fn spawn_decode_worker(
             }
         }
     })
+}
+
+fn spawn_ffmpeg_rawvideo_decoder(
+    source_path: &str,
+    width: u32,
+    height: u32,
+    fps: u32,
+) -> Result<tokio::process::Child, std::io::Error> {
+    TokioCommand::new("ffmpeg")
+        .args(ffmpeg_rawvideo_decoder_args(source_path, width, height, fps.max(1)))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+}
+
+fn ffmpeg_rawvideo_decoder_args(
+    source_path: &str,
+    width: u32,
+    height: u32,
+    fps: u32,
+) -> Vec<String> {
+    vec![
+        "-v".into(),
+        "error".into(),
+        "-stream_loop".into(),
+        "-1".into(),
+        "-i".into(),
+        source_path.into(),
+        "-an".into(),
+        "-vf".into(),
+        format!("fps={},scale={}:{}:flags=fast_bilinear,format=yuv420p", fps.max(1), width, height),
+        "-f".into(),
+        "rawvideo".into(),
+        "pipe:1".into(),
+    ]
+}
+
+async fn wait_for_reassignment_or_retry(assignment_rx: &mut watch::Receiver<WorkerAssignment>) {
+    tokio::select! {
+        _ = assignment_rx.changed() => {}
+        _ = time::sleep(Duration::from_millis(250)) => {}
+    }
 }
 
 pub(crate) fn spawn_frame_broker(
@@ -395,11 +471,8 @@ pub(crate) fn spawn_frame_broker(
                 snapshot.frame_channel_send_failures = frame_pool.channel_send_failure_count();
                 snapshot.frame_unsubscribed_drops = unsubscribed_drops;
                 let total = delivered_frames + dropped_frames;
-                snapshot.frame_drop_rate = if total == 0 {
-                    0.0
-                } else {
-                    dropped_frames as f64 / total as f64
-                };
+                snapshot.frame_drop_rate =
+                    if total == 0 { 0.0 } else { dropped_frames as f64 / total as f64 };
             });
         }
     });
@@ -411,7 +484,10 @@ mod tests {
 
     use tokio::sync::{mpsc, watch};
 
-    use super::{spawn_frame_broker, DecodedFrame, FramePool, FrameSubscribers, QueuePressureSmoother};
+    use super::{
+        ffmpeg_rawvideo_decoder_args, spawn_frame_broker, DecodedFrame, FramePool,
+        FrameSubscribers, QueuePressureSmoother,
+    };
     use crate::native_video::telemetry::TelemetrySnapshot;
 
     #[test]
@@ -424,6 +500,29 @@ mod tests {
         assert!((smoother.push(1.0) - 0.75).abs() < f64::EPSILON);
     }
 
+    #[test]
+    fn ffmpeg_decoder_args_request_looped_yuv420_rawvideo() {
+        let args = ffmpeg_rawvideo_decoder_args("sample.mp4", 1280, 720, 30);
+
+        assert_eq!(
+            args,
+            vec![
+                "-v".to_string(),
+                "error".to_string(),
+                "-stream_loop".to_string(),
+                "-1".to_string(),
+                "-i".to_string(),
+                "sample.mp4".to_string(),
+                "-an".to_string(),
+                "-vf".to_string(),
+                "fps=30,scale=1280:720:flags=fast_bilinear,format=yuv420p".to_string(),
+                "-f".to_string(),
+                "rawvideo".to_string(),
+                "pipe:1".to_string(),
+            ]
+        );
+    }
+
     #[tokio::test]
     async fn broker_counts_unsubscribed_drops_separately() {
         let subscribers: FrameSubscribers = Arc::new(Mutex::new(None));
@@ -434,24 +533,13 @@ mod tests {
         let mut packet = pool.try_borrow().expect("pooled packet");
         packet.set_len(0);
 
-        spawn_frame_broker(
-            broker_rx,
-            subscribers,
-            telemetry.clone(),
-            telemetry_tx.clone(),
-        );
+        spawn_frame_broker(broker_rx, subscribers, telemetry.clone(), telemetry_tx.clone());
 
-        broker_tx
-            .send(DecodedFrame { packet })
-            .await
-            .expect("broker frame send");
+        broker_tx.send(DecodedFrame { packet }).await.expect("broker frame send");
         drop(broker_tx);
 
         let mut telemetry_rx = telemetry_rx;
-        telemetry_rx
-            .changed()
-            .await
-            .expect("telemetry update after unsubscribed drop");
+        telemetry_rx.changed().await.expect("telemetry update after unsubscribed drop");
         let snapshot = telemetry_rx.borrow().clone();
 
         assert_eq!(snapshot.delivered_frames, 0);

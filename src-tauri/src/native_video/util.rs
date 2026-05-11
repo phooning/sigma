@@ -20,9 +20,7 @@ pub(crate) fn now_millis() -> u64 {
 }
 
 pub(crate) fn p95_index(len: usize) -> usize {
-    ((len as f64 * 0.95).ceil() as usize)
-        .saturating_sub(1)
-        .min(len.saturating_sub(1))
+    ((len as f64 * 0.95).ceil() as usize).saturating_sub(1).min(len.saturating_sub(1))
 }
 
 pub(crate) fn even_dimension(value: u32) -> u32 {

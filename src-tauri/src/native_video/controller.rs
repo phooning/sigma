@@ -9,8 +9,8 @@ use super::{
     constants::{
         BASE_CASE_MAX_STREAMS_BEFORE_VALIDATION, DOWNGRADE_DROP_RATE, DOWNGRADE_QUEUE_PRESSURE,
         GPU_FRAME_RESIDENCY_MULTIPLIER, MATERIAL_OVERSAMPLE, MIN_DOWNGRADE_DWELL_MS,
-        MIN_UPGRADE_DWELL_MS,
-        SCALING_MAX_STREAMS_AFTER_VALIDATION, UPGRADE_HEADROOM, UPGRADE_QUEUE_PRESSURE,
+        MIN_UPGRADE_DWELL_MS, SCALING_MAX_STREAMS_AFTER_VALIDATION, UPGRADE_HEADROOM,
+        UPGRADE_QUEUE_PRESSURE,
     },
     frame_packet::yuv420_payload_len,
     profile::PerformanceProfile,
@@ -25,13 +25,8 @@ use super::{
 
 #[derive(Debug)]
 pub(crate) enum ControlMessage {
-    UpdateManifest {
-        manifest: CanvasManifest,
-        respond_to: oneshot::Sender<ControllerSnapshot>,
-    },
-    StopAll {
-        respond_to: oneshot::Sender<ControllerSnapshot>,
-    },
+    UpdateManifest { manifest: CanvasManifest, respond_to: oneshot::Sender<ControllerSnapshot> },
+    StopAll { respond_to: oneshot::Sender<ControllerSnapshot> },
 }
 
 pub(crate) fn spawn_controller(
@@ -54,19 +49,12 @@ pub(crate) fn spawn_controller(
 
         while let Some(message) = control_rx.recv().await {
             match message {
-                ControlMessage::UpdateManifest {
-                    manifest: next_manifest,
-                    respond_to,
-                } => {
+                ControlMessage::UpdateManifest { manifest: next_manifest, respond_to } => {
                     manifest = next_manifest;
-                    let profile_snapshot = profile
-                        .lock()
-                        .map(|profile| profile.clone())
-                        .unwrap_or_default();
-                    let telemetry_snapshot = telemetry
-                        .lock()
-                        .map(|snapshot| snapshot.clone())
-                        .unwrap_or_default();
+                    let profile_snapshot =
+                        profile.lock().map(|profile| profile.clone()).unwrap_or_default();
+                    let telemetry_snapshot =
+                        telemetry.lock().map(|snapshot| snapshot.clone()).unwrap_or_default();
                     let next_allocations = Arbiter::allocate(
                         &manifest,
                         &profile_snapshot,
@@ -117,9 +105,9 @@ pub(crate) fn spawn_controller(
                         snapshot.safe_budget_bytes_per_sec =
                             profile_snapshot.safe_budget_bytes_per_sec;
                         snapshot.vram_budget_bytes = profile_snapshot.vram_budget_bytes;
-                        snapshot.over_budget =
-                            predicted_cost > profile_snapshot.safe_budget_bytes_per_sec
-                                || predicted_vram > profile_snapshot.vram_budget_bytes;
+                        snapshot.over_budget = predicted_cost
+                            > profile_snapshot.safe_budget_bytes_per_sec
+                            || predicted_vram > profile_snapshot.vram_budget_bytes;
                     });
 
                     let snapshot = controller_snapshot(
@@ -135,10 +123,8 @@ pub(crate) fn spawn_controller(
                     }
                     allocations.clear();
                     manifest.assets.clear();
-                    let profile_snapshot = profile
-                        .lock()
-                        .map(|profile| profile.clone())
-                        .unwrap_or_default();
+                    let profile_snapshot =
+                        profile.lock().map(|profile| profile.clone()).unwrap_or_default();
                     update_telemetry(&telemetry, &telemetry_tx, |snapshot| {
                         snapshot.visible_streams = 0;
                         snapshot.active_streams = 0;
@@ -208,6 +194,7 @@ impl Arbiter {
             let mut decision = if let Some((tier, width, height, cost)) = candidate {
                 QualityDecision {
                     asset_id: asset.id.clone(),
+                    source_path: asset.path.clone(),
                     stream_id,
                     state: StreamState::Active,
                     tier,
@@ -222,6 +209,7 @@ impl Arbiter {
             } else {
                 QualityDecision {
                     asset_id: asset.id.clone(),
+                    source_path: asset.path.clone(),
                     stream_id,
                     state: if active_count < max_active {
                         StreamState::Thumbnail
@@ -258,10 +246,8 @@ impl Arbiter {
 
             if decision.state == StreamState::Active {
                 total_cost = total_cost.saturating_add(decision.predicted_cost_bytes_per_sec);
-                total_vram = total_vram.saturating_add(tier_vram_bytes(
-                    decision.decode_width,
-                    decision.decode_height,
-                ));
+                total_vram = total_vram
+                    .saturating_add(tier_vram_bytes(decision.decode_width, decision.decode_height));
                 active_count += 1;
             }
 
@@ -347,12 +333,13 @@ fn apply_hysteresis(
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_hysteresis, choose_candidate, tier_cost_bytes_per_sec, tier_vram_bytes,
+        apply_hysteresis, choose_candidate, tier_cost_bytes_per_sec, tier_vram_bytes, Arbiter,
         MIN_UPGRADE_DWELL_MS, QUALITY_TIERS,
     };
     use crate::native_video::{
         profile::PerformanceProfile,
-        types::{QualityDecision, StreamState, VisibleAsset},
+        telemetry::TelemetrySnapshot,
+        types::{CanvasManifest, QualityDecision, StreamState, VisibleAsset},
     };
 
     fn profile_with_budget_and_factor(budget: u64, factor: f64) -> PerformanceProfile {
@@ -389,6 +376,7 @@ mod tests {
     ) -> QualityDecision {
         QualityDecision {
             asset_id: format!("asset-{tier_index}"),
+            source_path: format!("asset-{tier_index}.mp4"),
             stream_id: tier_index as u64,
             state: StreamState::Active,
             tier: QUALITY_TIERS[tier_index],
@@ -420,8 +408,12 @@ mod tests {
             now,
             &profile,
         );
-        let current_previous_cost =
-            tier_cost_bytes_per_sec(previous.decode_width, previous.decode_height, previous.fps, &profile);
+        let current_previous_cost = tier_cost_bytes_per_sec(
+            previous.decode_width,
+            previous.decode_height,
+            previous.fps,
+            &profile,
+        );
 
         assert!(current_previous_cost > remaining_budget);
         assert_eq!(result.tier.id, next.tier.id);
@@ -432,8 +424,12 @@ mod tests {
         let previous = decision(1, 256, 144, 60, 1);
         let next = decision(2, 426, 240, 60, 10_000_000);
         let profile = profile_with_budget_and_factor(10_000_000, 1.0);
-        let current_previous_cost =
-            tier_cost_bytes_per_sec(previous.decode_width, previous.decode_height, previous.fps, &profile);
+        let current_previous_cost = tier_cost_bytes_per_sec(
+            previous.decode_width,
+            previous.decode_height,
+            previous.fps,
+            &profile,
+        );
         let now = previous.last_changed_at_ms + MIN_UPGRADE_DWELL_MS - 1;
 
         let result = apply_hysteresis(
@@ -462,6 +458,41 @@ mod tests {
     }
 
     #[test]
+    fn allocation_carries_asset_path_for_decode_worker() {
+        let manifest = CanvasManifest {
+            canvas_width: 1920,
+            canvas_height: 1080,
+            viewport_zoom: 1.0,
+            assets: vec![VisibleAsset {
+                id: "asset-1".into(),
+                path: "C:/media/clip.mp4".into(),
+                source_width: 1920,
+                source_height: 1080,
+                screen_x: 0.0,
+                screen_y: 0.0,
+                rendered_width_px: 1280.0,
+                rendered_height_px: 720.0,
+                visible_area_px: 1280.0 * 720.0,
+                focus_weight: 1.0,
+                center_weight: 0.5,
+                target_fps: 30,
+            }],
+        };
+        let profile = profile_with_budget_and_factor(u64::MAX / 4, 1.0);
+
+        let allocations = Arbiter::allocate(
+            &manifest,
+            &profile,
+            &TelemetrySnapshot::default(),
+            &Default::default(),
+        );
+
+        assert_eq!(allocations[0].asset_id, "asset-1");
+        assert_eq!(allocations[0].source_path, "C:/media/clip.mp4");
+        assert_eq!(allocations[0].state, StreamState::Active);
+    }
+
+    #[test]
     fn choose_candidate_respects_remaining_vram_budget() {
         let asset = VisibleAsset {
             id: "asset-1".into(),
@@ -480,13 +511,9 @@ mod tests {
         let profile = PerformanceProfile::uncalibrated();
         let vram_for_240p = tier_vram_bytes(426, 240);
 
-        let candidate = choose_candidate(
-            &asset,
-            &profile,
-            u64::MAX,
-            vram_for_240p.saturating_sub(1),
-        )
-        .expect("candidate under tight vram budget");
+        let candidate =
+            choose_candidate(&asset, &profile, u64::MAX, vram_for_240p.saturating_sub(1))
+                .expect("candidate under tight vram budget");
 
         assert_eq!(candidate.0.id, 1);
     }
@@ -494,9 +521,7 @@ mod tests {
 
 fn priority(asset: &VisibleAsset, manifest: &CanvasManifest) -> f64 {
     let canvas_area = (manifest.canvas_width as f64 * manifest.canvas_height as f64).max(1.0);
-    let area_score = (asset.visible_area_px.max(0.0) / canvas_area)
-        .sqrt()
-        .min(1.0);
+    let area_score = (asset.visible_area_px.max(0.0) / canvas_area).sqrt().min(1.0);
     let focus = asset.focus_weight.clamp(0.0, 4.0);
     let center = asset.center_weight.clamp(0.0, 1.0);
     focus * 4.0 + center * 2.0 + area_score
@@ -507,22 +532,15 @@ fn tier_dimensions(asset: &VisibleAsset, tier: QualityTier) -> Option<(u32, u32)
     let source_height = asset.source_height.max(1) as f64;
     let rendered_cap_width = (asset.rendered_width_px * MATERIAL_OVERSAMPLE).max(1.0);
     let rendered_cap_height = (asset.rendered_height_px * MATERIAL_OVERSAMPLE).max(1.0);
-    let cap_width = asset
-        .source_width
-        .max(1)
-        .min(rendered_cap_width.floor() as u32);
-    let cap_height = asset
-        .source_height
-        .max(1)
-        .min(rendered_cap_height.floor() as u32);
+    let cap_width = asset.source_width.max(1).min(rendered_cap_width.floor() as u32);
+    let cap_height = asset.source_height.max(1).min(rendered_cap_height.floor() as u32);
 
     if cap_width < 64 || cap_height < 64 {
         return None;
     }
 
-    let scale = (tier.max_width as f64 / source_width)
-        .min(tier.max_height as f64 / source_height)
-        .min(1.0);
+    let scale =
+        (tier.max_width as f64 / source_width).min(tier.max_height as f64 / source_height).min(1.0);
     let width = even_dimension((source_width * scale).round() as u32).max(2);
     let height = even_dimension((source_height * scale).round() as u32).max(2);
 
@@ -552,10 +570,7 @@ fn controller_snapshot(
     telemetry: &Arc<Mutex<TelemetrySnapshot>>,
     allocations: Vec<QualityDecision>,
 ) -> ControllerSnapshot {
-    let telemetry = telemetry
-        .lock()
-        .map(|snapshot| snapshot.clone())
-        .unwrap_or_default();
+    let telemetry = telemetry.lock().map(|snapshot| snapshot.clone()).unwrap_or_default();
     let assumptions = if profile.base_case_validated {
         vec![
             "Budgets are measured on this machine and capped at 80% of the limiting subsystem."
@@ -569,10 +584,5 @@ fn controller_snapshot(
         ]
     };
 
-    ControllerSnapshot {
-        profile: profile.clone(),
-        telemetry,
-        allocations,
-        assumptions,
-    }
+    ControllerSnapshot { profile: profile.clone(), telemetry, allocations, assumptions }
 }

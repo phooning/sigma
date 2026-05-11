@@ -38,6 +38,7 @@ export type NativeVideoProfile = {
 
 export type NativeVideoAllocation = {
   assetId: string;
+  sourcePath: string;
   streamId: number;
   state: "active" | "suspended" | "thumbnail";
   decodeWidth: number;
