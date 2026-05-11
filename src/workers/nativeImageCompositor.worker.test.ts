@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { NativeImageManifestAsset } from "../components/native-image/types";
 import {
+  compareNativeImageCacheEvictionCandidates,
   getNativeImageResourcePolicy,
   selectDesiredNativeImageAssets,
 } from "./nativeImageCompositor.worker";
@@ -56,6 +57,26 @@ describe("native image resource policy", () => {
     expect(highHeadroom.maxConcurrentLoads).toBeGreaterThanOrEqual(
       baseline.maxConcurrentLoads,
     );
+  });
+
+  it("evicts cache entries by lowest priority, then oldest use, then largest size", () => {
+    const entries = [
+      { id: "largest-tie", priorityScore: 10, lastUsedAt: 4, byteSize: 900 },
+      { id: "recent-low", priorityScore: 1, lastUsedAt: 100, byteSize: 100 },
+      { id: "oldest-tie", priorityScore: 10, lastUsedAt: 1, byteSize: 100 },
+      { id: "high-priority", priorityScore: 50, lastUsedAt: 0, byteSize: 1000 },
+      { id: "small-tie", priorityScore: 10, lastUsedAt: 4, byteSize: 200 },
+    ];
+
+    entries.sort(compareNativeImageCacheEvictionCandidates);
+
+    expect(entries.map((entry) => entry.id)).toEqual([
+      "recent-low",
+      "oldest-tie",
+      "largest-tie",
+      "small-tie",
+      "high-priority",
+    ]);
   });
 
   it("keeps selected visible images even when active count and cache budget are tight", () => {

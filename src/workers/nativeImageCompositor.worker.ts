@@ -34,6 +34,8 @@ type CachedBitmap = {
   url: string;
   bitmap: ImageBitmap | null;
   byteSize: number;
+  priorityScore: number;
+  lastUsedAt: number;
   status: "loading" | "ready" | "error";
   version: number;
 };
@@ -84,6 +86,7 @@ const pendingLoads = new Map<string, NativeImageManifestAsset>();
 let inflightLoads = 0;
 let renderScheduled = false;
 let resourcePolicyOverride: Partial<NativeImageResourcePolicy> | null = null;
+let cacheAccessClock = 0;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
@@ -186,6 +189,19 @@ const sortByPriority = (assets: NativeImageManifestAsset[]) =>
     return right.drawOrder - left.drawOrder;
   });
 
+export const compareNativeImageCacheEvictionCandidates = (
+  left: Pick<CachedBitmap, "byteSize" | "lastUsedAt" | "priorityScore">,
+  right: Pick<CachedBitmap, "byteSize" | "lastUsedAt" | "priorityScore">,
+) => {
+  const priorityDelta = left.priorityScore - right.priorityScore;
+  if (priorityDelta !== 0) return priorityDelta;
+
+  const recencyDelta = left.lastUsedAt - right.lastUsedAt;
+  if (recencyDelta !== 0) return recencyDelta;
+
+  return right.byteSize - left.byteSize;
+};
+
 const estimatedAssetBytes = (
   asset: NativeImageManifestAsset,
   pixelRatio: number,
@@ -261,6 +277,27 @@ const releaseEntry = (entry: CachedBitmap) => {
   entry.bitmap = null;
 };
 
+const touchEntry = (
+  entry: CachedBitmap,
+  asset: Pick<
+    NativeImageManifestAsset,
+    "centerWeight" | "focusWeight" | "visibleAreaPx"
+  >,
+) => {
+  entry.priorityScore = getNativeImagePriorityScore(asset);
+  entry.lastUsedAt = ++cacheAccessClock;
+};
+
+const updateEntryPriority = (
+  entry: CachedBitmap,
+  asset: Pick<
+    NativeImageManifestAsset,
+    "centerWeight" | "focusWeight" | "visibleAreaPx"
+  >,
+) => {
+  entry.priorityScore = getNativeImagePriorityScore(asset);
+};
+
 const scheduleRender = () => {
   if (renderScheduled) return;
   renderScheduled = true;
@@ -289,7 +326,7 @@ const enforceCacheBudget = (desiredIds: Set<string>) => {
 
   if (totalBytes <= policy.maxCacheBytes) return;
 
-  disposable.sort((left, right) => left.byteSize - right.byteSize);
+  disposable.sort(compareNativeImageCacheEvictionCandidates);
   for (const entry of disposable) {
     if (totalBytes <= policy.maxCacheBytes) break;
     releaseEntry(entry);
@@ -318,6 +355,9 @@ const reconcileResources = () => {
   const desiredAssets = getDesiredAssets();
   const desiredIds = new Set(desiredAssets.map((asset) => asset.id));
   const desiredById = new Map(desiredAssets.map((asset) => [asset.id, asset]));
+  const manifestById = new Map(
+    manifest.assets.map((asset) => [asset.id, asset]),
+  );
 
   for (const [id, pending] of pendingLoads) {
     const desiredAsset = desiredById.get(id);
@@ -327,10 +367,17 @@ const reconcileResources = () => {
   }
 
   for (const [id, entry] of cache) {
-    const desiredAsset = desiredById.get(id);
-    if (!desiredAsset || desiredAsset.path !== entry.path) {
+    const manifestAsset = manifestById.get(id);
+    if (!manifestAsset || manifestAsset.path !== entry.path) {
       releaseEntry(entry);
       cache.delete(id);
+      continue;
+    }
+
+    updateEntryPriority(entry, manifestAsset);
+
+    if (desiredById.has(id)) {
+      touchEntry(entry, manifestAsset);
     }
   }
 
@@ -360,6 +407,8 @@ async function loadAsset(asset: NativeImageManifestAsset) {
     url: asset.url,
     bitmap: null,
     byteSize: 0,
+    priorityScore: getNativeImagePriorityScore(asset),
+    lastUsedAt: ++cacheAccessClock,
     status: "loading",
     version,
   });
