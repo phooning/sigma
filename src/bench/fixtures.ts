@@ -74,6 +74,7 @@ export const createBenchNativeControllerSnapshot = (
   profile: createBenchNativeVideoProfile(),
   allocations: Array.from({ length: assetCount }, (_, index) => ({
     assetId: `video-${index}`,
+    sourcePath: `/bench/video-${index}.mp4`,
     streamId: index + 1,
     state: index % 4 === 0 ? "thumbnail" : "active",
     decodeWidth: index % 4 === 0 ? 426 : 1280,

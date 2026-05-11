@@ -43,22 +43,51 @@ export function NativeImageSurface({
 }: NativeImageSurfaceProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const workerRef = useRef<Worker | null>(null);
+  const hasTransferredCanvasRef = useRef(false);
+  const deferredCleanupRef = useRef<number | null>(null);
+  const canvasSizeRef = useRef(canvasSize);
+  const onReadyChangeRef = useRef(onReadyChange);
+  const onAssetReadyChangeRef = useRef(onAssetReadyChange);
   const previewSignatureRef = useRef("");
   const manifestSignatureRef = useRef("");
 
   const isEnabled = supportsNativeImageSurface();
 
   useEffect(() => {
+    canvasSizeRef.current = canvasSize;
+    onReadyChangeRef.current = onReadyChange;
+    onAssetReadyChangeRef.current = onAssetReadyChange;
+  });
+
+  useEffect(() => {
     if (!isEnabled) return;
+    if (deferredCleanupRef.current !== null) {
+      window.clearTimeout(deferredCleanupRef.current);
+      deferredCleanupRef.current = null;
+    }
+    const scheduleCleanup = () => {
+      deferredCleanupRef.current = window.setTimeout(() => {
+        onReadyChangeRef.current?.(false);
+        workerRef.current?.terminate();
+        workerRef.current = null;
+        deferredCleanupRef.current = null;
+      }, 0);
+    };
+    if (workerRef.current) return scheduleCleanup;
 
     const canvas = canvasRef.current;
     if (!canvas || !("transferControlToOffscreen" in canvas)) return;
+    if (hasTransferredCanvasRef.current) {
+      onReadyChangeRef.current?.(false);
+      return;
+    }
 
-    onReadyChange?.(false);
+    onReadyChangeRef.current?.(false);
     let worker: Worker | null = null;
 
     try {
       const offscreen = canvas.transferControlToOffscreen();
+      hasTransferredCanvasRef.current = true;
       worker = new Worker(
         new URL(
           "../../workers/nativeImageCompositor.worker.ts",
@@ -75,34 +104,34 @@ export function NativeImageSurface({
           | { type: "error"; reason?: string };
 
         if (message.type === "ready") {
-          onReadyChange?.(true);
+          onReadyChangeRef.current?.(true);
           return;
         }
 
         if (message.type === "asset-ready") {
-          onAssetReadyChange?.(message.itemId, message.path);
+          onAssetReadyChangeRef.current?.(message.itemId, message.path);
           return;
         }
 
         if (message.type === "error") {
-          onReadyChange?.(false);
+          onReadyChangeRef.current?.(false);
         }
       };
 
       worker.onerror = () => {
-        onReadyChange?.(false);
+        onReadyChangeRef.current?.(false);
       };
 
       worker.onmessageerror = () => {
-        onReadyChange?.(false);
+        onReadyChangeRef.current?.(false);
       };
 
       worker.postMessage(
         {
           type: "init",
           canvas: offscreen,
-          width: canvasSize.width,
-          height: canvasSize.height,
+          width: canvasSizeRef.current.width,
+          height: canvasSizeRef.current.height,
           devicePixelRatio: window.devicePixelRatio || 1,
         },
         [offscreen],
@@ -112,24 +141,16 @@ export function NativeImageSurface({
         "Native image surface unavailable; falling back to DOM image rendering.",
         error,
       );
-      onReadyChange?.(false);
+      onReadyChangeRef.current?.(false);
       worker?.terminate();
       workerRef.current = null;
       return;
     }
 
     return () => {
-      onReadyChange?.(false);
-      worker?.terminate();
-      workerRef.current = null;
+      scheduleCleanup();
     };
-  }, [
-    canvasSize.height,
-    canvasSize.width,
-    isEnabled,
-    onAssetReadyChange,
-    onReadyChange,
-  ]);
+  }, [isEnabled]);
 
   useEffect(() => {
     if (!isEnabled) return;

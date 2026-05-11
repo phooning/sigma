@@ -120,4 +120,51 @@ describe("NativeImageSurface", () => {
 
     expect(requestImagePreview).toHaveBeenCalledTimes(2);
   });
+
+  it("does not transfer the same canvas again after resize rerenders", () => {
+    const transferControlToOffscreen = vi.mocked(
+      HTMLCanvasElement.prototype.transferControlToOffscreen,
+    );
+    const offscreenCanvas = {} as OffscreenCanvas;
+    transferControlToOffscreen
+      .mockReturnValueOnce(offscreenCanvas)
+      .mockImplementation(() => {
+        throw new DOMException(
+          "Cannot transfer control from a canvas for more than one time.",
+          "InvalidStateError",
+        );
+      });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const { rerender } = render(
+      <NativeImageSurface
+        items={[imageItem]}
+        viewport={{ x: 0, y: 0, zoom: 0.1 }}
+        canvasSize={{ width: 1200, height: 800 }}
+        selectedItems={new Set<string>()}
+        draggingItemId={null}
+        resizingItemId={null}
+        croppingItemId={null}
+        editingCropItemId={null}
+        requestImagePreview={vi.fn()}
+      />,
+    );
+
+    rerender(
+      <NativeImageSurface
+        items={[imageItem]}
+        viewport={{ x: 0, y: 0, zoom: 0.1 }}
+        canvasSize={{ width: 1280, height: 720 }}
+        selectedItems={new Set<string>()}
+        draggingItemId={null}
+        resizingItemId={null}
+        croppingItemId={null}
+        editingCropItemId={null}
+        requestImagePreview={vi.fn()}
+      />,
+    );
+
+    expect(transferControlToOffscreen).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
+  });
 });
