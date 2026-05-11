@@ -51,25 +51,10 @@ class WorkerStub {
 }
 
 describe("NativeImageSurface", () => {
-  const animationFrames: FrameRequestCallback[] = [];
-  let animationFrameHandle = 0;
-  const flushAnimationFrames = () => {
-    const queued = animationFrames.splice(0);
-    for (const callback of queued) {
-      callback(performance.now());
-    }
-  };
-
   beforeEach(() => {
-    animationFrames.length = 0;
-    animationFrameHandle = 0;
     vi.stubGlobal("Worker", WorkerStub);
     vi.stubGlobal("createImageBitmap", vi.fn());
-    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
-      animationFrames.push(callback);
-      animationFrameHandle += 1;
-      return animationFrameHandle;
-    });
+    vi.spyOn(window, "requestAnimationFrame");
     vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
     HTMLCanvasElement.prototype.transferControlToOffscreen = vi
       .fn()
@@ -98,8 +83,6 @@ describe("NativeImageSurface", () => {
       />,
     );
 
-    flushAnimationFrames();
-
     expect(requestImagePreview).toHaveBeenCalledTimes(1);
 
     rerender(
@@ -116,9 +99,8 @@ describe("NativeImageSurface", () => {
       />,
     );
 
-    flushAnimationFrames();
-
     expect(requestImagePreview).toHaveBeenCalledTimes(2);
+    expect(window.requestAnimationFrame).not.toHaveBeenCalled();
   });
 
   it("does not transfer the same canvas again after resize rerenders", () => {

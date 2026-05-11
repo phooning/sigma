@@ -194,83 +194,48 @@ export function NativeImageSurface({
   useEffect(() => {
     if (!isEnabled) return;
 
-    let frameId = 0;
-    let lastItems = items;
-    let lastSelectedItems = selectedItems;
-    let lastDraggingItemId = draggingItemId;
-    let lastResizingItemId = resizingItemId;
-    let lastCroppingItemId = croppingItemId;
-    let lastEditingCropItemId = editingCropItemId;
-    let lastViewportSignature = "";
+    const viewportSignature = signatureForViewport(viewport);
+    const { manifest, previewRequests } = buildNativeImageManifest({
+      items,
+      viewport,
+      canvasSize,
+      selectedItems,
+      draggingItemId,
+      resizingItemId,
+      croppingItemId,
+      editingCropItemId,
+    });
+    const manifestSignature = [
+      viewportSignature,
+      manifest.assets.length,
+      ...manifest.assets.map(
+        (asset) =>
+          `${asset.id}:${asset.path}:${asset.drawOrder}:${asset.isSelected ? 1 : 0}:${asset.cropLeftRatio.toFixed(4)}:${asset.cropTopRatio.toFixed(4)}:${asset.cropWidthRatio.toFixed(4)}:${asset.cropHeightRatio.toFixed(4)}:${asset.screenX.toFixed(1)}:${asset.screenY.toFixed(1)}:${asset.renderedWidthPx.toFixed(1)}:${asset.renderedHeightPx.toFixed(1)}`,
+      ),
+    ].join("|");
 
-    const publishManifest = () => {
-      const viewportSignature = signatureForViewport(viewport);
-      const inputsChanged =
-        lastItems !== items ||
-        lastSelectedItems !== selectedItems ||
-        lastDraggingItemId !== draggingItemId ||
-        lastResizingItemId !== resizingItemId ||
-        lastCroppingItemId !== croppingItemId ||
-        lastEditingCropItemId !== editingCropItemId ||
-        lastViewportSignature !== viewportSignature;
+    if (manifestSignature !== manifestSignatureRef.current) {
+      manifestSignatureRef.current = manifestSignature;
+      workerRef.current?.postMessage({ type: "layout", manifest });
+    }
 
-      if (inputsChanged) {
-        lastItems = items;
-        lastSelectedItems = selectedItems;
-        lastDraggingItemId = draggingItemId;
-        lastResizingItemId = resizingItemId;
-        lastCroppingItemId = croppingItemId;
-        lastEditingCropItemId = editingCropItemId;
-        lastViewportSignature = viewportSignature;
+    const previewSignature = signatureForPreviewRequests(
+      previewRequests,
+      viewportSignature,
+    );
+    if (previewSignature === previewSignatureRef.current) return;
 
-        const { manifest, previewRequests } = buildNativeImageManifest({
-          items,
-          viewport,
-          canvasSize,
-          selectedItems,
-          draggingItemId,
-          resizingItemId,
-          croppingItemId,
-          editingCropItemId,
-        });
-        const manifestSignature = [
-          viewportSignature,
-          manifest.assets.length,
-          ...manifest.assets.map(
-            (asset) =>
-              `${asset.id}:${asset.path}:${asset.drawOrder}:${asset.isSelected ? 1 : 0}:${asset.cropLeftRatio.toFixed(4)}:${asset.cropTopRatio.toFixed(4)}:${asset.cropWidthRatio.toFixed(4)}:${asset.cropHeightRatio.toFixed(4)}:${asset.screenX.toFixed(1)}:${asset.screenY.toFixed(1)}:${asset.renderedWidthPx.toFixed(1)}:${asset.renderedHeightPx.toFixed(1)}`,
-          ),
-        ].join("|");
-
-        if (manifestSignature !== manifestSignatureRef.current) {
-          manifestSignatureRef.current = manifestSignature;
-          workerRef.current?.postMessage({ type: "layout", manifest });
-        }
-
-        const previewSignature = signatureForPreviewRequests(
-          previewRequests,
-          viewportSignature,
-        );
-        if (previewSignature !== previewSignatureRef.current) {
-          previewSignatureRef.current = previewSignature;
-          const viewBounds = getViewBounds(
-            viewport,
-            canvasSize.width,
-            canvasSize.height,
-          );
-          for (const request of previewRequests) {
-            requestImagePreview(request.item, request.maxDimension, {
-              viewBounds,
-            });
-          }
-        }
-      }
-
-      frameId = window.requestAnimationFrame(publishManifest);
-    };
-
-    frameId = window.requestAnimationFrame(publishManifest);
-    return () => window.cancelAnimationFrame(frameId);
+    previewSignatureRef.current = previewSignature;
+    const viewBounds = getViewBounds(
+      viewport,
+      canvasSize.width,
+      canvasSize.height,
+    );
+    for (const request of previewRequests) {
+      requestImagePreview(request.item, request.maxDimension, {
+        viewBounds,
+      });
+    }
   }, [
     canvasSize,
     croppingItemId,
