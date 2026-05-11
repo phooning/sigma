@@ -205,6 +205,13 @@ export function NativeImageSurface({
       croppingItemId,
       editingCropItemId,
     });
+    const manifestAssetIds = new Set(manifest.assets.map((asset) => asset.id));
+    for (const item of items) {
+      if (item.type === "image" && !manifestAssetIds.has(item.id)) {
+        onAssetReadyChangeRef.current?.(item.id, "");
+      }
+    }
+
     const manifestSignature = [
       viewportSignature,
       manifest.assets.length,

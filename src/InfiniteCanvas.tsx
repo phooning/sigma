@@ -1003,9 +1003,17 @@ export default function InfiniteCanvas() {
         editingCropItemId={editingCropItem}
         onReadyChange={setIsNativeImageSurfaceReady}
         onAssetReadyChange={(itemId, path) => {
-          setNativeImageReadyPaths((current) =>
-            current[itemId] === path ? current : { ...current, [itemId]: path },
-          );
+          setNativeImageReadyPaths((current) => {
+            if (!path) {
+              if (!(itemId in current)) return current;
+              const { [itemId]: _removed, ...next } = current;
+              return next;
+            }
+
+            return current[itemId] === path
+              ? current
+              : { ...current, [itemId]: path };
+          });
         }}
         requestImagePreview={requestImagePreview}
       />

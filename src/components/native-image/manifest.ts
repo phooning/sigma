@@ -11,8 +11,29 @@ import type {
 } from "./types";
 
 const ACTIVE_IMAGE_Z_INDEX = 10_000;
+const NATIVE_IMAGE_PREVIEW_HANDOFF_MIN_LONG_EDGE = 4096;
 const IMAGE_PLACEHOLDER_URL =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%231f2937'/%3E%3C/svg%3E";
+
+export const shouldUseNativeImagePreviewHandoff = (
+  item: Pick<
+    MediaItem,
+    "type" | "sourceWidth" | "sourceHeight" | "width" | "height"
+  >,
+) => {
+  if (item.type !== "image") return false;
+
+  const longEdge = Math.max(
+    item.sourceWidth ?? item.width,
+    item.sourceHeight ?? item.height,
+  );
+
+  return longEdge > NATIVE_IMAGE_PREVIEW_HANDOFF_MIN_LONG_EDGE;
+};
+
+export const hasNativeImagePreviewHandoffSource = (
+  item: Pick<MediaItem, "imagePreview1024Path" | "imagePreview1024Url">,
+) => Boolean(item.imagePreview1024Path || item.imagePreview1024Url);
 
 const isReactManagedImage = (
   item: MediaItem,
@@ -154,7 +175,12 @@ export function buildNativeImageManifest({
     if (visibleAreaPx <= 0) return [];
 
     const source = getNativeImageSource(item, viewport.zoom);
-    if (source.lod === "preview256" && !item.imagePreview256Path) {
+    if (
+      shouldUseNativeImagePreviewHandoff(item) &&
+      !item.imagePreview1024Path
+    ) {
+      previewRequests.push({ item, maxDimension: 1024 });
+    } else if (source.lod === "preview256" && !item.imagePreview256Path) {
       previewRequests.push({ item, maxDimension: 256 });
     } else if (
       (source.lod === "preview1024" || viewport.zoom < 1) &&

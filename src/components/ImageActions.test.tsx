@@ -21,6 +21,17 @@ const renderImageActions = (
   item: MediaItem,
   requestImagePreview = vi.fn(),
   onReadyChange = vi.fn(),
+  {
+    mountDomImage = true,
+    showDomImage = true,
+    preferPreviewForNativeHandoff = false,
+    zoom = 0.1,
+  }: {
+    mountDomImage?: boolean;
+    showDomImage?: boolean;
+    preferPreviewForNativeHandoff?: boolean;
+    zoom?: number;
+  } = {},
 ) =>
   render(
     <ImageActions
@@ -28,14 +39,13 @@ const renderImageActions = (
       crop={EMPTY_CROP}
       item={item}
       isCropEditing={false}
-      isDragging={false}
-      isCropping={false}
-      isResizing={false}
-      useNativeImageSurface={false}
+      mountDomImage={mountDomImage}
+      showDomImage={showDomImage}
+      preferPreviewForNativeHandoff={preferPreviewForNativeHandoff}
       handleItemPointerDown={vi.fn()}
       requestImagePreview={requestImagePreview}
       onReadyChange={onReadyChange}
-      zoom={0.1}
+      zoom={zoom}
     />,
   );
 
@@ -86,5 +96,25 @@ describe("ImageActions LOD fallback", () => {
     fireEvent.load(image);
 
     expect(onReadyChange).toHaveBeenLastCalledWith(true);
+  });
+
+  it("uses the 1024 preview for native handoffs even at full-image zoom", () => {
+    renderImageActions(
+      {
+        ...imageItem,
+        imagePreview1024Url: "asset:///images/full-res-preview-1024.png",
+      },
+      vi.fn(),
+      vi.fn(),
+      {
+        preferPreviewForNativeHandoff: true,
+        zoom: 1,
+      },
+    );
+
+    expect(screen.getByAltText("canvas item")).toHaveAttribute(
+      "src",
+      "asset:///images/full-res-preview-1024.png",
+    );
   });
 });

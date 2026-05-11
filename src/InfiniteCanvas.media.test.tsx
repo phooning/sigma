@@ -353,8 +353,10 @@ describe("InfiniteCanvas media item interactions", () => {
     expect(mediaItem.style.height).toBe("960px");
   });
 
-  it("locks the current resized aspect ratio when resizing with shift held", async () => {
+  it("resizes the frame freely while keeping the image crop box unsquashed", async () => {
     const mediaItem = getMediaItem();
+    const image = screen.getByAltText("canvas item") as HTMLImageElement;
+    const cropBox = image.parentElement as HTMLDivElement;
     const handle = document.querySelector(".resize-handle") as HTMLElement;
 
     await act(async () => {
@@ -379,8 +381,11 @@ describe("InfiniteCanvas media item interactions", () => {
 
     expect(mediaItem.style.width).toBe("1380px");
     expect(mediaItem.style.height).toBe("1160px");
-
-    const resizedRatio = 1380 / 1160;
+    expect(parseFloat(cropBox.style.width)).toBeCloseTo(1546.667);
+    expect(parseFloat(cropBox.style.height)).toBeCloseTo(1160);
+    expect(
+      parseFloat(cropBox.style.width) / parseFloat(cropBox.style.height),
+    ).toBeCloseTo(1280 / 960);
 
     await act(async () => {
       fireEvent.pointerDown(handle, {
@@ -396,7 +401,6 @@ describe("InfiniteCanvas media item interactions", () => {
         clientY: 0,
         pointerId: 7,
         button: 0,
-        shiftKey: true,
       });
     });
     await act(async () => {
@@ -406,7 +410,41 @@ describe("InfiniteCanvas media item interactions", () => {
     const width = parseFloat(mediaItem.style.width);
     const height = parseFloat(mediaItem.style.height);
     expect(width).toBeCloseTo(1480);
-    expect(width / height).toBeCloseTo(resizedRatio);
+    expect(height).toBeCloseTo(1160);
+    expect(parseFloat(cropBox.style.width)).toBeCloseTo(1546.667);
+    expect(
+      parseFloat(cropBox.style.width) / parseFloat(cropBox.style.height),
+    ).toBeCloseTo(1280 / 960);
+
+    const ratioBeforeShift = width / height;
+    await act(async () => {
+      fireEvent.pointerDown(handle, {
+        clientX: 0,
+        clientY: 0,
+        pointerId: 8,
+        button: 0,
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerMove(mediaItem, {
+        clientX: 100,
+        clientY: 0,
+        pointerId: 8,
+        button: 0,
+        shiftKey: true,
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerUp(mediaItem, { pointerId: 8, button: 0 });
+    });
+
+    expect(parseFloat(mediaItem.style.width)).toBeCloseTo(1580);
+    expect(parseFloat(mediaItem.style.height)).toBeCloseTo(
+      1580 / ratioBeforeShift,
+    );
+    expect(
+      parseFloat(mediaItem.style.width) / parseFloat(mediaItem.style.height),
+    ).toBeCloseTo(ratioBeforeShift);
   });
 
   it("deletes the media item on delete button click", async () => {
@@ -805,7 +843,7 @@ describe("InfiniteCanvas media item interactions", () => {
     });
 
     expect(cropBox.style.left).toBe("0px");
-    expect(cropBox.style.width).toBe("1380px");
+    expect(parseFloat(cropBox.style.width)).toBeCloseTo(1546.667);
 
     const eastHandle = document.querySelector(".crop-handle-e") as HTMLElement;
     await act(async () => {
@@ -828,9 +866,9 @@ describe("InfiniteCanvas media item interactions", () => {
       fireEvent.pointerUp(mediaItem, { pointerId: 14, button: 0 });
     });
 
-    expect(mediaItem.style.width).toBe("1260px");
+    expect(parseFloat(mediaItem.style.width)).toBeCloseTo(1260);
     expect(cropBox.style.left).toBe("0px");
-    expect(cropBox.style.width).toBe("1380px");
+    expect(parseFloat(cropBox.style.width)).toBeCloseTo(1546.667);
 
     const startLeft = parseFloat(mediaItem.style.left);
     const westHandle = document.querySelector(".crop-handle-w") as HTMLElement;
@@ -855,8 +893,8 @@ describe("InfiniteCanvas media item interactions", () => {
     });
 
     expect(mediaItem.style.left).toBe(`${startLeft + 120}px`);
-    expect(mediaItem.style.width).toBe("1140px");
+    expect(parseFloat(mediaItem.style.width)).toBeCloseTo(1140);
     expect(cropBox.style.left).toBe("-120px");
-    expect(cropBox.style.width).toBe("1380px");
+    expect(parseFloat(cropBox.style.width)).toBeCloseTo(1546.667);
   });
 });
