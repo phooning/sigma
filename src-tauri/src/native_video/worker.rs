@@ -23,7 +23,7 @@ use super::{
     types::{QualityDecision, StreamState},
 };
 
-pub(crate) type FrameSubscribers = Arc<Mutex<Option<Channel<InvokeResponseBody>>>>;
+pub(crate) type FrameSubscribers = Arc<Mutex<HashMap<u32, Channel<InvokeResponseBody>>>>;
 const QUEUE_PRESSURE_WINDOW: usize = 3;
 
 #[derive(Clone, Debug)]
@@ -78,8 +78,8 @@ impl QueuePressureSmoother {
 ///   `PooledFramePacket` to the broker.
 /// - If a packet is dropped before IPC dispatch, `Drop` returns the original `Arc<Vec<u8>>` to the
 ///   recycle queue with `try_send`; no `Mutex<Vec<_>>` free list is used.
-/// - `FramePool::dispatch` is the sole IPC handoff point. It copies the valid packet bytes into a
-///   fresh IPC payload, then immediately returns the original `Arc<Vec<u8>>` to the pool so native
+/// - `FramePool::dispatch` is the sole IPC handoff point. It copies the valid packet bytes into
+///   fresh IPC payloads, then immediately returns the original `Arc<Vec<u8>>` to the pool so native
 ///   decode never waits on frontend or IPC ownership lifetimes.
 pub(crate) struct FramePool {
     recycle_tx: mpsc::Sender<Arc<Vec<u8>>>,
@@ -159,31 +159,61 @@ impl FramePool {
         }
     }
 
+    #[cfg(test)]
     pub(crate) async fn dispatch(
         &self,
-        mut packet: PooledFramePacket,
+        packet: PooledFramePacket,
         on_frame: &Channel<InvokeResponseBody>,
     ) -> bool {
+        self.dispatch_to_subscribers(packet, &[on_frame.clone()]).await.delivered_frames > 0
+    }
+
+    pub(crate) async fn dispatch_to_subscribers(
+        &self,
+        mut packet: PooledFramePacket,
+        subscribers: &[Channel<InvokeResponseBody>],
+    ) -> FrameDispatchReport {
         let Some(buffer) = packet.buffer.take() else {
-            return false;
+            return FrameDispatchReport::default();
         };
 
         let len = packet.len.min(buffer.len());
         let fresh_for_ipc = buffer[..len].to_vec();
         packet.len = 0;
-        let sent = match on_frame.send(InvokeResponseBody::Raw(fresh_for_ipc)) {
-            Ok(()) => true,
-            Err(error) => {
-                let count = self.channel_send_failure_count.fetch_add(1, Ordering::Relaxed) + 1;
-                eprintln!(
-                    "native-video: failed to dispatch frame to IPC channel; total_send_failures={count}; error={error}"
-                );
-                false
+        let mut report = FrameDispatchReport::default();
+
+        for subscriber in subscribers {
+            match subscriber.send(InvokeResponseBody::Raw(fresh_for_ipc.clone())) {
+                Ok(()) => {
+                    report.delivered_frames = report.delivered_frames.saturating_add(1);
+                }
+                Err(error) => {
+                    report.failed_subscriber_ids.push(subscriber.id());
+                    report.dropped_frames = report.dropped_frames.saturating_add(1);
+                    let count = self.channel_send_failure_count.fetch_add(1, Ordering::Relaxed) + 1;
+                    eprintln!(
+                        "native-video: failed to dispatch frame to IPC channel; total_send_failures={count}; error={error}"
+                    );
+                }
             }
-        };
+        }
+
+        if subscribers.is_empty() {
+            report.dropped_frames = 1;
+            report.unsubscribed_drops = 1;
+        }
+
         self.recycle(buffer);
-        sent
+        report
     }
+}
+
+#[derive(Default)]
+pub(crate) struct FrameDispatchReport {
+    pub(crate) delivered_frames: u64,
+    pub(crate) dropped_frames: u64,
+    pub(crate) unsubscribed_drops: u64,
+    pub(crate) failed_subscriber_ids: Vec<u32>,
 }
 
 impl PooledFramePacket {
@@ -435,27 +465,23 @@ pub(crate) fn spawn_frame_broker(
             let queue_pressure_raw = queue_depth as f64 / BROKER_QUEUE_CAPACITY.max(1) as f64;
             let queue_pressure_smoothed = queue_pressure.push(queue_pressure_raw);
             let frame_pool = frame.packet.pool.clone();
-            let subscriber = subscribers.lock().ok().and_then(|subscriber| subscriber.clone());
+            let subscriber_snapshot = subscribers
+                .lock()
+                .map(|subscribers| subscribers.values().cloned().collect::<Vec<_>>())
+                .unwrap_or_default();
+            let dispatch_report =
+                frame_pool.dispatch_to_subscribers(frame.packet, &subscriber_snapshot).await;
 
-            match subscriber {
-                Some(on_frame) => {
-                    if frame_pool.dispatch(frame.packet, &on_frame).await {
-                        delivered_frames = delivered_frames.saturating_add(1);
-                    } else {
-                        dropped_frames = dropped_frames.saturating_add(1);
-                        if let Ok(mut subscriber) = subscribers.lock() {
-                            if subscriber
-                                .as_ref()
-                                .is_some_and(|candidate| candidate.id() == on_frame.id())
-                            {
-                                *subscriber = None;
-                            }
-                        }
+            delivered_frames = delivered_frames.saturating_add(dispatch_report.delivered_frames);
+            dropped_frames = dropped_frames.saturating_add(dispatch_report.dropped_frames);
+            unsubscribed_drops =
+                unsubscribed_drops.saturating_add(dispatch_report.unsubscribed_drops);
+
+            if !dispatch_report.failed_subscriber_ids.is_empty() {
+                if let Ok(mut subscribers) = subscribers.lock() {
+                    for subscriber_id in dispatch_report.failed_subscriber_ids {
+                        subscribers.remove(&subscriber_id);
                     }
-                }
-                None => {
-                    dropped_frames = dropped_frames.saturating_add(1);
-                    unsubscribed_drops = unsubscribed_drops.saturating_add(1);
                 }
             }
 
@@ -480,7 +506,10 @@ pub(crate) fn spawn_frame_broker(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
+    use std::{
+        collections::HashMap,
+        sync::{Arc, Mutex},
+    };
 
     use tokio::sync::{mpsc, watch};
 
@@ -525,7 +554,7 @@ mod tests {
 
     #[tokio::test]
     async fn broker_counts_unsubscribed_drops_separately() {
-        let subscribers: FrameSubscribers = Arc::new(Mutex::new(None));
+        let subscribers: FrameSubscribers = Arc::new(Mutex::new(HashMap::new()));
         let telemetry = Arc::new(Mutex::new(TelemetrySnapshot::default()));
         let (telemetry_tx, telemetry_rx) = watch::channel(TelemetrySnapshot::default());
         let (broker_tx, broker_rx) = mpsc::channel(1);

@@ -125,6 +125,42 @@ async fn frame_pool_recycles_buffer_after_successful_ipc_dispatch() {
 }
 
 #[tokio::test]
+async fn frame_pool_broadcasts_to_multiple_frame_subscribers() {
+    let pool = FramePool::new(0, 16);
+    let mut packet = pool.try_borrow().expect("pooled packet");
+    let bytes = packet.bytes_mut().expect("unique pooled packet bytes");
+    bytes[..5].copy_from_slice(b"frame");
+    packet.set_len(5);
+
+    let first_frame = Arc::new(Mutex::new(None));
+    let first_frame_for_channel = first_frame.clone();
+    let first_channel = Channel::<InvokeResponseBody>::new(move |body| {
+        if let InvokeResponseBody::Raw(bytes) = body {
+            *first_frame_for_channel.lock().unwrap() = Some(bytes);
+        }
+        Ok(())
+    });
+
+    let second_frame = Arc::new(Mutex::new(None));
+    let second_frame_for_channel = second_frame.clone();
+    let second_channel = Channel::<InvokeResponseBody>::new(move |body| {
+        if let InvokeResponseBody::Raw(bytes) = body {
+            *second_frame_for_channel.lock().unwrap() = Some(bytes);
+        }
+        Ok(())
+    });
+
+    let report = pool.dispatch_to_subscribers(packet, &[first_channel, second_channel]).await;
+
+    assert_eq!(report.delivered_frames, 2);
+    assert_eq!(report.dropped_frames, 0);
+    assert_eq!(report.failed_subscriber_ids.len(), 0);
+    assert_eq!(first_frame.lock().unwrap().as_deref(), Some(&b"frame"[..]));
+    assert_eq!(second_frame.lock().unwrap().as_deref(), Some(&b"frame"[..]));
+    assert!(pool.try_borrow().is_some());
+}
+
+#[tokio::test]
 async fn frame_pool_dispatch_continues_past_98_frames_without_exhaustion() {
     let pool = FramePool::new(0, 16);
     let received_frames = Arc::new(Mutex::new(0_u64));

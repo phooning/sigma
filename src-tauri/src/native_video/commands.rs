@@ -77,12 +77,11 @@ pub fn native_video_subscribe_frames(
     state: State<'_, NativeVideoState>,
     on_frame: Channel<InvokeResponseBody>,
 ) -> Result<(), String> {
-    // Native video maintains a single live frame subscriber at a time.
-    let mut subscriber = state
+    let mut subscribers = state
         .frame_subscribers
         .lock()
         .map_err(|_| "native video frame subscriber lock poisoned".to_string())?;
-    *subscriber = Some(on_frame);
+    subscribers.insert(on_frame.id(), on_frame);
 
     Ok(())
 }
