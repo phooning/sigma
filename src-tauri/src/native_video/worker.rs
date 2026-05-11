@@ -25,6 +25,8 @@ use super::{
 
 pub(crate) type FrameSubscribers = Arc<Mutex<HashMap<u32, Channel<InvokeResponseBody>>>>;
 const QUEUE_PRESSURE_WINDOW: usize = 3;
+const SUSTAINED_BROKER_SEND_FAILURES: u32 = 3;
+const BROKER_BACKPRESSURE_SLEEP_MS: u64 = 12;
 
 #[derive(Clone, Debug)]
 pub(crate) enum WorkerAssignment {
@@ -46,6 +48,7 @@ pub(crate) struct WorkerHandle {
 }
 
 pub(crate) struct DecodedFrame {
+    stream_id: u64,
     packet: PooledFramePacket,
 }
 
@@ -336,6 +339,7 @@ fn spawn_decode_worker(
                         continue;
                     };
                     let mut payload = vec![0_u8; payload_len];
+                    let mut consecutive_broker_send_failures = 0_u32;
                     let mut interval =
                         time::interval(Duration::from_secs_f64(1.0 / fps.max(1) as f64));
                     loop {
@@ -349,6 +353,21 @@ fn spawn_decode_worker(
                                 break;
                             }
                             _ = interval.tick() => {
+                                if broker_tx.capacity() == 0 {
+                                    consecutive_broker_send_failures =
+                                        consecutive_broker_send_failures.saturating_add(1);
+                                    record_broker_backpressure(
+                                        &telemetry,
+                                        &telemetry_tx,
+                                        consecutive_broker_send_failures,
+                                    );
+                                    time::sleep(Duration::from_millis(
+                                        BROKER_BACKPRESSURE_SLEEP_MS,
+                                    ))
+                                    .await;
+                                    continue;
+                                }
+
                                 let read_result = tokio::select! {
                                     changed = assignment_rx.changed() => {
                                         if changed.is_err() {
@@ -394,8 +413,23 @@ fn spawn_decode_worker(
                                 );
                                 packet.set_len(len);
                                 sequence = sequence.wrapping_add(1);
-                                if broker_tx.try_send(DecodedFrame { packet }).is_err() {
-                                    time::sleep(Duration::from_millis(4)).await;
+                                match broker_tx.try_send(DecodedFrame { stream_id, packet }) {
+                                    Ok(()) => {
+                                        consecutive_broker_send_failures = 0;
+                                    }
+                                    Err(_error) => {
+                                        consecutive_broker_send_failures =
+                                            consecutive_broker_send_failures.saturating_add(1);
+                                        record_broker_backpressure(
+                                            &telemetry,
+                                            &telemetry_tx,
+                                            consecutive_broker_send_failures,
+                                        );
+                                        time::sleep(Duration::from_millis(
+                                            BROKER_BACKPRESSURE_SLEEP_MS,
+                                        ))
+                                        .await;
+                                    }
                                 }
                             }
                         }
@@ -448,6 +482,27 @@ async fn wait_for_reassignment_or_retry(assignment_rx: &mut watch::Receiver<Work
     }
 }
 
+fn record_broker_backpressure(
+    telemetry: &Arc<Mutex<TelemetrySnapshot>>,
+    telemetry_tx: &watch::Sender<TelemetrySnapshot>,
+    consecutive_failures: u32,
+) {
+    update_telemetry(telemetry, telemetry_tx, |snapshot| {
+        snapshot.broker_send_failures = snapshot.broker_send_failures.saturating_add(1);
+        snapshot.broker_backpressure_drops = snapshot.broker_backpressure_drops.saturating_add(1);
+        snapshot.dropped_frames = snapshot.dropped_frames.saturating_add(1);
+        snapshot.broker_queue_depth = BROKER_QUEUE_CAPACITY;
+        snapshot.broker_queue_capacity = BROKER_QUEUE_CAPACITY;
+        snapshot.broker_queue_pressure = 1.0;
+        snapshot.broker_queue_pressure_smoothed = 1.0;
+        snapshot.broker_backpressure_active =
+            consecutive_failures >= SUSTAINED_BROKER_SEND_FAILURES;
+        let total = snapshot.delivered_frames + snapshot.dropped_frames;
+        snapshot.frame_drop_rate =
+            if total == 0 { 0.0 } else { snapshot.dropped_frames as f64 / total as f64 };
+    });
+}
+
 pub(crate) fn spawn_frame_broker(
     mut frame_rx: mpsc::Receiver<DecodedFrame>,
     subscribers: FrameSubscribers,
@@ -458,28 +513,47 @@ pub(crate) fn spawn_frame_broker(
         let mut delivered_frames = 0_u64;
         let mut dropped_frames = 0_u64;
         let mut unsubscribed_drops = 0_u64;
+        let mut stream_frame_replacements = 0_u64;
         let mut queue_pressure = QueuePressureSmoother::new();
 
         while let Some(frame) = frame_rx.recv().await {
             let queue_depth = frame_rx.len();
             let queue_pressure_raw = queue_depth as f64 / BROKER_QUEUE_CAPACITY.max(1) as f64;
             let queue_pressure_smoothed = queue_pressure.push(queue_pressure_raw);
-            let frame_pool = frame.packet.pool.clone();
             let subscriber_snapshot = subscribers
                 .lock()
                 .map(|subscribers| subscribers.values().cloned().collect::<Vec<_>>())
                 .unwrap_or_default();
-            let dispatch_report =
-                frame_pool.dispatch_to_subscribers(frame.packet, &subscriber_snapshot).await;
+            let mut latest_by_stream = HashMap::from([(frame.stream_id, frame)]);
 
-            delivered_frames = delivered_frames.saturating_add(dispatch_report.delivered_frames);
-            dropped_frames = dropped_frames.saturating_add(dispatch_report.dropped_frames);
-            unsubscribed_drops =
-                unsubscribed_drops.saturating_add(dispatch_report.unsubscribed_drops);
+            while let Ok(queued_frame) = frame_rx.try_recv() {
+                if latest_by_stream.insert(queued_frame.stream_id, queued_frame).is_some() {
+                    stream_frame_replacements = stream_frame_replacements.saturating_add(1);
+                    dropped_frames = dropped_frames.saturating_add(1);
+                }
+            }
 
-            if !dispatch_report.failed_subscriber_ids.is_empty() {
+            let mut frame_pool_for_telemetry = None;
+            let mut failed_subscriber_ids = Vec::new();
+            for frame in latest_by_stream.into_values() {
+                let frame_pool = frame.packet.pool.clone();
+                frame_pool_for_telemetry = Some(frame_pool.clone());
+                let dispatch_report =
+                    frame_pool.dispatch_to_subscribers(frame.packet, &subscriber_snapshot).await;
+
+                delivered_frames =
+                    delivered_frames.saturating_add(dispatch_report.delivered_frames);
+                dropped_frames = dropped_frames.saturating_add(dispatch_report.dropped_frames);
+                unsubscribed_drops =
+                    unsubscribed_drops.saturating_add(dispatch_report.unsubscribed_drops);
+                failed_subscriber_ids.extend(dispatch_report.failed_subscriber_ids);
+            }
+
+            if !failed_subscriber_ids.is_empty() {
+                failed_subscriber_ids.sort_unstable();
+                failed_subscriber_ids.dedup();
                 if let Ok(mut subscribers) = subscribers.lock() {
-                    for subscriber_id in dispatch_report.failed_subscriber_ids {
+                    for subscriber_id in failed_subscriber_ids {
                         subscribers.remove(&subscriber_id);
                     }
                 }
@@ -487,18 +561,27 @@ pub(crate) fn spawn_frame_broker(
 
             update_telemetry(&telemetry, &telemetry_tx, |snapshot| {
                 snapshot.delivered_frames = delivered_frames;
-                snapshot.dropped_frames = dropped_frames;
+                snapshot.dropped_frames =
+                    dropped_frames.saturating_add(snapshot.broker_backpressure_drops);
                 snapshot.broker_queue_depth = queue_depth;
                 snapshot.broker_queue_capacity = BROKER_QUEUE_CAPACITY;
                 snapshot.broker_queue_pressure = queue_pressure_raw;
                 snapshot.broker_queue_pressure_smoothed = queue_pressure_smoothed;
-                snapshot.frame_pool_capacity = frame_pool.capacity();
-                snapshot.frame_pool_exhaustions = frame_pool.exhaustion_count();
-                snapshot.frame_channel_send_failures = frame_pool.channel_send_failure_count();
+                if let Some(frame_pool) = frame_pool_for_telemetry {
+                    snapshot.frame_pool_capacity = frame_pool.capacity();
+                    snapshot.frame_pool_exhaustions = frame_pool.exhaustion_count();
+                    snapshot.frame_channel_send_failures = frame_pool.channel_send_failure_count();
+                }
                 snapshot.frame_unsubscribed_drops = unsubscribed_drops;
-                let total = delivered_frames + dropped_frames;
+                snapshot.broker_stream_frame_replacements = stream_frame_replacements;
+                if queue_pressure_smoothed >= 0.9 {
+                    snapshot.broker_backpressure_active = true;
+                } else if queue_pressure_smoothed <= 0.25 {
+                    snapshot.broker_backpressure_active = false;
+                }
+                let total = delivered_frames + snapshot.dropped_frames;
                 snapshot.frame_drop_rate =
-                    if total == 0 { 0.0 } else { dropped_frames as f64 / total as f64 };
+                    if total == 0 { 0.0 } else { snapshot.dropped_frames as f64 / total as f64 };
             });
         }
     });
@@ -511,6 +594,7 @@ mod tests {
         sync::{Arc, Mutex},
     };
 
+    use tauri::ipc::{Channel, InvokeResponseBody};
     use tokio::sync::{mpsc, watch};
 
     use super::{
@@ -564,7 +648,7 @@ mod tests {
 
         spawn_frame_broker(broker_rx, subscribers, telemetry.clone(), telemetry_tx.clone());
 
-        broker_tx.send(DecodedFrame { packet }).await.expect("broker frame send");
+        broker_tx.send(DecodedFrame { stream_id: 1, packet }).await.expect("broker frame send");
         drop(broker_tx);
 
         let mut telemetry_rx = telemetry_rx;
@@ -576,5 +660,44 @@ mod tests {
         assert_eq!(snapshot.frame_unsubscribed_drops, 1);
         assert_eq!(snapshot.frame_channel_send_failures, 0);
         assert_eq!(snapshot.frame_pool_exhaustions, 0);
+    }
+
+    #[tokio::test]
+    async fn broker_replaces_older_queued_frames_for_same_stream() {
+        let received = Arc::new(Mutex::new(Vec::new()));
+        let received_for_channel = received.clone();
+        let on_frame = Channel::<InvokeResponseBody>::new(move |body| {
+            if let InvokeResponseBody::Raw(bytes) = body {
+                received_for_channel.lock().unwrap().push(bytes);
+            }
+            Ok(())
+        });
+        let subscribers: FrameSubscribers =
+            Arc::new(Mutex::new(HashMap::from([(on_frame.id(), on_frame)])));
+        let telemetry = Arc::new(Mutex::new(TelemetrySnapshot::default()));
+        let (telemetry_tx, telemetry_rx) = watch::channel(TelemetrySnapshot::default());
+        let (broker_tx, broker_rx) = mpsc::channel(4);
+        let pool = FramePool::new(2, 16);
+
+        for value in [1_u8, 2] {
+            let mut packet = pool.try_borrow().expect("pooled packet");
+            let bytes = packet.bytes_mut().expect("unique packet bytes");
+            bytes[0] = value;
+            packet.set_len(1);
+            broker_tx.send(DecodedFrame { stream_id: 7, packet }).await.expect("queued frame");
+        }
+        drop(broker_tx);
+
+        spawn_frame_broker(broker_rx, subscribers, telemetry.clone(), telemetry_tx.clone());
+
+        let mut telemetry_rx = telemetry_rx;
+        telemetry_rx.changed().await.expect("telemetry update after coalescing");
+        let snapshot = telemetry_rx.borrow().clone();
+        let frames = received.lock().unwrap().clone();
+
+        assert_eq!(frames, vec![vec![2]]);
+        assert_eq!(snapshot.delivered_frames, 1);
+        assert_eq!(snapshot.dropped_frames, 1);
+        assert_eq!(snapshot.broker_stream_frame_replacements, 1);
     }
 }

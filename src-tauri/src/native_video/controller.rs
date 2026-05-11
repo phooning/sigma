@@ -162,6 +162,7 @@ impl Arbiter {
         };
         let overloaded = telemetry.broker_queue_pressure_smoothed >= DOWNGRADE_QUEUE_PRESSURE
             || telemetry.frame_drop_rate >= DOWNGRADE_DROP_RATE
+            || telemetry.broker_backpressure_active
             || telemetry.predicted_vram_bytes > profile.vram_budget_bytes
             || telemetry.predicted_cost_bytes_per_sec > profile.safe_budget_bytes_per_sec;
         let headroom = if profile.safe_budget_bytes_per_sec == 0 {
