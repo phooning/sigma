@@ -294,6 +294,19 @@ describe("InfiniteCanvas media item interactions", () => {
       );
 
     expect(useCanvasSessionStore.getState().items[1]).toBe(unchangedItem);
+
+    const itemsBeforeClone = useCanvasSessionStore.getState().items;
+    useCanvasSessionStore.getState().setItems((prev) =>
+      prev.map((item) => ({
+        ...item,
+        crop: item.crop ? { ...item.crop } : item.crop,
+      })),
+    );
+
+    const itemsAfterClone = useCanvasSessionStore.getState().items;
+    expect(itemsAfterClone).toBe(itemsBeforeClone);
+    expect(itemsAfterClone[0]).toBe(itemsBeforeClone[0]);
+    expect(itemsAfterClone[1]).toBe(itemsBeforeClone[1]);
   });
 
   it("resizes the image back to correct aspect ratio on rescale button click", async () => {

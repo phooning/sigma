@@ -100,6 +100,79 @@ const attachMediaUrls = (item: MediaItem) => {
   };
 };
 
+const MEDIA_ITEM_IDENTITY_KEYS = [
+  "id",
+  "type",
+  "filePath",
+  "url",
+  "fileSize",
+  "duration",
+  "sourceWidth",
+  "sourceHeight",
+  "deferVideoLoad",
+  "thumbnailPath",
+  "thumbnailUrl",
+  "lowResProxyUrl",
+  "imagePreview256Path",
+  "imagePreview256Url",
+  "imagePreview1024Path",
+  "imagePreview1024Url",
+  "imageLod",
+  "videoLod",
+  "x",
+  "y",
+  "width",
+  "height",
+] as const satisfies ReadonlyArray<keyof MediaItem>;
+
+const areCropInsetsEqual = (
+  previous: MediaItem["crop"],
+  next: MediaItem["crop"],
+) => {
+  if (previous === next) return true;
+  if (!previous || !next) return previous === next;
+
+  return (
+    previous.top === next.top &&
+    previous.right === next.right &&
+    previous.bottom === next.bottom &&
+    previous.left === next.left
+  );
+};
+
+const areMediaItemsEqual = (previous: MediaItem, next: MediaItem) => {
+  if (previous === next) return true;
+  if (!areCropInsetsEqual(previous.crop, next.crop)) return false;
+
+  return MEDIA_ITEM_IDENTITY_KEYS.every((key) => previous[key] === next[key]);
+};
+
+const reconcileItemIdentities = (
+  previousItems: MediaItem[],
+  nextItems: MediaItem[],
+) => {
+  const previousById = new Map(
+    previousItems.map((item) => [item.id, item] as const),
+  );
+  let changed = previousItems.length !== nextItems.length;
+
+  const reconciledItems = nextItems.map((nextItem, index) => {
+    const previousItem = previousById.get(nextItem.id);
+    const reconciledItem =
+      previousItem && areMediaItemsEqual(previousItem, nextItem)
+        ? previousItem
+        : nextItem;
+
+    if (previousItems[index] !== reconciledItem) {
+      changed = true;
+    }
+
+    return reconciledItem;
+  });
+
+  return changed ? reconciledItems : previousItems;
+};
+
 const normalizeItems = (items: MediaItem[]) => {
   let changed = false;
   const nextItems = items.map((item) => {
@@ -109,6 +182,11 @@ const normalizeItems = (items: MediaItem[]) => {
   });
   return changed ? nextItems : items;
 };
+
+const normalizeAndReconcileItems = (
+  items: MediaItem[],
+  previousItems: MediaItem[],
+) => reconcileItemIdentities(previousItems, normalizeItems(items));
 
 const createMeasuredLocalStorage = () => ({
   getItem: (name: string) => localStorage.getItem(name),
@@ -146,7 +224,10 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
         }),
       setItems: (value) =>
         set((state) => {
-          const items = normalizeItems(resolveStateUpdate(value, state.items));
+          const items = normalizeAndReconcileItems(
+            resolveStateUpdate(value, state.items),
+            state.items,
+          );
           return {
             items,
             isDirty: resolveDirtyState({
@@ -166,7 +247,10 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
         })),
       replaceSession: (snapshot) =>
         set((state) => {
-          const items = normalizeItems(snapshot.items ?? state.items);
+          const items = normalizeAndReconcileItems(
+            snapshot.items ?? state.items,
+            state.items,
+          );
           const viewport = snapshot.viewport ?? state.viewport;
           const saveFilePath =
             snapshot.saveFilePath === undefined
@@ -313,7 +397,10 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
       }),
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Partial<CanvasSessionSnapshot>;
-        const items = normalizeItems(persisted.items ?? currentState.items);
+        const items = normalizeAndReconcileItems(
+          persisted.items ?? currentState.items,
+          currentState.items,
+        );
         const viewport = persisted.viewport ?? currentState.viewport;
         const saveFilePath =
           persisted.saveFilePath ?? currentState.saveFilePath;
