@@ -134,5 +134,7 @@ describe("buildNativeImageManifest", () => {
       manifest.assets[0].drawOrder,
     );
     expect(manifest.assets[1].focusWeight).toBe(2.5);
+    expect(manifest.assets[1].isSelected).toBe(true);
+    expect(manifest.assets[0].isSelected).toBe(false);
   });
 });

@@ -189,6 +189,7 @@ export function buildNativeImageManifest({
         visibleAreaPx,
         focusWeight: isSelected ? 2.5 : 1,
         centerWeight,
+        isSelected,
       },
     ];
   });

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { getViewBounds } from "../../utils/viewport";
+import type { NativeImageResourcePolicy } from "../../workers/nativeImageCompositor.worker";
 import { buildNativeImageManifest } from "./manifest";
 import type { NativeImageSurfaceProps } from "./types";
 
@@ -27,6 +28,29 @@ const signatureForViewport = ({
   y: number;
   zoom: number;
 }) => `${x.toFixed(3)}:${y.toFixed(3)}:${zoom.toFixed(4)}`;
+
+const readPositiveIntegerSetting = (key: string) => {
+  const rawValue = window.localStorage.getItem(key);
+  if (!rawValue) return undefined;
+  const value = Number.parseInt(rawValue, 10);
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+};
+
+const readNativeImageResourcePolicySetting = () => {
+  const maxCacheMb = readPositiveIntegerSetting("sigma.nativeImage.maxCacheMb");
+  const resourcePolicy: Partial<NativeImageResourcePolicy> = {
+    maxActiveImages: readPositiveIntegerSetting(
+      "sigma.nativeImage.maxActiveImages",
+    ),
+    maxCacheBytes: maxCacheMb ? maxCacheMb * 1024 * 1024 : undefined,
+    maxConcurrentLoads: readPositiveIntegerSetting(
+      "sigma.nativeImage.maxConcurrentLoads",
+    ),
+  };
+  return Object.values(resourcePolicy).some((value) => value !== undefined)
+    ? resourcePolicy
+    : null;
+};
 
 export function NativeImageSurface({
   items,
@@ -136,6 +160,10 @@ export function NativeImageSurface({
         },
         [offscreen],
       );
+      worker.postMessage({
+        type: "settings",
+        resourcePolicy: readNativeImageResourcePolicySetting(),
+      });
     } catch (error) {
       console.warn(
         "Native image surface unavailable; falling back to DOM image rendering.",
@@ -210,7 +238,7 @@ export function NativeImageSurface({
           manifest.assets.length,
           ...manifest.assets.map(
             (asset) =>
-              `${asset.id}:${asset.path}:${asset.drawOrder}:${asset.cropLeftRatio.toFixed(4)}:${asset.cropTopRatio.toFixed(4)}:${asset.cropWidthRatio.toFixed(4)}:${asset.cropHeightRatio.toFixed(4)}:${asset.screenX.toFixed(1)}:${asset.screenY.toFixed(1)}:${asset.renderedWidthPx.toFixed(1)}:${asset.renderedHeightPx.toFixed(1)}`,
+              `${asset.id}:${asset.path}:${asset.drawOrder}:${asset.isSelected ? 1 : 0}:${asset.cropLeftRatio.toFixed(4)}:${asset.cropTopRatio.toFixed(4)}:${asset.cropWidthRatio.toFixed(4)}:${asset.cropHeightRatio.toFixed(4)}:${asset.screenX.toFixed(1)}:${asset.screenY.toFixed(1)}:${asset.renderedWidthPx.toFixed(1)}:${asset.renderedHeightPx.toFixed(1)}`,
           ),
         ].join("|");
 
