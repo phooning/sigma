@@ -66,12 +66,7 @@ import type {
 } from "./utils/media.types";
 import { notify } from "./utils/notifications";
 import { ACTION_SELECTORS } from "./utils/press";
-import {
-  clampVideoTime,
-  getImageLod,
-  getLoopRange,
-  getVideoLod,
-} from "./utils/videoUtils";
+import { getImageLod, getLoopRange, getVideoLod } from "./utils/videoUtils";
 import { getViewBounds, pushItemToTop } from "./utils/viewport";
 
 export default function InfiniteCanvas() {
@@ -1100,15 +1095,7 @@ export default function InfiniteCanvas() {
       const controller = selectedVideoTimelineController;
       if (!controller || controller.duration <= 0) return false;
 
-      const frameDurationSeconds = 1 / 30;
-      const nextTime = clampVideoTime(
-        controller.currentTime + deltaFrames * frameDurationSeconds,
-        controller.duration,
-      );
-      controller.seekToRatio(nextTime / controller.duration);
-      if (controller.isPaused) {
-        controller.stopTimelineAnimation();
-      }
+      controller.seekByFrames(deltaFrames);
       return true;
     },
     [selectedVideoTimelineController],

@@ -28,6 +28,7 @@ interface SyncTimelineOptions {
 }
 
 const TIMELINE_STATE_WRITE_INTERVAL_MS = 100;
+const DEFAULT_VIDEO_FRAME_RATE = 30;
 
 export function useVideoTimeline({
   videoRef,
@@ -396,6 +397,29 @@ export function useVideoTimeline({
     [clampTimelineTime, durationStateRef, syncTimelineFromVideo, videoRef],
   );
 
+  const seekByFrames = useCallback(
+    (deltaFrames: number) => {
+      const video = videoRef.current;
+      const duration = durationStateRef.current;
+      if (!video || duration <= 0) return;
+
+      const nextTime = clampTimelineTime(
+        video.currentTime + deltaFrames / DEFAULT_VIDEO_FRAME_RATE,
+        duration,
+      );
+      stopTimelineAnimation();
+      video.currentTime = nextTime;
+      syncTimelineFromVideo(nextTime, duration);
+    },
+    [
+      clampTimelineTime,
+      durationStateRef,
+      stopTimelineAnimation,
+      syncTimelineFromVideo,
+      videoRef,
+    ],
+  );
+
   const seekFromPointer = useCallback(
     (clientX: number) => {
       const timeline = timelineRef.current;
@@ -449,6 +473,7 @@ export function useVideoTimeline({
     durationRef: durationStateRef,
     isScrubbing,
     isScrubbingRef,
+    seekByFrames,
     timelineRef,
     seekFromPointer,
     seekToRatio,
