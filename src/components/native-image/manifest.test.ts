@@ -113,6 +113,12 @@ describe("buildNativeImageManifest", () => {
       id: "dragging",
       x: 100,
       y: 40,
+      width: 5000,
+      height: 3200,
+      sourceWidth: 5000,
+      sourceHeight: 3200,
+      imagePreview1024Path: "/images/dragging-1024.png",
+      imagePreview1024Url: "asset:///images/dragging-1024.png",
     });
 
     const { manifest } = buildNativeImageManifest({
@@ -134,5 +140,50 @@ describe("buildNativeImageManifest", () => {
       manifest.assets[0].drawOrder,
     );
     expect(manifest.assets[1].focusWeight).toBe(2.5);
+    expect(manifest.assets[1].isSelected).toBe(true);
+    expect(manifest.assets[0].isSelected).toBe(false);
+  });
+
+  it("skips standard-size dragged images while React carries the moving DOM layer", () => {
+    const item = baseImage({
+      id: "dragging-standard",
+      imagePreview1024Path: "/images/standard-1024.png",
+      imagePreview1024Url: "asset:///images/standard-1024.png",
+    });
+
+    const { manifest } = buildNativeImageManifest({
+      items: [item],
+      viewport: { x: 0, y: 0, zoom: 1 },
+      canvasSize: { width: 1200, height: 800 },
+      selectedItems: new Set<string>(),
+      draggingItemId: item.id,
+      resizingItemId: null,
+      croppingItemId: null,
+      editingCropItemId: null,
+    });
+
+    expect(manifest.assets).toHaveLength(0);
+  });
+
+  it("requests a 1024 handoff preview for visible >4K images", () => {
+    const item = baseImage({
+      width: 5000,
+      height: 3200,
+      sourceWidth: 5000,
+      sourceHeight: 3200,
+    });
+
+    const { previewRequests } = buildNativeImageManifest({
+      items: [item],
+      viewport: { x: 0, y: 0, zoom: 1 },
+      canvasSize: { width: 1200, height: 800 },
+      selectedItems: new Set<string>(),
+      draggingItemId: null,
+      resizingItemId: null,
+      croppingItemId: null,
+      editingCropItemId: null,
+    });
+
+    expect(previewRequests).toEqual([{ item, maxDimension: 1024 }]);
   });
 });

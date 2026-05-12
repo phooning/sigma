@@ -1,10 +1,11 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 use std::{
     collections::hash_map::DefaultHasher,
-    fs,
+    fs::{self, OpenOptions},
     hash::{Hash, Hasher},
     path::{Path, PathBuf},
     process::Command,
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -12,6 +13,26 @@ use tauri::Manager;
 
 mod decode_arbiter;
 mod native_video;
+
+const MEDIA_CACHE_DIRS: [&str; 2] = ["image-previews", "video-thumbnails"];
+const MEDIA_CACHE_MAX_BYTES: u64 = 512 * 1024 * 1024;
+const MEDIA_CACHE_MAX_AGE_SECS: u64 = 90 * 24 * 60 * 60;
+
+static MEDIA_CACHE_HITS: AtomicU64 = AtomicU64::new(0);
+static MEDIA_CACHE_MISSES: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Clone, Debug, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MediaCacheStats {
+    total_bytes: u64,
+    image_preview_bytes: u64,
+    video_thumbnail_bytes: u64,
+    file_count: u64,
+    hits: u64,
+    misses: u64,
+    max_bytes: u64,
+    max_age_days: u64,
+}
 
 #[derive(serde::Serialize)]
 struct ImageProbe {
@@ -138,6 +159,155 @@ fn parse_duration_string(duration: &str) -> Option<f64> {
     Some(hours * 3600.0 + minutes * 60.0 + seconds)
 }
 
+fn media_cache_root<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
+    app.path().app_cache_dir().map_err(|err| format!("Failed to locate app cache directory: {err}"))
+}
+
+fn media_cache_dir<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    name: &str,
+) -> Result<PathBuf, String> {
+    Ok(media_cache_root(app)?.join(name))
+}
+
+fn touch_cache_file(path: &Path) {
+    if let Ok(metadata) = fs::metadata(path) {
+        if let Ok(file) = OpenOptions::new().write(true).open(path) {
+            let _ = file.set_len(metadata.len());
+        }
+    }
+}
+
+#[derive(Debug)]
+struct MediaCacheFile {
+    path: PathBuf,
+    size: u64,
+    modified: SystemTime,
+    cache_name: String,
+}
+
+fn collect_media_cache_files(root: &Path) -> Vec<MediaCacheFile> {
+    let mut files = Vec::new();
+    for cache_name in MEDIA_CACHE_DIRS {
+        let cache_dir = root.join(cache_name);
+        let Ok(entries) = fs::read_dir(&cache_dir) else {
+            continue;
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Ok(metadata) = entry.metadata() else {
+                continue;
+            };
+            if !metadata.is_file() {
+                continue;
+            }
+            files.push(MediaCacheFile {
+                path,
+                size: metadata.len(),
+                modified: metadata.modified().unwrap_or(UNIX_EPOCH),
+                cache_name: cache_name.to_string(),
+            });
+        }
+    }
+    files
+}
+
+fn prune_media_cache(root: &Path, max_bytes: u64, max_age_secs: u64) -> Result<(), String> {
+    let now = SystemTime::now();
+    let max_age = std::time::Duration::from_secs(max_age_secs);
+    let mut files = collect_media_cache_files(root);
+
+    for file in &files {
+        let is_expired =
+            now.duration_since(file.modified).map(|age| age > max_age).unwrap_or(false);
+        if is_expired {
+            fs::remove_file(&file.path).map_err(|err| {
+                format!("Failed to remove expired media cache file {:?}: {err}", file.path)
+            })?;
+        }
+    }
+
+    files = collect_media_cache_files(root);
+    let mut total_bytes = files.iter().map(|file| file.size).sum::<u64>();
+    if total_bytes <= max_bytes {
+        return Ok(());
+    }
+
+    files.sort_by_key(|file| file.modified);
+    for file in files {
+        if total_bytes <= max_bytes {
+            break;
+        }
+        fs::remove_file(&file.path)
+            .map_err(|err| format!("Failed to prune media cache file {:?}: {err}", file.path))?;
+        total_bytes = total_bytes.saturating_sub(file.size);
+    }
+
+    Ok(())
+}
+
+fn media_cache_stats_for_root(root: &Path) -> MediaCacheStats {
+    let mut stats = MediaCacheStats {
+        hits: MEDIA_CACHE_HITS.load(Ordering::Relaxed),
+        misses: MEDIA_CACHE_MISSES.load(Ordering::Relaxed),
+        max_bytes: MEDIA_CACHE_MAX_BYTES,
+        max_age_days: MEDIA_CACHE_MAX_AGE_SECS / (24 * 60 * 60),
+        ..MediaCacheStats::default()
+    };
+
+    for file in collect_media_cache_files(root) {
+        stats.total_bytes = stats.total_bytes.saturating_add(file.size);
+        stats.file_count = stats.file_count.saturating_add(1);
+        match file.cache_name.as_str() {
+            "image-previews" => {
+                stats.image_preview_bytes = stats.image_preview_bytes.saturating_add(file.size);
+            }
+            "video-thumbnails" => {
+                stats.video_thumbnail_bytes = stats.video_thumbnail_bytes.saturating_add(file.size);
+            }
+            _ => {}
+        }
+    }
+
+    stats
+}
+
+#[tauri::command]
+async fn media_cache_stats<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<MediaCacheStats, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = media_cache_root(&app)?;
+        Ok(media_cache_stats_for_root(&root))
+    })
+    .await
+    .map_err(|err| format!("Failed to inspect media cache: {err}"))?
+}
+
+#[tauri::command]
+async fn clear_media_cache<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<MediaCacheStats, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = media_cache_root(&app)?;
+        for cache_name in MEDIA_CACHE_DIRS {
+            let cache_dir = root.join(cache_name);
+            if cache_dir.exists() {
+                fs::remove_dir_all(&cache_dir)
+                    .map_err(|err| format!("Failed to clear {cache_name} cache: {err}"))?;
+            }
+            fs::create_dir_all(&cache_dir)
+                .map_err(|err| format!("Failed to recreate {cache_name} cache: {err}"))?;
+        }
+        MEDIA_CACHE_HITS.store(0, Ordering::Relaxed);
+        MEDIA_CACHE_MISSES.store(0, Ordering::Relaxed);
+        Ok(media_cache_stats_for_root(&root))
+    })
+    .await
+    .map_err(|err| format!("Failed to clear media cache: {err}"))?
+}
+
 #[tauri::command]
 async fn generate_video_thumbnail<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -152,14 +322,12 @@ pub(crate) fn generate_video_thumbnail_blocking<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     path: String,
 ) -> Result<Option<String>, String> {
-    let cache_dir = app
-        .path()
-        .app_cache_dir()
-        .map_err(|err| format!("Failed to locate app cache directory: {err}"))?
-        .join("video-thumbnails");
+    let cache_root = media_cache_root(&app)?;
+    let cache_dir = media_cache_dir(&app, "video-thumbnails")?;
 
     fs::create_dir_all(&cache_dir)
         .map_err(|err| format!("Failed to create thumbnail cache directory: {err}"))?;
+    prune_media_cache(&cache_root, MEDIA_CACHE_MAX_BYTES, MEDIA_CACHE_MAX_AGE_SECS)?;
 
     let mut hasher = DefaultHasher::new();
     path.hash(&mut hasher);
@@ -172,8 +340,11 @@ pub(crate) fn generate_video_thumbnail_blocking<R: tauri::Runtime>(
 
     let thumbnail_path = cache_dir.join(format!("{:x}.jpg", hasher.finish()));
     if thumbnail_path.exists() {
+        MEDIA_CACHE_HITS.fetch_add(1, Ordering::Relaxed);
+        touch_cache_file(&thumbnail_path);
         return Ok(Some(thumbnail_path.to_string_lossy().into_owned()));
     }
+    MEDIA_CACHE_MISSES.fetch_add(1, Ordering::Relaxed);
 
     let output = Command::new("ffmpeg")
         .args([
@@ -194,6 +365,7 @@ pub(crate) fn generate_video_thumbnail_blocking<R: tauri::Runtime>(
 
     match output {
         Ok(result) if result.status.success() => {
+            prune_media_cache(&cache_root, MEDIA_CACHE_MAX_BYTES, MEDIA_CACHE_MAX_AGE_SECS)?;
             Ok(Some(thumbnail_path.to_string_lossy().into_owned()))
         }
         Ok(_) | Err(_) => {
@@ -225,14 +397,12 @@ pub(crate) fn generate_image_preview_blocking<R: tauri::Runtime>(
         return Err("Image preview size must be greater than zero".to_string());
     }
 
-    let cache_dir = app
-        .path()
-        .app_cache_dir()
-        .map_err(|err| format!("Failed to locate app cache directory: {err}"))?
-        .join("image-previews");
+    let cache_root = media_cache_root(&app)?;
+    let cache_dir = media_cache_dir(&app, "image-previews")?;
 
     fs::create_dir_all(&cache_dir)
         .map_err(|err| format!("Failed to create image preview cache directory: {err}"))?;
+    prune_media_cache(&cache_root, MEDIA_CACHE_MAX_BYTES, MEDIA_CACHE_MAX_AGE_SECS)?;
 
     let mut hasher = DefaultHasher::new();
     path.hash(&mut hasher);
@@ -246,8 +416,11 @@ pub(crate) fn generate_image_preview_blocking<R: tauri::Runtime>(
 
     let preview_path = cache_dir.join(format!("{:x}-{max_dimension}.png", hasher.finish()));
     if preview_path.exists() {
+        MEDIA_CACHE_HITS.fetch_add(1, Ordering::Relaxed);
+        touch_cache_file(&preview_path);
         return Ok(Some(preview_path.to_string_lossy().into_owned()));
     }
+    MEDIA_CACHE_MISSES.fetch_add(1, Ordering::Relaxed);
 
     let reader = image::ImageReader::open(&path)
         .map_err(|err| format!("Failed to open image for preview: {err}"))?
@@ -260,6 +433,7 @@ pub(crate) fn generate_image_preview_blocking<R: tauri::Runtime>(
     preview
         .save_with_format(&preview_path, image::ImageFormat::Png)
         .map_err(|err| format!("Failed to save image preview: {err}"))?;
+    prune_media_cache(&cache_root, MEDIA_CACHE_MAX_BYTES, MEDIA_CACHE_MAX_AGE_SECS)?;
 
     Ok(Some(preview_path.to_string_lossy().into_owned()))
 }
@@ -552,6 +726,8 @@ pub fn configure_tauri_builder<R: tauri::Runtime>(builder: tauri::Builder<R>) ->
         .invoke_handler(tauri::generate_handler![
             probe_media,
             probe_images,
+            media_cache_stats,
+            clear_media_cache,
             generate_video_thumbnail,
             generate_image_preview,
             request_decode,
@@ -596,6 +772,51 @@ mod tests {
 
     fn crop(x: f64, y: f64, width: f64, height: f64, box_width: f64, box_height: f64) -> CropRatio {
         CropRatio { x, y, width, height, box_width: Some(box_width), box_height: Some(box_height) }
+    }
+
+    fn unique_temp_dir(name: &str) -> PathBuf {
+        let test_id = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after Unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("sigma-{name}-{}-{test_id}", std::process::id()))
+    }
+
+    #[test]
+    fn media_cache_stats_counts_preview_and_thumbnail_bytes() {
+        let root = unique_temp_dir("media-cache-stats");
+        let image_dir = root.join("image-previews");
+        let thumbnail_dir = root.join("video-thumbnails");
+        fs::create_dir_all(&image_dir).expect("image cache dir");
+        fs::create_dir_all(&thumbnail_dir).expect("thumbnail cache dir");
+        fs::write(image_dir.join("preview.png"), [1_u8; 3]).expect("preview file");
+        fs::write(thumbnail_dir.join("thumb.jpg"), [2_u8; 5]).expect("thumbnail file");
+
+        let stats = media_cache_stats_for_root(&root);
+
+        let _ = fs::remove_dir_all(&root);
+        assert_eq!(stats.image_preview_bytes, 3);
+        assert_eq!(stats.video_thumbnail_bytes, 5);
+        assert_eq!(stats.total_bytes, 8);
+        assert_eq!(stats.file_count, 2);
+    }
+
+    #[test]
+    fn prune_media_cache_removes_oldest_files_until_under_budget() {
+        let root = unique_temp_dir("media-cache-prune");
+        let image_dir = root.join("image-previews");
+        fs::create_dir_all(&image_dir).expect("image cache dir");
+        let first = image_dir.join("first.png");
+        let second = image_dir.join("second.png");
+        fs::write(&first, [1_u8; 8]).expect("first cache file");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        fs::write(&second, [2_u8; 8]).expect("second cache file");
+
+        prune_media_cache(&root, 8, MEDIA_CACHE_MAX_AGE_SECS).expect("prune cache");
+
+        assert!(!first.exists());
+        assert!(second.exists());
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]

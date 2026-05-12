@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { getViewBounds } from "../../utils/viewport";
+import type { NativeImageResourcePolicy } from "../../workers/nativeImageCompositor.worker";
 import { buildNativeImageManifest } from "./manifest";
 import type { NativeImageSurfaceProps } from "./types";
 
@@ -28,6 +29,29 @@ const signatureForViewport = ({
   zoom: number;
 }) => `${x.toFixed(3)}:${y.toFixed(3)}:${zoom.toFixed(4)}`;
 
+const readPositiveIntegerSetting = (key: string) => {
+  const rawValue = window.localStorage.getItem(key);
+  if (!rawValue) return undefined;
+  const value = Number.parseInt(rawValue, 10);
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+};
+
+const readNativeImageResourcePolicySetting = () => {
+  const maxCacheMb = readPositiveIntegerSetting("sigma.nativeImage.maxCacheMb");
+  const resourcePolicy: Partial<NativeImageResourcePolicy> = {
+    maxActiveImages: readPositiveIntegerSetting(
+      "sigma.nativeImage.maxActiveImages",
+    ),
+    maxCacheBytes: maxCacheMb ? maxCacheMb * 1024 * 1024 : undefined,
+    maxConcurrentLoads: readPositiveIntegerSetting(
+      "sigma.nativeImage.maxConcurrentLoads",
+    ),
+  };
+  return Object.values(resourcePolicy).some((value) => value !== undefined)
+    ? resourcePolicy
+    : null;
+};
+
 export function NativeImageSurface({
   items,
   viewport,
@@ -43,22 +67,51 @@ export function NativeImageSurface({
 }: NativeImageSurfaceProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const workerRef = useRef<Worker | null>(null);
+  const hasTransferredCanvasRef = useRef(false);
+  const deferredCleanupRef = useRef<number | null>(null);
+  const canvasSizeRef = useRef(canvasSize);
+  const onReadyChangeRef = useRef(onReadyChange);
+  const onAssetReadyChangeRef = useRef(onAssetReadyChange);
   const previewSignatureRef = useRef("");
   const manifestSignatureRef = useRef("");
 
   const isEnabled = supportsNativeImageSurface();
 
   useEffect(() => {
+    canvasSizeRef.current = canvasSize;
+    onReadyChangeRef.current = onReadyChange;
+    onAssetReadyChangeRef.current = onAssetReadyChange;
+  });
+
+  useEffect(() => {
     if (!isEnabled) return;
+    if (deferredCleanupRef.current !== null) {
+      window.clearTimeout(deferredCleanupRef.current);
+      deferredCleanupRef.current = null;
+    }
+    const scheduleCleanup = () => {
+      deferredCleanupRef.current = window.setTimeout(() => {
+        onReadyChangeRef.current?.(false);
+        workerRef.current?.terminate();
+        workerRef.current = null;
+        deferredCleanupRef.current = null;
+      }, 0);
+    };
+    if (workerRef.current) return scheduleCleanup;
 
     const canvas = canvasRef.current;
     if (!canvas || !("transferControlToOffscreen" in canvas)) return;
+    if (hasTransferredCanvasRef.current) {
+      onReadyChangeRef.current?.(false);
+      return;
+    }
 
-    onReadyChange?.(false);
+    onReadyChangeRef.current?.(false);
     let worker: Worker | null = null;
 
     try {
       const offscreen = canvas.transferControlToOffscreen();
+      hasTransferredCanvasRef.current = true;
       worker = new Worker(
         new URL(
           "../../workers/nativeImageCompositor.worker.ts",
@@ -75,61 +128,57 @@ export function NativeImageSurface({
           | { type: "error"; reason?: string };
 
         if (message.type === "ready") {
-          onReadyChange?.(true);
+          onReadyChangeRef.current?.(true);
           return;
         }
 
         if (message.type === "asset-ready") {
-          onAssetReadyChange?.(message.itemId, message.path);
+          onAssetReadyChangeRef.current?.(message.itemId, message.path);
           return;
         }
 
         if (message.type === "error") {
-          onReadyChange?.(false);
+          onReadyChangeRef.current?.(false);
         }
       };
 
       worker.onerror = () => {
-        onReadyChange?.(false);
+        onReadyChangeRef.current?.(false);
       };
 
       worker.onmessageerror = () => {
-        onReadyChange?.(false);
+        onReadyChangeRef.current?.(false);
       };
 
       worker.postMessage(
         {
           type: "init",
           canvas: offscreen,
-          width: canvasSize.width,
-          height: canvasSize.height,
+          width: canvasSizeRef.current.width,
+          height: canvasSizeRef.current.height,
           devicePixelRatio: window.devicePixelRatio || 1,
         },
         [offscreen],
       );
+      worker.postMessage({
+        type: "settings",
+        resourcePolicy: readNativeImageResourcePolicySetting(),
+      });
     } catch (error) {
       console.warn(
         "Native image surface unavailable; falling back to DOM image rendering.",
         error,
       );
-      onReadyChange?.(false);
+      onReadyChangeRef.current?.(false);
       worker?.terminate();
       workerRef.current = null;
       return;
     }
 
     return () => {
-      onReadyChange?.(false);
-      worker?.terminate();
-      workerRef.current = null;
+      scheduleCleanup();
     };
-  }, [
-    canvasSize.height,
-    canvasSize.width,
-    isEnabled,
-    onAssetReadyChange,
-    onReadyChange,
-  ]);
+  }, [isEnabled]);
 
   useEffect(() => {
     if (!isEnabled) return;
@@ -145,83 +194,55 @@ export function NativeImageSurface({
   useEffect(() => {
     if (!isEnabled) return;
 
-    let frameId = 0;
-    let lastItems = items;
-    let lastSelectedItems = selectedItems;
-    let lastDraggingItemId = draggingItemId;
-    let lastResizingItemId = resizingItemId;
-    let lastCroppingItemId = croppingItemId;
-    let lastEditingCropItemId = editingCropItemId;
-    let lastViewportSignature = "";
-
-    const publishManifest = () => {
-      const viewportSignature = signatureForViewport(viewport);
-      const inputsChanged =
-        lastItems !== items ||
-        lastSelectedItems !== selectedItems ||
-        lastDraggingItemId !== draggingItemId ||
-        lastResizingItemId !== resizingItemId ||
-        lastCroppingItemId !== croppingItemId ||
-        lastEditingCropItemId !== editingCropItemId ||
-        lastViewportSignature !== viewportSignature;
-
-      if (inputsChanged) {
-        lastItems = items;
-        lastSelectedItems = selectedItems;
-        lastDraggingItemId = draggingItemId;
-        lastResizingItemId = resizingItemId;
-        lastCroppingItemId = croppingItemId;
-        lastEditingCropItemId = editingCropItemId;
-        lastViewportSignature = viewportSignature;
-
-        const { manifest, previewRequests } = buildNativeImageManifest({
-          items,
-          viewport,
-          canvasSize,
-          selectedItems,
-          draggingItemId,
-          resizingItemId,
-          croppingItemId,
-          editingCropItemId,
-        });
-        const manifestSignature = [
-          viewportSignature,
-          manifest.assets.length,
-          ...manifest.assets.map(
-            (asset) =>
-              `${asset.id}:${asset.path}:${asset.drawOrder}:${asset.cropLeftRatio.toFixed(4)}:${asset.cropTopRatio.toFixed(4)}:${asset.cropWidthRatio.toFixed(4)}:${asset.cropHeightRatio.toFixed(4)}:${asset.screenX.toFixed(1)}:${asset.screenY.toFixed(1)}:${asset.renderedWidthPx.toFixed(1)}:${asset.renderedHeightPx.toFixed(1)}`,
-          ),
-        ].join("|");
-
-        if (manifestSignature !== manifestSignatureRef.current) {
-          manifestSignatureRef.current = manifestSignature;
-          workerRef.current?.postMessage({ type: "layout", manifest });
-        }
-
-        const previewSignature = signatureForPreviewRequests(
-          previewRequests,
-          viewportSignature,
-        );
-        if (previewSignature !== previewSignatureRef.current) {
-          previewSignatureRef.current = previewSignature;
-          const viewBounds = getViewBounds(
-            viewport,
-            canvasSize.width,
-            canvasSize.height,
-          );
-          for (const request of previewRequests) {
-            requestImagePreview(request.item, request.maxDimension, {
-              viewBounds,
-            });
-          }
-        }
+    const viewportSignature = signatureForViewport(viewport);
+    const { manifest, previewRequests } = buildNativeImageManifest({
+      items,
+      viewport,
+      canvasSize,
+      selectedItems,
+      draggingItemId,
+      resizingItemId,
+      croppingItemId,
+      editingCropItemId,
+    });
+    const manifestAssetIds = new Set(manifest.assets.map((asset) => asset.id));
+    for (const item of items) {
+      if (item.type === "image" && !manifestAssetIds.has(item.id)) {
+        onAssetReadyChangeRef.current?.(item.id, "");
       }
+    }
 
-      frameId = window.requestAnimationFrame(publishManifest);
-    };
+    const manifestSignature = [
+      viewportSignature,
+      manifest.assets.length,
+      ...manifest.assets.map(
+        (asset) =>
+          `${asset.id}:${asset.path}:${asset.drawOrder}:${asset.isSelected ? 1 : 0}:${asset.cropLeftRatio.toFixed(4)}:${asset.cropTopRatio.toFixed(4)}:${asset.cropWidthRatio.toFixed(4)}:${asset.cropHeightRatio.toFixed(4)}:${asset.screenX.toFixed(1)}:${asset.screenY.toFixed(1)}:${asset.renderedWidthPx.toFixed(1)}:${asset.renderedHeightPx.toFixed(1)}`,
+      ),
+    ].join("|");
 
-    frameId = window.requestAnimationFrame(publishManifest);
-    return () => window.cancelAnimationFrame(frameId);
+    if (manifestSignature !== manifestSignatureRef.current) {
+      manifestSignatureRef.current = manifestSignature;
+      workerRef.current?.postMessage({ type: "layout", manifest });
+    }
+
+    const previewSignature = signatureForPreviewRequests(
+      previewRequests,
+      viewportSignature,
+    );
+    if (previewSignature === previewSignatureRef.current) return;
+
+    previewSignatureRef.current = previewSignature;
+    const viewBounds = getViewBounds(
+      viewport,
+      canvasSize.width,
+      canvasSize.height,
+    );
+    for (const request of previewRequests) {
+      requestImagePreview(request.item, request.maxDimension, {
+        viewBounds,
+      });
+    }
   }, [
     canvasSize,
     croppingItemId,

@@ -1,4 +1,4 @@
-import { act, fireEvent, render } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MediaItem } from "../utils/media.types";
 import { CanvasMediaItem } from "./CanvasMediaItem";
@@ -6,18 +6,24 @@ import type { CanvasMediaItemProps } from "./CanvasMediaItem.types";
 
 vi.mock("./ImageActions", () => ({
   ImageActions: ({
+    mountDomImage,
     onReadyChange,
+    showDomImage,
   }: {
+    mountDomImage: boolean;
     onReadyChange?: (isReady: boolean) => void;
-  }) => (
-    <button
-      type="button"
-      data-testid="image-ready"
-      onClick={() => onReadyChange?.(true)}
-    >
-      ready
-    </button>
-  ),
+    showDomImage: boolean;
+  }) =>
+    mountDomImage ? (
+      <button
+        type="button"
+        data-testid="image-ready"
+        data-visible={showDomImage}
+        onClick={() => onReadyChange?.(true)}
+      >
+        ready
+      </button>
+    ) : null,
 }));
 
 vi.mock("./MediaFrameActions", () => ({
@@ -52,6 +58,17 @@ const imageItem: MediaItem = {
   height: 800,
   sourceWidth: 1200,
   sourceHeight: 800,
+};
+
+const videoItem: MediaItem = {
+  id: "video-1",
+  type: "video",
+  filePath: "/videos/example.mp4",
+  url: "asset:///videos/example.mp4",
+  x: 0,
+  y: 0,
+  width: 1200,
+  height: 800,
 };
 
 const baseProps: CanvasMediaItemProps = {
@@ -173,5 +190,143 @@ describe("CanvasMediaItem readiness mask", () => {
       backdropFilter: "blur(0px)",
     });
     expect(mask).toHaveStyle({ transition: "none" });
+  });
+
+  it("keeps a ready playing video clear while idle", () => {
+    const animationFrames: FrameRequestCallback[] = [];
+    let animationFrameHandle = 0;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      animationFrames.push(callback);
+      animationFrameHandle += 1;
+      return animationFrameHandle;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+
+    const { container } = render(
+      <CanvasMediaItem {...baseProps} item={videoItem} />,
+    );
+    const mask = container.querySelector(".media-visibility-mask");
+
+    expect(mask).toHaveStyle({
+      opacity: "1",
+      backdropFilter: "blur(12px)",
+    });
+
+    fireEvent.click(screen.getByTestId("video-ready"));
+
+    expect(animationFrames).toHaveLength(1);
+
+    act(() => {
+      animationFrames[0]?.(16);
+    });
+
+    expect(mask).toHaveStyle({
+      opacity: "0",
+      backdropFilter: "blur(0px)",
+    });
+  });
+
+  it("keeps a ready video clear during drag, resize, and crop interactions", () => {
+    const animationFrames: FrameRequestCallback[] = [];
+    let animationFrameHandle = 0;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      animationFrames.push(callback);
+      animationFrameHandle += 1;
+      return animationFrameHandle;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+
+    const { container, rerender } = render(
+      <CanvasMediaItem {...baseProps} item={videoItem} />,
+    );
+    const mask = container.querySelector(".media-visibility-mask");
+
+    fireEvent.click(screen.getByTestId("video-ready"));
+    act(() => {
+      animationFrames[0]?.(16);
+    });
+
+    expect(mask).toHaveStyle({
+      opacity: "0",
+      backdropFilter: "blur(0px)",
+    });
+
+    for (const interactionProps of [
+      { isDragging: true },
+      { isResizing: true },
+      { isCropping: true },
+    ]) {
+      rerender(
+        <CanvasMediaItem
+          {...baseProps}
+          {...interactionProps}
+          item={videoItem}
+        />,
+      );
+
+      expect(mask).toHaveStyle({
+        opacity: "0",
+        backdropFilter: "blur(0px)",
+        transition: "none",
+      });
+    }
+  });
+
+  it("shows standard-size native images through the moving DOM layer while transforming", () => {
+    render(<CanvasMediaItem {...baseProps} isDragging useNativeImageSurface />);
+
+    expect(screen.getByTestId("image-ready")).toHaveAttribute(
+      "data-visible",
+      "true",
+    );
+  });
+
+  it("uses a preloaded preview handoff for >4K native image transforms", () => {
+    const largeItem: MediaItem = {
+      ...imageItem,
+      width: 5000,
+      height: 3200,
+      sourceWidth: 5000,
+      sourceHeight: 3200,
+      imagePreview1024Path: "/images/full-res-preview-1024.png",
+      imagePreview1024Url: "asset:///images/full-res-preview-1024.png",
+    };
+
+    const { rerender } = render(
+      <CanvasMediaItem
+        {...baseProps}
+        item={largeItem}
+        isDragging
+        useNativeImageSurface
+      />,
+    );
+
+    expect(screen.getByTestId("image-ready")).toHaveAttribute(
+      "data-visible",
+      "true",
+    );
+
+    rerender(
+      <CanvasMediaItem {...baseProps} item={largeItem} useNativeImageSurface />,
+    );
+
+    expect(screen.getByTestId("image-ready")).toHaveAttribute(
+      "data-visible",
+      "true",
+    );
+
+    rerender(
+      <CanvasMediaItem
+        {...baseProps}
+        item={largeItem}
+        nativeImageReadyPath="/images/full-res.png"
+        useNativeImageSurface
+      />,
+    );
+
+    expect(screen.getByTestId("image-ready")).toHaveAttribute(
+      "data-visible",
+      "false",
+    );
   });
 });

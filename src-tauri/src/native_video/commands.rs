@@ -31,11 +31,7 @@ use super::{
 pub async fn native_video_get_profile(
     state: State<'_, NativeVideoState>,
 ) -> Result<PerformanceProfile, String> {
-    Ok(state
-        .profile
-        .lock()
-        .map_err(|_| "native video profile lock poisoned".to_string())?
-        .clone())
+    Ok(state.profile.lock().map_err(|_| "native video profile lock poisoned".to_string())?.clone())
 }
 
 #[tauri::command]
@@ -47,10 +43,7 @@ pub async fn native_video_update_manifest(
     let (respond_to, response) = oneshot::channel();
     state
         .control_tx
-        .send(ControlMessage::UpdateManifest {
-            manifest,
-            respond_to,
-        })
+        .send(ControlMessage::UpdateManifest { manifest, respond_to })
         .await
         .map_err(|_| "native video controller is not running".to_string())?;
 
@@ -76,9 +69,7 @@ pub async fn native_video_stop_all(
         .await
         .map_err(|_| "native video controller is not running".to_string())?;
 
-    response
-        .await
-        .map_err(|_| "native video controller dropped the stop response".to_string())
+    response.await.map_err(|_| "native video controller dropped the stop response".to_string())
 }
 
 #[tauri::command]
@@ -86,12 +77,11 @@ pub fn native_video_subscribe_frames(
     state: State<'_, NativeVideoState>,
     on_frame: Channel<InvokeResponseBody>,
 ) -> Result<(), String> {
-    // Native video maintains a single live frame subscriber at a time.
-    let mut subscriber = state
+    let mut subscribers = state
         .frame_subscribers
         .lock()
         .map_err(|_| "native video frame subscriber lock poisoned".to_string())?;
-    *subscriber = Some(on_frame);
+    subscribers.insert(on_frame.id(), on_frame);
 
     Ok(())
 }
@@ -135,15 +125,11 @@ pub async fn native_video_record_frontend_metrics(
         .map_err(|err| format!("failed to deserialize frontend metrics: {err}"))?;
     let serialization_deserialization_time_ms = serde_started_at.elapsed().as_secs_f64() * 1_000.0;
 
-    let mut profile = state
-        .profile
-        .lock()
-        .map_err(|_| "native video profile lock poisoned".to_string())?
-        .clone();
+    let mut profile =
+        state.profile.lock().map_err(|_| "native video profile lock poisoned".to_string())?.clone();
 
-    profile.ipc_budget_bytes_per_sec = profile
-        .ipc_budget_bytes_per_sec
-        .max(metrics.measured_ipc_bytes_per_sec);
+    profile.ipc_budget_bytes_per_sec =
+        profile.ipc_budget_bytes_per_sec.max(metrics.measured_ipc_bytes_per_sec);
     profile.upload_cost_factor = bounded_factor(metrics.upload_latency_p95_ms, 16.667);
     profile.composite_cost_factor = bounded_factor(metrics.composite_latency_p95_ms, 16.667);
     profile.base_probe_frame_drop_rate = Some(metrics.frame_drop_rate);
@@ -161,10 +147,8 @@ pub async fn native_video_record_frontend_metrics(
     profile.recompute_safe_budget();
 
     persist_profile(&state.profile_path, &profile)?;
-    *state
-        .profile
-        .lock()
-        .map_err(|_| "native video profile lock poisoned".to_string())? = profile.clone();
+    *state.profile.lock().map_err(|_| "native video profile lock poisoned".to_string())? =
+        profile.clone();
 
     update_telemetry(&state.telemetry, &state.telemetry_tx, |snapshot| {
         snapshot.safe_budget_bytes_per_sec = profile.safe_budget_bytes_per_sec;
@@ -183,10 +167,8 @@ pub async fn native_video_reset_profile(
 ) -> Result<PerformanceProfile, String> {
     let profile = PerformanceProfile::uncalibrated();
     persist_profile(&state.profile_path, &profile)?;
-    *state
-        .profile
-        .lock()
-        .map_err(|_| "native video profile lock poisoned".to_string())? = profile.clone();
+    *state.profile.lock().map_err(|_| "native video profile lock poisoned".to_string())? =
+        profile.clone();
     Ok(profile)
 }
 
@@ -201,11 +183,8 @@ pub async fn native_video_run_base_case_probe(
     let fps = config.fps.unwrap_or(60).clamp(1, 60);
     let frames = config.frames.unwrap_or(fps * 3).clamp(1, fps * 10);
 
-    if let Some(source_path) = config
-        .source_path
-        .as_deref()
-        .map(str::trim)
-        .filter(|path| !path.is_empty())
+    if let Some(source_path) =
+        config.source_path.as_deref().map(str::trim).filter(|path| !path.is_empty())
     {
         let report =
             run_ffmpeg_base_case_probe(source_path, width, height, fps, frames, on_frame).await?;
@@ -243,11 +222,8 @@ pub async fn native_video_run_base_case_probe(
     decode_latencies.sort_by(f64::total_cmp);
     send_latencies.sort_by(f64::total_cmp);
     let elapsed_ms = started.elapsed().as_secs_f64() * 1_000.0;
-    let measured_ipc_bytes_per_sec = if elapsed_ms > 0.0 {
-        ((bytes_sent as f64 / elapsed_ms) * 1_000.0) as u64
-    } else {
-        0
-    };
+    let measured_ipc_bytes_per_sec =
+        if elapsed_ms > 0.0 { ((bytes_sent as f64 / elapsed_ms) * 1_000.0) as u64 } else { 0 };
 
     let report = BaseCaseProbeReport {
         decode_backend: "synthetic-yuv420".into(),
@@ -302,10 +278,7 @@ async fn run_ffmpeg_base_case_probe(
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|err| format!("failed to start ffmpeg base-case probe: {err}"))?;
-    let mut stdout = child
-        .stdout
-        .take()
-        .ok_or("ffmpeg base-case probe did not expose stdout")?;
+    let mut stdout = child.stdout.take().ok_or("ffmpeg base-case probe did not expose stdout")?;
     let mut decode_latencies = Vec::with_capacity(frames as usize);
     let mut send_latencies = Vec::with_capacity(frames as usize);
     let mut bytes_sent = 0_u64;
@@ -345,19 +318,14 @@ async fn run_ffmpeg_base_case_probe(
         .await
         .map_err(|err| format!("failed to wait for ffmpeg base-case probe: {err}"))?;
     if !status.success() {
-        return Err(format!(
-            "ffmpeg base-case probe failed with status {status}"
-        ));
+        return Err(format!("ffmpeg base-case probe failed with status {status}"));
     }
 
     decode_latencies.sort_by(f64::total_cmp);
     send_latencies.sort_by(f64::total_cmp);
     let elapsed_ms = started.elapsed().as_secs_f64() * 1_000.0;
-    let measured_ipc_bytes_per_sec = if elapsed_ms > 0.0 {
-        ((bytes_sent as f64 / elapsed_ms) * 1_000.0) as u64
-    } else {
-        0
-    };
+    let measured_ipc_bytes_per_sec =
+        if elapsed_ms > 0.0 { ((bytes_sent as f64 / elapsed_ms) * 1_000.0) as u64 } else { 0 };
 
     Ok(BaseCaseProbeReport {
         decode_backend: "ffmpeg-rawvideo-yuv420p".into(),
@@ -398,9 +366,7 @@ async fn persist_base_case_probe_metrics(
                 let _ = tx.send(measure_ram_bandwidth());
             })
             .map_err(|err| format!("failed to spawn RAM bandwidth probe thread: {err}"))?;
-        rx
-            .await
-            .map_err(|err| format!("RAM bandwidth probe thread dropped result: {err}"))?
+        rx.await.map_err(|err| format!("RAM bandwidth probe thread dropped result: {err}"))?
     } else {
         state
             .profile
@@ -409,15 +375,11 @@ async fn persist_base_case_probe_metrics(
             .ram_bandwidth_bytes_per_sec
     };
 
-    let mut profile = state
-        .profile
-        .lock()
-        .map_err(|_| "native video profile lock poisoned".to_string())?
-        .clone();
+    let mut profile =
+        state.profile.lock().map_err(|_| "native video profile lock poisoned".to_string())?.clone();
 
-    profile.ipc_budget_bytes_per_sec = profile
-        .ipc_budget_bytes_per_sec
-        .max(report.measured_ipc_bytes_per_sec);
+    profile.ipc_budget_bytes_per_sec =
+        profile.ipc_budget_bytes_per_sec.max(report.measured_ipc_bytes_per_sec);
     profile.base_probe_ipc_latency_p95_ms = Some(report.send_latency_p95_ms);
     profile.base_probe_ram_bandwidth_bytes_per_sec = Some(ram_bandwidth);
     profile.ram_bandwidth_bytes_per_sec = ram_bandwidth;
@@ -433,10 +395,8 @@ async fn persist_base_case_probe_metrics(
     profile.recompute_safe_budget();
 
     persist_profile(&state.profile_path, &profile)?;
-    *state
-        .profile
-        .lock()
-        .map_err(|_| "native video profile lock poisoned".to_string())? = profile.clone();
+    *state.profile.lock().map_err(|_| "native video profile lock poisoned".to_string())? =
+        profile.clone();
 
     update_telemetry(&state.telemetry, &state.telemetry_tx, |snapshot| {
         snapshot.safe_budget_bytes_per_sec = profile.safe_budget_bytes_per_sec;

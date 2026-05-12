@@ -51,25 +51,10 @@ class WorkerStub {
 }
 
 describe("NativeImageSurface", () => {
-  const animationFrames: FrameRequestCallback[] = [];
-  let animationFrameHandle = 0;
-  const flushAnimationFrames = () => {
-    const queued = animationFrames.splice(0);
-    for (const callback of queued) {
-      callback(performance.now());
-    }
-  };
-
   beforeEach(() => {
-    animationFrames.length = 0;
-    animationFrameHandle = 0;
     vi.stubGlobal("Worker", WorkerStub);
     vi.stubGlobal("createImageBitmap", vi.fn());
-    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
-      animationFrames.push(callback);
-      animationFrameHandle += 1;
-      return animationFrameHandle;
-    });
+    vi.spyOn(window, "requestAnimationFrame");
     vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
     HTMLCanvasElement.prototype.transferControlToOffscreen = vi
       .fn()
@@ -98,8 +83,6 @@ describe("NativeImageSurface", () => {
       />,
     );
 
-    flushAnimationFrames();
-
     expect(requestImagePreview).toHaveBeenCalledTimes(1);
 
     rerender(
@@ -116,8 +99,54 @@ describe("NativeImageSurface", () => {
       />,
     );
 
-    flushAnimationFrames();
-
     expect(requestImagePreview).toHaveBeenCalledTimes(2);
+    expect(window.requestAnimationFrame).not.toHaveBeenCalled();
+  });
+
+  it("does not transfer the same canvas again after resize rerenders", () => {
+    const transferControlToOffscreen = vi.mocked(
+      HTMLCanvasElement.prototype.transferControlToOffscreen,
+    );
+    const offscreenCanvas = {} as OffscreenCanvas;
+    transferControlToOffscreen
+      .mockReturnValueOnce(offscreenCanvas)
+      .mockImplementation(() => {
+        throw new DOMException(
+          "Cannot transfer control from a canvas for more than one time.",
+          "InvalidStateError",
+        );
+      });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const { rerender } = render(
+      <NativeImageSurface
+        items={[imageItem]}
+        viewport={{ x: 0, y: 0, zoom: 0.1 }}
+        canvasSize={{ width: 1200, height: 800 }}
+        selectedItems={new Set<string>()}
+        draggingItemId={null}
+        resizingItemId={null}
+        croppingItemId={null}
+        editingCropItemId={null}
+        requestImagePreview={vi.fn()}
+      />,
+    );
+
+    rerender(
+      <NativeImageSurface
+        items={[imageItem]}
+        viewport={{ x: 0, y: 0, zoom: 0.1 }}
+        canvasSize={{ width: 1280, height: 720 }}
+        selectedItems={new Set<string>()}
+        draggingItemId={null}
+        resizingItemId={null}
+        croppingItemId={null}
+        editingCropItemId={null}
+        requestImagePreview={vi.fn()}
+      />,
+    );
+
+    expect(transferControlToOffscreen).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
   });
 });

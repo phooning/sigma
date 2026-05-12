@@ -20,6 +20,10 @@ type WorkerMessage =
       devicePixelRatio: number;
     }
   | {
+      type: "settings";
+      resourcePolicy: Partial<NativeImageResourcePolicy> | null;
+    }
+  | {
       type: "layout";
       manifest: NativeImageManifest;
     };
@@ -30,13 +34,41 @@ type CachedBitmap = {
   url: string;
   bitmap: ImageBitmap | null;
   byteSize: number;
+  priorityScore: number;
+  lastUsedAt: number;
   status: "loading" | "ready" | "error";
   version: number;
 };
 
-const MAX_ACTIVE_IMAGES = 24;
-const MAX_CACHE_BYTES = 192 * 1024 * 1024;
-const MAX_CONCURRENT_LOADS = 3;
+const BASE_ACTIVE_IMAGES = 24;
+const BASE_CACHE_BYTES = 192 * 1024 * 1024;
+const BASE_CONCURRENT_LOADS = 3;
+const BYTES_PER_PIXEL = 4;
+const BASE_DISPLAY_MEGAPIXELS = 1920 * 1080;
+
+type NativeImagePolicyInput = {
+  canvasWidth: number;
+  canvasHeight: number;
+  devicePixelRatio: number;
+  deviceMemoryGb?: number;
+  hardwareConcurrency?: number;
+};
+
+type WorkerNavigator = Navigator & {
+  deviceMemory?: number;
+};
+
+export type NativeImageResourcePolicy = {
+  maxActiveImages: number;
+  maxCacheBytes: number;
+  maxConcurrentLoads: number;
+};
+
+type NativeImageAssetSelectionInput = {
+  assets: NativeImageManifestAsset[];
+  policy: Pick<NativeImageResourcePolicy, "maxActiveImages" | "maxCacheBytes">;
+  devicePixelRatio: number;
+};
 
 let canvas: OffscreenCanvas | null = null;
 let context: OffscreenCanvasRenderingContext2D | null = null;
@@ -53,6 +85,94 @@ const cache = new Map<string, CachedBitmap>();
 const pendingLoads = new Map<string, NativeImageManifestAsset>();
 let inflightLoads = 0;
 let renderScheduled = false;
+let resourcePolicyOverride: Partial<NativeImageResourcePolicy> | null = null;
+let cacheAccessClock = 0;
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+
+const getDeviceMemoryGb = () => {
+  const deviceMemory = (navigator as WorkerNavigator).deviceMemory;
+  return typeof deviceMemory === "number" && Number.isFinite(deviceMemory)
+    ? deviceMemory
+    : undefined;
+};
+
+export const getNativeImageResourcePolicy = ({
+  canvasWidth,
+  canvasHeight,
+  devicePixelRatio,
+  deviceMemoryGb = getDeviceMemoryGb(),
+  hardwareConcurrency = navigator.hardwareConcurrency,
+}: NativeImagePolicyInput): NativeImageResourcePolicy => {
+  const displayPixels =
+    Math.max(1, canvasWidth) *
+    Math.max(1, canvasHeight) *
+    Math.max(1, devicePixelRatio) ** 2;
+  const displayScale = Math.max(1, displayPixels / BASE_DISPLAY_MEGAPIXELS);
+  const memoryScale =
+    typeof deviceMemoryGb === "number" && Number.isFinite(deviceMemoryGb)
+      ? clamp(deviceMemoryGb / 8, 0.75, 4)
+      : 1;
+  const cpuScale =
+    typeof hardwareConcurrency === "number" &&
+    Number.isFinite(hardwareConcurrency)
+      ? clamp(hardwareConcurrency / 8, 0.75, 2)
+      : 1;
+
+  return {
+    maxActiveImages: Math.round(
+      clamp(
+        BASE_ACTIVE_IMAGES * Math.sqrt(displayScale) * Math.sqrt(memoryScale),
+        BASE_ACTIVE_IMAGES,
+        96,
+      ),
+    ),
+    maxCacheBytes: Math.round(
+      clamp(
+        BASE_CACHE_BYTES * displayScale * memoryScale,
+        BASE_CACHE_BYTES,
+        1536 * 1024 * 1024,
+      ),
+    ),
+    maxConcurrentLoads: Math.round(
+      clamp(
+        BASE_CONCURRENT_LOADS * Math.sqrt(cpuScale) * Math.sqrt(memoryScale),
+        2,
+        8,
+      ),
+    ),
+  };
+};
+
+const getCurrentPolicy = () =>
+  applyResourcePolicyOverride(
+    getNativeImageResourcePolicy({
+      canvasWidth,
+      canvasHeight,
+      devicePixelRatio,
+    }),
+  );
+
+const applyResourcePolicyOverride = (
+  policy: NativeImageResourcePolicy,
+): NativeImageResourcePolicy => ({
+  maxActiveImages: resourcePolicyOverride?.maxActiveImages
+    ? Math.round(clamp(resourcePolicyOverride.maxActiveImages, 1, 512))
+    : policy.maxActiveImages,
+  maxCacheBytes: resourcePolicyOverride?.maxCacheBytes
+    ? Math.round(
+        clamp(
+          resourcePolicyOverride.maxCacheBytes,
+          16 * 1024 * 1024,
+          4096 * 1024 * 1024,
+        ),
+      )
+    : policy.maxCacheBytes,
+  maxConcurrentLoads: resourcePolicyOverride?.maxConcurrentLoads
+    ? Math.round(clamp(resourcePolicyOverride.maxConcurrentLoads, 1, 16))
+    : policy.maxConcurrentLoads,
+});
 
 const getNativeImagePriorityScore = (
   asset: Pick<
@@ -69,31 +189,78 @@ const sortByPriority = (assets: NativeImageManifestAsset[]) =>
     return right.drawOrder - left.drawOrder;
   });
 
-const getDesiredAssets = () => {
+export const compareNativeImageCacheEvictionCandidates = (
+  left: Pick<CachedBitmap, "byteSize" | "lastUsedAt" | "priorityScore">,
+  right: Pick<CachedBitmap, "byteSize" | "lastUsedAt" | "priorityScore">,
+) => {
+  const priorityDelta = left.priorityScore - right.priorityScore;
+  if (priorityDelta !== 0) return priorityDelta;
+
+  const recencyDelta = left.lastUsedAt - right.lastUsedAt;
+  if (recencyDelta !== 0) return recencyDelta;
+
+  return right.byteSize - left.byteSize;
+};
+
+const estimatedAssetBytes = (
+  asset: NativeImageManifestAsset,
+  pixelRatio: number,
+) => {
+  const renderedPixels =
+    Math.max(1, Math.round(asset.renderedWidthPx * pixelRatio)) *
+    Math.max(1, Math.round(asset.renderedHeightPx * pixelRatio));
+  const sourcePixels =
+    Math.max(1, asset.sourceWidth) * Math.max(1, asset.sourceHeight);
+  return Math.min(sourcePixels, renderedPixels) * BYTES_PER_PIXEL;
+};
+
+export const selectDesiredNativeImageAssets = ({
+  assets,
+  policy,
+  devicePixelRatio,
+}: NativeImageAssetSelectionInput) => {
   const desired: NativeImageManifestAsset[] = [];
+  const desiredIds = new Set<string>();
   let estimatedBytes = 0;
+  const protectedAssets = sortByPriority(
+    assets.filter((asset) => asset.isSelected),
+  );
+  const candidateAssets = sortByPriority(
+    assets.filter((asset) => !asset.isSelected),
+  );
 
-  for (const asset of sortByPriority(manifest.assets)) {
-    if (desired.length >= MAX_ACTIVE_IMAGES) break;
+  for (const asset of protectedAssets) {
+    if (desiredIds.has(asset.id)) continue;
+    desired.push(asset);
+    desiredIds.add(asset.id);
+    estimatedBytes += estimatedAssetBytes(asset, devicePixelRatio);
+  }
 
-    const predictedBytes =
-      Math.max(1, Math.round(asset.renderedWidthPx)) *
-      Math.max(1, Math.round(asset.renderedHeightPx)) *
-      4;
+  for (const asset of candidateAssets) {
+    if (desired.length >= policy.maxActiveImages) break;
 
+    const predictedBytes = estimatedAssetBytes(asset, devicePixelRatio);
     if (
       desired.length > 0 &&
-      estimatedBytes + predictedBytes > MAX_CACHE_BYTES
+      estimatedBytes + predictedBytes > policy.maxCacheBytes
     ) {
       continue;
     }
 
     desired.push(asset);
+    desiredIds.add(asset.id);
     estimatedBytes += predictedBytes;
   }
 
   return desired;
 };
+
+const getDesiredAssets = () =>
+  selectDesiredNativeImageAssets({
+    assets: manifest.assets,
+    policy: getCurrentPolicy(),
+    devicePixelRatio,
+  });
 
 const resizeCanvas = () => {
   if (!canvas || !context) return;
@@ -110,6 +277,27 @@ const releaseEntry = (entry: CachedBitmap) => {
   entry.bitmap = null;
 };
 
+const touchEntry = (
+  entry: CachedBitmap,
+  asset: Pick<
+    NativeImageManifestAsset,
+    "centerWeight" | "focusWeight" | "visibleAreaPx"
+  >,
+) => {
+  entry.priorityScore = getNativeImagePriorityScore(asset);
+  entry.lastUsedAt = ++cacheAccessClock;
+};
+
+const updateEntryPriority = (
+  entry: CachedBitmap,
+  asset: Pick<
+    NativeImageManifestAsset,
+    "centerWeight" | "focusWeight" | "visibleAreaPx"
+  >,
+) => {
+  entry.priorityScore = getNativeImagePriorityScore(asset);
+};
+
 const scheduleRender = () => {
   if (renderScheduled) return;
   renderScheduled = true;
@@ -120,21 +308,27 @@ const scheduleRender = () => {
 };
 
 const enforceCacheBudget = (desiredIds: Set<string>) => {
+  const policy = getCurrentPolicy();
   let totalBytes = 0;
   const disposable: CachedBitmap[] = [];
+  const protectedIds = new Set(
+    manifest.assets
+      .filter((asset) => asset.isSelected)
+      .map((asset) => asset.id),
+  );
 
   for (const entry of cache.values()) {
     totalBytes += entry.byteSize;
-    if (!desiredIds.has(entry.id)) {
+    if (!desiredIds.has(entry.id) && !protectedIds.has(entry.id)) {
       disposable.push(entry);
     }
   }
 
-  if (totalBytes <= MAX_CACHE_BYTES) return;
+  if (totalBytes <= policy.maxCacheBytes) return;
 
-  disposable.sort((left, right) => left.byteSize - right.byteSize);
+  disposable.sort(compareNativeImageCacheEvictionCandidates);
   for (const entry of disposable) {
-    if (totalBytes <= MAX_CACHE_BYTES) break;
+    if (totalBytes <= policy.maxCacheBytes) break;
     releaseEntry(entry);
     cache.delete(entry.id);
     totalBytes -= entry.byteSize;
@@ -142,7 +336,8 @@ const enforceCacheBudget = (desiredIds: Set<string>) => {
 };
 
 const processLoadQueue = () => {
-  while (inflightLoads < MAX_CONCURRENT_LOADS) {
+  const policy = getCurrentPolicy();
+  while (inflightLoads < policy.maxConcurrentLoads) {
     const desiredAssets = sortByPriority(Array.from(pendingLoads.values()));
     const nextAsset = desiredAssets[0];
     if (!nextAsset) return;
@@ -160,6 +355,9 @@ const reconcileResources = () => {
   const desiredAssets = getDesiredAssets();
   const desiredIds = new Set(desiredAssets.map((asset) => asset.id));
   const desiredById = new Map(desiredAssets.map((asset) => [asset.id, asset]));
+  const manifestById = new Map(
+    manifest.assets.map((asset) => [asset.id, asset]),
+  );
 
   for (const [id, pending] of pendingLoads) {
     const desiredAsset = desiredById.get(id);
@@ -169,10 +367,17 @@ const reconcileResources = () => {
   }
 
   for (const [id, entry] of cache) {
-    const desiredAsset = desiredById.get(id);
-    if (!desiredAsset || desiredAsset.path !== entry.path) {
+    const manifestAsset = manifestById.get(id);
+    if (!manifestAsset || manifestAsset.path !== entry.path) {
       releaseEntry(entry);
       cache.delete(id);
+      continue;
+    }
+
+    updateEntryPriority(entry, manifestAsset);
+
+    if (desiredById.has(id)) {
+      touchEntry(entry, manifestAsset);
     }
   }
 
@@ -202,6 +407,8 @@ async function loadAsset(asset: NativeImageManifestAsset) {
     url: asset.url,
     bitmap: null,
     byteSize: 0,
+    priorityScore: getNativeImagePriorityScore(asset),
+    lastUsedAt: ++cacheAccessClock,
     status: "loading",
     version,
   });
@@ -317,6 +524,13 @@ self.onmessage = (event: MessageEvent<WorkerMessage>) => {
     canvasHeight = Math.max(1, Math.round(message.height));
     devicePixelRatio = Math.max(1, message.devicePixelRatio || 1);
     resizeCanvas();
+    scheduleRender();
+    return;
+  }
+
+  if (message.type === "settings") {
+    resourcePolicyOverride = message.resourcePolicy;
+    reconcileResources();
     scheduleRender();
     return;
   }

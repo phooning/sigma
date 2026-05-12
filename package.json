@@ -14,9 +14,10 @@
     "bench:update": "node ./scripts/run-vitest-benchmarks.mjs --update-baseline",
     "bench:check": "pnpm bench && node ./scripts/check-vitest-bench-baseline.mjs",
     "bench:ipc:rust": "cargo bench --manifest-path src-tauri/Cargo.toml --bench ipc_latency",
-    "test:e2e": "playwright test",
-    "check": "./.githooks/pre-push",
-    "tauri": "tauri"
+    "check": "node ./scripts/run-pre-push.mjs",
+    "tauri": "tauri",
+    "pw:install": "cross-env playwright install chromium",
+    "test:e2e": "cross-env playwright test"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.8",
@@ -54,6 +55,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.7.0",
     "@webgpu/types": "^0.1.69",
+    "cross-env": "^10.1.0",
     "jsdom": "^29.1.1",
     "tailwindcss": "^4.3.0",
     "typescript": "~5.8.3",

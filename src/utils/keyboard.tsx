@@ -5,9 +5,18 @@ import type { MediaItem } from "./media.types";
 type CanvasHotkeyConfig = {
   containerRef: React.RefObject<HTMLDivElement | null>;
   getItems: () => MediaItem[];
+  canSave: boolean;
+  onCloseSettings: () => void;
+  isSettingsOpen: boolean;
+  onOpenSettings: () => void;
   onToggleDevMode: () => void;
   selectedItemsRef: React.RefObject<Set<string>>;
   onSave: () => void | Promise<void>;
+  onSaveAs: () => void | Promise<void>;
+  onCancelCropEditing: () => boolean;
+  onScrubFrames: (deltaFrames: number) => boolean;
+  onToggleCropActiveItem: () => boolean;
+  onResetSizeActiveItem: () => boolean;
   setItems: React.Dispatch<React.SetStateAction<MediaItem[]>>;
   setSelectedItems: React.Dispatch<React.SetStateAction<Set<string>>>;
   setEditingCropItem: (value: SetStateAction<string | null>) => void;
@@ -24,9 +33,18 @@ const isEditableTarget = (target: EventTarget | null) => {
 export function useCanvasHotkeys(config: CanvasHotkeyConfig) {
   const handleKeyDown = useEffectEvent((event: KeyboardEvent) => {
     const {
+      canSave,
       containerRef,
       getItems,
+      isSettingsOpen,
+      onCancelCropEditing,
+      onCloseSettings,
+      onOpenSettings,
+      onResetSizeActiveItem,
       onSave,
+      onSaveAs,
+      onScrubFrames,
+      onToggleCropActiveItem,
       onToggleDevMode,
       selectedItemsRef,
       setItems,
@@ -64,12 +82,25 @@ export function useCanvasHotkeys(config: CanvasHotkeyConfig) {
       return true;
     };
 
-    if (isEditableTarget(event.target)) return;
+    if (event.defaultPrevented || isEditableTarget(event.target)) return;
 
     if (event.key === "Escape") {
+      if (isSettingsOpen) {
+        event.preventDefault();
+        onCloseSettings();
+        return;
+      }
+
       event.preventDefault();
-      setSelectedItems(new Set());
-      setEditingCropItem(null);
+      if (onCancelCropEditing()) {
+        return;
+      }
+      if (selectedItemsRef.current.size === 0) {
+        onOpenSettings();
+      } else {
+        setSelectedItems(new Set());
+        setEditingCropItem(null);
+      }
       return;
     }
 
@@ -89,7 +120,20 @@ export function useCanvasHotkeys(config: CanvasHotkeyConfig) {
 
     if (isSave) {
       event.preventDefault();
-      onSave();
+      if (canSave) {
+        onSave();
+      } else {
+        onSaveAs();
+      }
+      return;
+    }
+
+    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      const direction = event.key === "ArrowRight" ? 1 : -1;
+      const step = event.shiftKey ? 10 : 1;
+      if (onScrubFrames(direction * step)) {
+        event.preventDefault();
+      }
       return;
     }
 
@@ -104,6 +148,23 @@ export function useCanvasHotkeys(config: CanvasHotkeyConfig) {
         event.preventDefault();
       }
       return;
+    }
+
+    if (!event.ctrlKey && !event.metaKey && !event.altKey) {
+      const key = event.key.toLowerCase();
+      if (key === "c") {
+        if (onToggleCropActiveItem()) {
+          event.preventDefault();
+        }
+        return;
+      }
+
+      if (key === "r") {
+        if (onResetSizeActiveItem()) {
+          event.preventDefault();
+        }
+        return;
+      }
     }
 
     const isSelectAll =

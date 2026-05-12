@@ -294,6 +294,19 @@ describe("InfiniteCanvas media item interactions", () => {
       );
 
     expect(useCanvasSessionStore.getState().items[1]).toBe(unchangedItem);
+
+    const itemsBeforeClone = useCanvasSessionStore.getState().items;
+    useCanvasSessionStore.getState().setItems((prev) =>
+      prev.map((item) => ({
+        ...item,
+        crop: item.crop ? { ...item.crop } : item.crop,
+      })),
+    );
+
+    const itemsAfterClone = useCanvasSessionStore.getState().items;
+    expect(itemsAfterClone).toBe(itemsBeforeClone);
+    expect(itemsAfterClone[0]).toBe(itemsBeforeClone[0]);
+    expect(itemsAfterClone[1]).toBe(itemsBeforeClone[1]);
   });
 
   it("resizes the image back to correct aspect ratio on rescale button click", async () => {
@@ -340,8 +353,10 @@ describe("InfiniteCanvas media item interactions", () => {
     expect(mediaItem.style.height).toBe("960px");
   });
 
-  it("locks the current resized aspect ratio when resizing with shift held", async () => {
+  it("resizes the frame freely while keeping the image crop box unsquashed", async () => {
     const mediaItem = getMediaItem();
+    const image = screen.getByAltText("canvas item") as HTMLImageElement;
+    const cropBox = image.parentElement as HTMLDivElement;
     const handle = document.querySelector(".resize-handle") as HTMLElement;
 
     await act(async () => {
@@ -366,8 +381,11 @@ describe("InfiniteCanvas media item interactions", () => {
 
     expect(mediaItem.style.width).toBe("1380px");
     expect(mediaItem.style.height).toBe("1160px");
-
-    const resizedRatio = 1380 / 1160;
+    expect(parseFloat(cropBox.style.width)).toBeCloseTo(1546.667);
+    expect(parseFloat(cropBox.style.height)).toBeCloseTo(1160);
+    expect(
+      parseFloat(cropBox.style.width) / parseFloat(cropBox.style.height),
+    ).toBeCloseTo(1280 / 960);
 
     await act(async () => {
       fireEvent.pointerDown(handle, {
@@ -383,7 +401,6 @@ describe("InfiniteCanvas media item interactions", () => {
         clientY: 0,
         pointerId: 7,
         button: 0,
-        shiftKey: true,
       });
     });
     await act(async () => {
@@ -393,7 +410,41 @@ describe("InfiniteCanvas media item interactions", () => {
     const width = parseFloat(mediaItem.style.width);
     const height = parseFloat(mediaItem.style.height);
     expect(width).toBeCloseTo(1480);
-    expect(width / height).toBeCloseTo(resizedRatio);
+    expect(height).toBeCloseTo(1160);
+    expect(parseFloat(cropBox.style.width)).toBeCloseTo(1546.667);
+    expect(
+      parseFloat(cropBox.style.width) / parseFloat(cropBox.style.height),
+    ).toBeCloseTo(1280 / 960);
+
+    const ratioBeforeShift = width / height;
+    await act(async () => {
+      fireEvent.pointerDown(handle, {
+        clientX: 0,
+        clientY: 0,
+        pointerId: 8,
+        button: 0,
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerMove(mediaItem, {
+        clientX: 100,
+        clientY: 0,
+        pointerId: 8,
+        button: 0,
+        shiftKey: true,
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerUp(mediaItem, { pointerId: 8, button: 0 });
+    });
+
+    expect(parseFloat(mediaItem.style.width)).toBeCloseTo(1580);
+    expect(parseFloat(mediaItem.style.height)).toBeCloseTo(
+      1580 / ratioBeforeShift,
+    );
+    expect(
+      parseFloat(mediaItem.style.width) / parseFloat(mediaItem.style.height),
+    ).toBeCloseTo(ratioBeforeShift);
   });
 
   it("deletes the media item on delete button click", async () => {
@@ -683,6 +734,79 @@ describe("InfiniteCanvas media item interactions", () => {
     expect(paused).toBe(false);
   });
 
+  it("scrubs selected video frames with arrow keys while keeping paused videos paused", async () => {
+    const videoPath = new URL(
+      "../fixtures/generated-lod-test-1080p.mp4",
+      import.meta.url,
+    ).pathname;
+    let paused = true;
+    let currentTime = 1;
+
+    setViewportSize({ width: 3000 });
+    await dropFiles([videoPath]);
+
+    await waitFor(() => {
+      expect(document.querySelector("video.media-content")).toBeInTheDocument();
+    });
+
+    const mediaItems = Array.from(
+      document.querySelectorAll(".media-item"),
+    ) as HTMLElement[];
+    const mediaItem = mediaItems.at(-1);
+    const video = Array.from(
+      document.querySelectorAll("video.media-content"),
+    ).at(-1) as HTMLVideoElement | undefined;
+
+    expect(mediaItem).toBeDefined();
+    expect(video).toBeDefined();
+    if (!mediaItem || !video) {
+      throw new Error("Expected video media item to be rendered");
+    }
+
+    Object.defineProperty(video, "paused", {
+      configurable: true,
+      get: () => paused,
+    });
+    Object.defineProperty(video, "currentTime", {
+      configurable: true,
+      get: () => currentTime,
+      set: (value) => {
+        currentTime = value;
+      },
+    });
+    Object.defineProperty(video, "play", {
+      configurable: true,
+      value: vi.fn(() => {
+        paused = false;
+        return Promise.resolve();
+      }),
+    });
+
+    await act(async () => {
+      fireEvent.pointerDown(mediaItem, {
+        button: 0,
+        clientX: 0,
+        clientY: 0,
+        pointerId: 51,
+      });
+      fireEvent.pointerUp(mediaItem, { pointerId: 51, button: 0 });
+      fireEvent.seeked(video);
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "ArrowLeft" });
+    });
+    expect(currentTime).toBeCloseTo(1 - 1 / 30, 3);
+    expect(paused).toBe(true);
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "ArrowRight", shiftKey: true });
+    });
+    expect(currentTime).toBeCloseTo(1 + 9 / 30, 3);
+    expect(paused).toBe(true);
+    expect(video.play).not.toHaveBeenCalled();
+  });
+
   it("crops an image in place from side and corner handles", async () => {
     const mediaItem = getMediaItem();
     const image = screen.getByAltText("canvas item") as HTMLImageElement;
@@ -792,7 +916,7 @@ describe("InfiniteCanvas media item interactions", () => {
     });
 
     expect(cropBox.style.left).toBe("0px");
-    expect(cropBox.style.width).toBe("1380px");
+    expect(parseFloat(cropBox.style.width)).toBeCloseTo(1546.667);
 
     const eastHandle = document.querySelector(".crop-handle-e") as HTMLElement;
     await act(async () => {
@@ -815,9 +939,9 @@ describe("InfiniteCanvas media item interactions", () => {
       fireEvent.pointerUp(mediaItem, { pointerId: 14, button: 0 });
     });
 
-    expect(mediaItem.style.width).toBe("1260px");
+    expect(parseFloat(mediaItem.style.width)).toBeCloseTo(1260);
     expect(cropBox.style.left).toBe("0px");
-    expect(cropBox.style.width).toBe("1380px");
+    expect(parseFloat(cropBox.style.width)).toBeCloseTo(1546.667);
 
     const startLeft = parseFloat(mediaItem.style.left);
     const westHandle = document.querySelector(".crop-handle-w") as HTMLElement;
@@ -842,8 +966,97 @@ describe("InfiniteCanvas media item interactions", () => {
     });
 
     expect(mediaItem.style.left).toBe(`${startLeft + 120}px`);
-    expect(mediaItem.style.width).toBe("1140px");
+    expect(parseFloat(mediaItem.style.width)).toBeCloseTo(1140);
     expect(cropBox.style.left).toBe("-120px");
-    expect(cropBox.style.width).toBe("1380px");
+    expect(parseFloat(cropBox.style.width)).toBeCloseTo(1546.667);
+  });
+
+  it("accepts crop mode on repeated C and cancels to the original crop on Escape", async () => {
+    const mediaItem = getMediaItem();
+    const startLeft = parseFloat(mediaItem.style.left);
+    const startWidth = parseFloat(mediaItem.style.width);
+
+    await act(async () => {
+      fireEvent.pointerDown(mediaItem, {
+        button: 0,
+        clientX: 0,
+        clientY: 0,
+        pointerId: 61,
+      });
+      fireEvent.pointerUp(mediaItem, { pointerId: 61, button: 0 });
+      fireEvent.keyDown(window, { key: "c" });
+    });
+
+    expect(document.querySelectorAll(".crop-handle")).toHaveLength(8);
+
+    const westHandle = document.querySelector(".crop-handle-w") as HTMLElement;
+    await act(async () => {
+      fireEvent.pointerDown(westHandle, {
+        clientX: 0,
+        clientY: 0,
+        pointerId: 62,
+        button: 0,
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerMove(mediaItem, {
+        clientX: 120,
+        clientY: 0,
+        pointerId: 62,
+        button: 0,
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerUp(mediaItem, { pointerId: 62, button: 0 });
+    });
+
+    expect(mediaItem.style.left).toBe(`${startLeft + 120}px`);
+    expect(parseFloat(mediaItem.style.width)).toBe(startWidth - 120);
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c" });
+    });
+
+    expect(document.querySelectorAll(".crop-handle")).toHaveLength(0);
+    expect(mediaItem.style.left).toBe(`${startLeft + 120}px`);
+    expect(parseFloat(mediaItem.style.width)).toBe(startWidth - 120);
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c" });
+    });
+
+    const secondWestHandle = document.querySelector(
+      ".crop-handle-w",
+    ) as HTMLElement;
+    await act(async () => {
+      fireEvent.pointerDown(secondWestHandle, {
+        clientX: 120,
+        clientY: 0,
+        pointerId: 63,
+        button: 0,
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerMove(mediaItem, {
+        clientX: 200,
+        clientY: 0,
+        pointerId: 63,
+        button: 0,
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerUp(mediaItem, { pointerId: 63, button: 0 });
+    });
+
+    expect(mediaItem.style.left).toBe(`${startLeft + 200}px`);
+    expect(parseFloat(mediaItem.style.width)).toBe(startWidth - 200);
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "Escape" });
+    });
+
+    expect(document.querySelectorAll(".crop-handle")).toHaveLength(0);
+    expect(mediaItem.style.left).toBe(`${startLeft + 120}px`);
+    expect(parseFloat(mediaItem.style.width)).toBe(startWidth - 120);
   });
 });

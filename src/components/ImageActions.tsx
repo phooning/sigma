@@ -41,11 +41,12 @@ export const handleImageResize = ({
     const startSize = resizeStart?.get(item.id);
     if (!startSize) return item;
 
+    const width = Math.max(MIN_MEDIA_SIZE, startSize.width + dx);
+    const height = Math.max(MIN_MEDIA_SIZE, startSize.height + dy);
+    const widthScale = width / startSize.width;
+    const heightScale = height / startSize.height;
+
     if (isHoldingShift) {
-      const candidateWidth = Math.max(MIN_MEDIA_SIZE, startSize.width + dx);
-      const candidateHeight = Math.max(MIN_MEDIA_SIZE, startSize.height + dy);
-      const widthScale = candidateWidth / startSize.width;
-      const heightScale = candidateHeight / startSize.height;
       const dominantScale =
         Math.abs(widthScale - 1) > Math.abs(heightScale - 1)
           ? widthScale
@@ -69,20 +70,30 @@ export const handleImageResize = ({
       };
     }
 
-    const nextWidth = Math.max(MIN_MEDIA_SIZE, startSize.width + dx);
-    const nextHeight = Math.max(MIN_MEDIA_SIZE, startSize.height + dy);
-    const widthScale = nextWidth / startSize.width;
-    const heightScale = nextHeight / startSize.height;
+    const cropBoxWidth =
+      startSize.width + startSize.crop.left + startSize.crop.right;
+    const cropBoxHeight =
+      startSize.height + startSize.crop.top + startSize.crop.bottom;
+    const visibleCropBoxWidth = cropBoxWidth - startSize.crop.left;
+    const visibleCropBoxHeight = cropBoxHeight - startSize.crop.top;
+    const scale = Math.max(
+      width / visibleCropBoxWidth,
+      height / visibleCropBoxHeight,
+      MIN_MEDIA_SIZE / visibleCropBoxWidth,
+      MIN_MEDIA_SIZE / visibleCropBoxHeight,
+    );
+    const cropLeft = startSize.crop.left * scale;
+    const cropTop = startSize.crop.top * scale;
 
     return {
       ...item,
-      width: nextWidth,
-      height: nextHeight,
+      width,
+      height,
       crop: {
-        top: startSize.crop.top * heightScale,
-        right: startSize.crop.right * widthScale,
-        bottom: startSize.crop.bottom * heightScale,
-        left: startSize.crop.left * widthScale,
+        top: cropTop,
+        right: Math.max(0, cropBoxWidth * scale - cropLeft - width),
+        bottom: Math.max(0, cropBoxHeight * scale - cropTop - height),
+        left: cropLeft,
       },
     };
   });
@@ -153,9 +164,17 @@ export const handleImageCrop = ({
     return { ...item, x, y, width, height, crop };
   });
 
-const getImagePreviewUrl = (item: MediaItem, lod: ImageLod) => {
+const getImagePreviewUrl = (
+  item: MediaItem,
+  lod: ImageLod,
+  preferPreview = false,
+) => {
   const fallbackUrl =
     item.thumbnailUrl ?? item.lowResProxyUrl ?? IMAGE_PLACEHOLDER_URL;
+
+  if (preferPreview) {
+    return item.imagePreview1024Url ?? item.imagePreview256Url ?? fallbackUrl;
+  }
 
   if (lod === "preview256") {
     return item.imagePreview256Url ?? item.imagePreview1024Url ?? fallbackUrl;
@@ -207,10 +226,9 @@ export function ImageActions({
   crop,
   item,
   isCropEditing,
-  isDragging,
-  isCropping,
-  isResizing,
-  useNativeImageSurface,
+  mountDomImage,
+  showDomImage,
+  preferPreviewForNativeHandoff,
   handleItemPointerDown,
   requestImagePreview,
   onReadyChange,
@@ -220,54 +238,68 @@ export function ImageActions({
   crop: CropInsets;
   item: MediaItem;
   isCropEditing: boolean;
-  isDragging: boolean;
-  isCropping: boolean;
-  isResizing: boolean;
-  useNativeImageSurface: boolean;
+  mountDomImage: boolean;
+  showDomImage: boolean;
+  preferPreviewForNativeHandoff: boolean;
   handleItemPointerDown: (id: string, e: React.PointerEvent) => void;
   requestImagePreview: (item: MediaItem, maxDimension: 256 | 1024) => void;
   onReadyChange?: (isReady: boolean) => void;
   zoom: number;
 }) {
   const lod = getImageLod(zoom, item);
-  const displayUrl = getImagePreviewUrl(item, lod);
+  const displayUrl = getImagePreviewUrl(
+    item,
+    lod,
+    preferPreviewForNativeHandoff,
+  );
   const imageRef = useRef<HTMLImageElement>(null);
-  const shouldUseDomImage =
-    !useNativeImageSurface ||
-    isDragging ||
-    isResizing ||
-    isCropping ||
-    isCropEditing;
 
   useEffect(() => {
-    if (!shouldUseDomImage) return;
+    if (!mountDomImage) return;
 
-    if (lod === "preview256") {
+    if (preferPreviewForNativeHandoff) {
+      requestImagePreview(item, 1024);
+    } else if (lod === "preview256") {
       requestImagePreview(item, 256);
     } else if (lod === "preview1024") {
       requestImagePreview(item, 1024);
     }
-  }, [item, lod, requestImagePreview, shouldUseDomImage]);
+  }, [
+    item,
+    lod,
+    mountDomImage,
+    preferPreviewForNativeHandoff,
+    requestImagePreview,
+  ]);
 
   useEffect(() => {
-    if (!shouldUseDomImage) {
+    if (!mountDomImage) {
       onReadyChange?.(false);
       return;
     }
 
     const image = imageRef.current;
     onReadyChange?.(Boolean(image?.complete && image.naturalWidth > 0));
-  }, [onReadyChange, shouldUseDomImage]);
+  }, [mountDomImage, onReadyChange]);
 
   return (
     <>
-      {!shouldUseDomImage ? null : (
-        <div className="media-crop-box" style={getCropBoxStyle(item, crop)}>
+      {!mountDomImage ? null : (
+        <div
+          className="media-crop-box"
+          aria-hidden={!showDomImage}
+          style={{
+            ...getCropBoxStyle(item, crop),
+            opacity: showDomImage ? 1 : 0,
+          }}
+        >
           <img
             ref={imageRef}
             className={[
               "media-content",
-              lod === "full" ? "image-lod-full" : "image-lod-preview",
+              lod === "full" && !preferPreviewForNativeHandoff
+                ? "image-lod-full"
+                : "image-lod-preview",
             ].join(" ")}
             src={displayUrl}
             alt="canvas item"

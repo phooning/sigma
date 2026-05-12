@@ -19,6 +19,7 @@ export type NativeImageManifestAsset = {
   visibleAreaPx: number;
   focusWeight: number;
   centerWeight: number;
+  isSelected: boolean;
 };
 
 export type NativeImageManifest = {

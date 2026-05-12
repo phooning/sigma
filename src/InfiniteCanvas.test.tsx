@@ -74,11 +74,23 @@ describe("Settings and persistence", () => {
     expect(screen.getByText("Toggle development mode.")).toBeInTheDocument();
     expect(screen.getByText("Ctrl/Cmd+S")).toBeInTheDocument();
     expect(
-      screen.getByText("Save the current canvas configuration."),
+      screen.getByText(
+        "Save the current canvas configuration, or open Save As when no path is set.",
+      ),
     ).toBeInTheDocument();
     expect(screen.getByText("Spacebar")).toBeInTheDocument();
     expect(
       screen.getByText("Toggle playback for selected videos."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Arrow Left / Arrow Right")).toBeInTheDocument();
+    expect(
+      screen.getByText("Scrub the selected video by 1 frame."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Shift+Arrow Left / Shift+Arrow Right"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Scrub the selected video by 10 frames."),
     ).toBeInTheDocument();
     expect(screen.getByText("Ctrl/Cmd+A")).toBeInTheDocument();
     expect(
@@ -86,6 +98,20 @@ describe("Settings and persistence", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Delete/Backspace")).toBeInTheDocument();
     expect(screen.getByText("Delete the selected items.")).toBeInTheDocument();
+    expect(screen.getByText("Escape")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Clear the current selection and exit crop editing, or open settings when nothing is selected.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("C")).toBeInTheDocument();
+    expect(
+      screen.getByText("Enter crop mode for the active selected item."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("R")).toBeInTheDocument();
+    expect(
+      screen.getByText("Reset the active selected item to its default size."),
+    ).toBeInTheDocument();
   });
 
   it("toggles development mode from the F1 hotkey", async () => {
@@ -185,8 +211,18 @@ describe("Settings and persistence", () => {
       fireEvent.keyDown(window, { key: "s", ctrlKey: true });
     });
 
-    expect(save).not.toHaveBeenCalled();
-    expect(writeTextFile).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledWith({
+        defaultPath: "canvas.json",
+        filters: [
+          {
+            extensions: ["json"],
+            name: "Canvas Config",
+          },
+        ],
+        title: "Save canvas",
+      });
+    });
   });
 
   it("uses Save As for a new path and then quick-saves to the same file only after changes", async () => {

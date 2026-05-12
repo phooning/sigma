@@ -1,19 +1,23 @@
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
-#[cfg(unix)]
+use std::sync::{Arc, Mutex};
+#[cfg(any(unix, windows))]
+use std::time::Duration;
+#[cfg(any(unix, windows))]
 use std::time::Instant;
 
-use tokio::{sync::watch, time};
+use tokio::sync::watch;
+#[cfg(any(unix, windows))]
+use tokio::time;
 
+#[cfg(not(any(unix, windows)))]
+use super::telemetry::TelemetrySnapshot;
+#[cfg(any(unix, windows))]
 use super::{
     constants::RESOURCE_SAMPLE_MS,
     telemetry::{update_telemetry, TelemetrySnapshot},
     util::now_millis,
 };
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub(crate) fn spawn_resource_monitor(
     telemetry: Arc<Mutex<TelemetrySnapshot>>,
     telemetry_tx: watch::Sender<TelemetrySnapshot>,
@@ -35,29 +39,29 @@ pub(crate) fn spawn_resource_monitor(
     });
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 pub(crate) fn spawn_resource_monitor(
     _telemetry: Arc<Mutex<TelemetrySnapshot>>,
     _telemetry_tx: watch::Sender<TelemetrySnapshot>,
 ) {
-    eprintln!("native-video: resource monitor is only implemented on Unix platforms");
+    eprintln!("native-video: resource monitor is only implemented on Unix and Windows platforms");
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 struct ResourceMonitor {
     last_at: Instant,
     last_cpu_us: u64,
     peak_cpu_core_fraction: f64,
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 struct ResourceSample {
     cpu_core_fraction: f64,
     peak_cpu_core_fraction: f64,
     peak_rss_bytes: u64,
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 impl ResourceMonitor {
     fn new() -> Self {
         let usage = process_usage();
@@ -82,7 +86,6 @@ impl ResourceMonitor {
     }
 }
 
-#[cfg(unix)]
 struct ProcessUsage {
     cpu_us: u64,
     peak_rss_bytes: u64,

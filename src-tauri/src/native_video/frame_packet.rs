@@ -24,15 +24,7 @@ pub(crate) fn make_frame_packet(
 ) -> Vec<u8> {
     // SVF1 synthetic packets now carry planar YUV420 instead of RGBA8.
     let mut packet = vec![0_u8; frame_packet_len(width, height)];
-    write_synthetic_yuv420_packet(
-        &mut packet,
-        stream_id,
-        sequence,
-        pts_us,
-        width,
-        height,
-        tier_id,
-    );
+    write_synthetic_yuv420_packet(&mut packet, stream_id, sequence, pts_us, width, height, tier_id);
     packet
 }
 
@@ -61,6 +53,38 @@ pub(crate) fn make_frame_packet_from_payload(
     );
     packet[FRAME_PACKET_HEADER_LEN..].copy_from_slice(&payload[..payload_len]);
     packet
+}
+
+pub(crate) fn write_yuv420_packet_from_payload(
+    packet: &mut [u8],
+    stream_id: u64,
+    sequence: u64,
+    pts_us: u64,
+    width: u32,
+    height: u32,
+    tier_id: u8,
+    payload: &[u8],
+) -> usize {
+    let width = even_dimension(width);
+    let height = even_dimension(height);
+    let payload_len = yuv420_payload_len(width, height);
+    let packet_len = FRAME_PACKET_HEADER_LEN + payload_len;
+    assert!(packet.len() >= packet_len);
+    assert!(payload.len() >= payload_len);
+
+    write_header(
+        &mut packet[..packet_len],
+        stream_id,
+        sequence,
+        pts_us,
+        width,
+        height,
+        tier_id,
+        payload_len,
+        width,
+    );
+    packet[FRAME_PACKET_HEADER_LEN..packet_len].copy_from_slice(&payload[..payload_len]);
+    packet_len
 }
 
 pub(crate) fn write_synthetic_yuv420_packet(

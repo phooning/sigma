@@ -51,7 +51,7 @@ impl NativeVideoState {
             BROKER_QUEUE_CAPACITY,
             frame_packet_len(MAX_FRAME_WIDTH, MAX_FRAME_HEIGHT),
         );
-        let frame_subscribers = Arc::new(Mutex::new(None));
+        let frame_subscribers = Arc::new(Mutex::new(Default::default()));
 
         spawn_resource_monitor(telemetry.clone(), telemetry_tx.clone());
         spawn_frame_broker(
@@ -69,13 +69,6 @@ impl NativeVideoState {
             profile.clone(),
         );
 
-        Self {
-            control_tx,
-            frame_subscribers,
-            telemetry_tx,
-            telemetry,
-            profile,
-            profile_path,
-        }
+        Self { control_tx, frame_subscribers, telemetry_tx, telemetry, profile, profile_path }
     }
 }

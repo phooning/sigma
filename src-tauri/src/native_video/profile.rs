@@ -70,7 +70,7 @@ impl PerformanceProfile {
             base_probe_ipc_latency_p95_ms: None,
             base_probe_ram_bandwidth_bytes_per_sec: None,
             notes: vec![
-                "Uncalibrated defaults only permit the highest-priority visible stream.".into(),
+                "Uncalibrated defaults only permit the highest-priority visible stream.".into()
             ],
         };
         profile.recompute_safe_budget();
@@ -94,6 +94,28 @@ impl PerformanceProfile {
                 self.ram_bandwidth_bytes_per_sec / 1_000_000_000.0
             );
         }
+    }
+
+    pub(crate) fn max_active_streams(&self) -> usize {
+        if self.base_case_validated {
+            return super::constants::SCALING_MAX_STREAMS_AFTER_VALIDATION;
+        }
+
+        if self.base_probe_ram_bandwidth_bytes_per_sec.is_some()
+            && self.base_probe_ipc_latency_p95_ms.is_some()
+            && self.base_probe_frame_drop_rate.is_some()
+        {
+            return super::constants::SOFT_CALIBRATED_MAX_STREAMS_WITH_FRONTEND_METRICS;
+        }
+
+        if self.base_probe_ram_bandwidth_bytes_per_sec.is_some()
+            || self.base_probe_ipc_latency_p95_ms.is_some()
+            || self.base_probe_frame_drop_rate.is_some()
+        {
+            return super::constants::SOFT_CALIBRATED_MAX_STREAMS_WITH_PROBE;
+        }
+
+        super::constants::BASE_CASE_MAX_STREAMS_BEFORE_VALIDATION
     }
 
     pub(crate) fn should_measure_ram_bandwidth(&self) -> bool {
@@ -202,16 +224,18 @@ fn detect_max_vram_bytes_inner() -> Option<u64> {
     })?;
 
     let result = (|| unsafe {
-        let init_v2: unsafe extern "C" fn() -> NvmlReturn =
-            load_symbol(handle, "nvmlInit_v2")?;
-        let shutdown: unsafe extern "C" fn() -> NvmlReturn =
-            load_symbol(handle, "nvmlShutdown")?;
+        let init_v2: unsafe extern "C" fn() -> NvmlReturn = load_symbol(handle, "nvmlInit_v2")?;
+        let shutdown: unsafe extern "C" fn() -> NvmlReturn = load_symbol(handle, "nvmlShutdown")?;
         let device_get_count_v2: unsafe extern "C" fn(*mut c_uint) -> NvmlReturn =
             load_symbol(handle, "nvmlDeviceGetCount_v2")?;
-        let device_get_handle_by_index_v2: unsafe extern "C" fn(c_uint, *mut NvmlDevice) -> NvmlReturn =
-            load_symbol(handle, "nvmlDeviceGetHandleByIndex_v2")?;
-        let device_get_memory_info: unsafe extern "C" fn(NvmlDevice, *mut NvmlMemory) -> NvmlReturn =
-            load_symbol(handle, "nvmlDeviceGetMemoryInfo")?;
+        let device_get_handle_by_index_v2: unsafe extern "C" fn(
+            c_uint,
+            *mut NvmlDevice,
+        ) -> NvmlReturn = load_symbol(handle, "nvmlDeviceGetHandleByIndex_v2")?;
+        let device_get_memory_info: unsafe extern "C" fn(
+            NvmlDevice,
+            *mut NvmlMemory,
+        ) -> NvmlReturn = load_symbol(handle, "nvmlDeviceGetMemoryInfo")?;
 
         if init_v2() != NVML_SUCCESS {
             return None;
@@ -230,11 +254,7 @@ fn detect_max_vram_bytes_inner() -> Option<u64> {
                 continue;
             }
 
-            let mut memory = NvmlMemory {
-                total: 0,
-                free: 0,
-                used: 0,
-            };
+            let mut memory = NvmlMemory { total: 0, free: 0, used: 0 };
             if device_get_memory_info(device, &mut memory) == NVML_SUCCESS {
                 max_total = max_total.max(memory.total);
             }
@@ -298,5 +318,21 @@ mod tests {
         profile.recompute_safe_budget();
 
         assert_eq!(profile.vram_budget_bytes, 800);
+    }
+
+    #[test]
+    fn max_active_streams_stages_calibration_progressively() {
+        let mut profile = PerformanceProfile::uncalibrated();
+        assert_eq!(profile.max_active_streams(), 1);
+
+        profile.base_probe_ipc_latency_p95_ms = Some(4.0);
+        assert_eq!(profile.max_active_streams(), 2);
+
+        profile.base_probe_ram_bandwidth_bytes_per_sec = Some(8_000_000_000.0);
+        profile.base_probe_frame_drop_rate = Some(0.02);
+        assert_eq!(profile.max_active_streams(), 4);
+
+        profile.base_case_validated = true;
+        assert_eq!(profile.max_active_streams(), 32);
     }
 }

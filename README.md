@@ -1,13 +1,13 @@
 # SIGMA Studio
 
-**SIGMA Studio** is a high-performance, local-first infinite canvas designed for organizing, visualizing, and cutting up media assets.
+**SIGMA Studio** is a high-performance, local-first infinite spatial canvas crafted for organizing, visualizing, and cutting up media assets; from 4K videos to 16K hi-res photos and more, its optimized edit tooling allows you to frame, crop, and loop any media assets you wish to drop in.
+
+Built on Rust and TypeScript on the Tauri Framework, it offers a lightweight universal alternative to linear file browsing.
 
 [![License](https://img.shields.io/github/license/phooning/sigma)](LICENSE)&nbsp;
 [![License](https://img.shields.io/github/last-commit/phooning/sigma)](LICENSE)&nbsp;
 
 <img alt="Image" src="https://github.com/user-attachments/assets/443eaeea-3534-4c63-94c9-78b86dd00630" />
-
-I built this with Tauri on Rust and React with the help of multi-agent reviews. It offers a lightweight OS-native alternative to heavy electron-based media tools, specifically optimized for creative workflows and high performance viewing.
 
 ## Key Features
 
@@ -104,7 +104,7 @@ pnpm bench:ipc:rust
 
 ## Roadmap & Tiers
 
-This Studio edition provides the core visualization capability. A planned **SIGMA Render Lab** offers advanced features for power users and lab applications:
+This Studio edition provides the core visualization and light editing capabilities. A planned **SIGMA Render Lab** offers advanced features for pros, more technical needs, and lab applications:
 
 | Feature           | Studio                            | Render Lab                                    |
 | :---------------- | :-------------------------------- | :-------------------------------------------- |
@@ -113,6 +113,7 @@ This Studio edition provides the core visualization capability. A planned **SIGM
 | **Exports**       | 1080p H.264                       | 4K+, ProRes, Wide Gamut, Live Asset Streaming |
 | **Automation**    | ComfyUI Browser & Execution (WIP) | Cloud Compute & Folder Watching               |
 | **Asset Support** | Standard (JPG/MP4)                | RAW, 3D (OBJ/STL), EXR                        |
+| **Labeling**      | Shapes, pen, text, color, borders | Asset tagging, executable pipelines, masking  |
 
 ## License
 

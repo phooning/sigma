@@ -1,10 +1,14 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { getCrop } from "../utils/media";
 import { getImageLod } from "../utils/videoUtils";
 import type { CanvasMediaItemProps } from "./CanvasMediaItem.types";
 import { ImageActions } from "./ImageActions";
 import { CropOverlay, MediaFrameActions } from "./MediaFrameActions";
-import { isNativeImageSourceReady } from "./native-image/manifest";
+import {
+  hasNativeImagePreviewHandoffSource,
+  isNativeImageSourceReady,
+  shouldUseNativeImagePreviewHandoff,
+} from "./native-image/manifest";
 import { useViewportEntrance } from "./useViewportEntrance";
 import { VideoMedia } from "./Video";
 
@@ -118,19 +122,90 @@ export const CanvasMediaItem = memo(function CanvasMediaItem({
   const [isMediaReady, setIsMediaReady] = useState(false);
 
   const isTransforming = isDragging || isResizing || isCropping;
-  const shouldUseDomImage =
+  const shouldUseNativePreviewHandoff =
     item.type === "image" &&
-    (!useNativeImageSurface || isTransforming || isCropEditing);
-
+    useNativeImageSurface &&
+    shouldUseNativeImagePreviewHandoff(item);
+  const hasNativePreviewHandoffSource =
+    item.type === "image" && hasNativeImagePreviewHandoffSource(item);
+  const [isNativePreviewHandoffHolding, setIsNativePreviewHandoffHolding] =
+    useState(false);
   const nativeImageReady =
     item.type === "image" &&
-    !shouldUseDomImage &&
+    useNativeImageSurface &&
     isNativeImageSourceReady(item, zoom, nativeImageReadyPath);
+
+  useEffect(() => {
+    if (
+      item.type !== "image" ||
+      !shouldUseNativePreviewHandoff ||
+      hasNativePreviewHandoffSource
+    ) {
+      return;
+    }
+
+    requestImagePreview(item, 1024);
+  }, [
+    hasNativePreviewHandoffSource,
+    item,
+    requestImagePreview,
+    shouldUseNativePreviewHandoff,
+  ]);
+
+  useEffect(() => {
+    if (!shouldUseNativePreviewHandoff || !hasNativePreviewHandoffSource) {
+      setIsNativePreviewHandoffHolding(false);
+      return;
+    }
+
+    if (isTransforming) {
+      setIsNativePreviewHandoffHolding(true);
+      return;
+    }
+
+    if (nativeImageReady) {
+      setIsNativePreviewHandoffHolding(false);
+    }
+  }, [
+    hasNativePreviewHandoffSource,
+    isTransforming,
+    nativeImageReady,
+    shouldUseNativePreviewHandoff,
+  ]);
+
+  const shouldShowNativePreviewHandoff =
+    item.type === "image" &&
+    shouldUseNativePreviewHandoff &&
+    hasNativePreviewHandoffSource &&
+    (isTransforming || isNativePreviewHandoffHolding);
+  const shouldPreferNativePreviewHandoff =
+    item.type === "image" &&
+    shouldUseNativePreviewHandoff &&
+    hasNativePreviewHandoffSource;
+  const shouldMountDomImage =
+    item.type === "image" &&
+    (!useNativeImageSurface ||
+      isTransforming ||
+      isCropping ||
+      isCropEditing ||
+      (shouldUseNativePreviewHandoff && hasNativePreviewHandoffSource));
+  const shouldShowDomImage =
+    item.type === "image" &&
+    (!useNativeImageSurface ||
+      isTransforming ||
+      isCropping ||
+      isCropEditing ||
+      shouldShowNativePreviewHandoff);
+
+  const shouldBypassMaskForTransform = item.type === "image" && isTransforming;
 
   const isVisible = useViewportEntrance(
     isInViewport,
-    isTransforming || nativeImageReady || isMediaReady,
-    isTransforming,
+    shouldBypassMaskForTransform ||
+      nativeImageReady ||
+      (shouldShowDomImage && isMediaReady) ||
+      (item.type === "video" && isMediaReady),
+    shouldBypassMaskForTransform,
   );
 
   if (isCulled && !isActiveAudioItem) {
@@ -179,10 +254,9 @@ export const CanvasMediaItem = memo(function CanvasMediaItem({
           crop={crop}
           item={item}
           isCropEditing={isCropEditing}
-          isDragging={isDragging}
-          isCropping={isCropping}
-          isResizing={isResizing}
-          useNativeImageSurface={useNativeImageSurface}
+          mountDomImage={shouldMountDomImage}
+          showDomImage={shouldShowDomImage}
+          preferPreviewForNativeHandoff={shouldPreferNativePreviewHandoff}
           handleItemPointerDown={handleItemPointerDown}
           requestImagePreview={requestImagePreview}
           onReadyChange={setIsMediaReady}
