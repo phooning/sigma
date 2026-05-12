@@ -448,14 +448,14 @@ mod tests {
     }
 
     #[test]
-    fn tier_cost_ignores_composite_factor_for_cpu_ipc_budgeting() {
+    fn tier_cost_includes_composite_factor_in_spending_model() {
         let without_composite = profile_with_cost_factors(1.5, 0.5, 0.0);
         let with_composite = profile_with_cost_factors(1.5, 0.5, 4.0);
 
         let base_cost = tier_cost_bytes_per_sec(426, 240, 60, &without_composite);
         let composite_cost = tier_cost_bytes_per_sec(426, 240, 60, &with_composite);
 
-        assert_eq!(base_cost, composite_cost);
+        assert!(composite_cost > base_cost);
     }
 
     #[test]
@@ -491,6 +491,66 @@ mod tests {
         assert_eq!(allocations[0].asset_id, "asset-1");
         assert_eq!(allocations[0].source_path, "C:/media/clip.mp4");
         assert_eq!(allocations[0].state, StreamState::Active);
+    }
+
+    #[test]
+    fn allocation_spends_budget_on_composite_pressure() {
+        let manifest = CanvasManifest {
+            canvas_width: 1920,
+            canvas_height: 1080,
+            viewport_zoom: 1.0,
+            assets: vec![VisibleAsset {
+                id: "asset-1".into(),
+                path: "C:/media/clip.mp4".into(),
+                source_width: 1920,
+                source_height: 1080,
+                screen_x: 0.0,
+                screen_y: 0.0,
+                rendered_width_px: 1280.0,
+                rendered_height_px: 720.0,
+                visible_area_px: 1280.0 * 720.0,
+                focus_weight: 1.0,
+                center_weight: 0.5,
+                target_fps: 30,
+            }],
+        };
+        let budget = tier_cost_bytes_per_sec(1280, 720, 30, &profile_with_cost_factors(1.0, 0.0, 0.0));
+        let without_composite = PerformanceProfile {
+            base_case_validated: true,
+            safe_budget_bytes_per_sec: budget,
+            cpu_decode_budget_bytes_per_sec: budget,
+            ipc_budget_bytes_per_sec: budget,
+            ram_bandwidth_bytes_per_sec: budget as f64,
+            ram_bandwidth_budget_bytes_per_sec: budget,
+            vram_budget_bytes: u64::MAX,
+            decode_cost_factor: 1.0,
+            upload_cost_factor: 0.0,
+            composite_cost_factor: 0.0,
+            ..PerformanceProfile::uncalibrated()
+        };
+        let with_composite = PerformanceProfile {
+            composite_cost_factor: 1.0,
+            ..without_composite.clone()
+        };
+
+        let baseline = Arbiter::allocate(
+            &manifest,
+            &without_composite,
+            &TelemetrySnapshot::default(),
+            &Default::default(),
+        );
+        let constrained = Arbiter::allocate(
+            &manifest,
+            &with_composite,
+            &TelemetrySnapshot::default(),
+            &Default::default(),
+        );
+
+        assert_eq!(baseline[0].state, StreamState::Active);
+        assert_eq!(baseline[0].tier.id, 4);
+        assert_eq!(constrained[0].state, StreamState::Active);
+        assert!(constrained[0].tier.id < baseline[0].tier.id);
+        assert!(constrained[0].predicted_cost_bytes_per_sec <= with_composite.safe_budget_bytes_per_sec);
     }
 
     #[test]
@@ -553,11 +613,15 @@ fn tier_dimensions(asset: &VisibleAsset, tier: QualityTier) -> Option<(u32, u32)
 }
 
 fn tier_cost_bytes_per_sec(width: u32, height: u32, fps: u32, profile: &PerformanceProfile) -> u64 {
-    // Cost modeling follows decode + upload bandwidth pressure on the CPU/IPC path.
-    // Composite is measured separately from frontend metrics but is not part of this budget until
-    // there is a distinct GPU/VRAM control path to spend it against.
+    // Cost modeling uses normalized frontend factors so allocation can react to decode, upload,
+    // and composite pressure with the same byte/sec budgeting path.
     let raw_bytes = yuv420_payload_len(width, height) as u64 * fps.max(1) as u64;
-    let factor = (profile.decode_cost_factor + profile.upload_cost_factor).max(1.0);
+    let factor = (
+        profile.decode_cost_factor
+            + profile.upload_cost_factor
+            + profile.composite_cost_factor
+    )
+        .max(1.0);
 
     (raw_bytes as f64 * factor) as u64
 }
@@ -576,7 +640,7 @@ fn controller_snapshot(
         vec![
             "Budgets are measured on this machine and capped at 80% of the limiting subsystem."
                 .into(),
-            "Decode/upload factors are calibrated by base-case frontend telemetry.".into(),
+            "Decode/upload/composite factors are calibrated by base-case frontend telemetry.".into(),
         ]
     } else {
         vec![
