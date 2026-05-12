@@ -15,11 +15,20 @@ export const HOTKEY_ROWS = [
   },
   {
     keys: "Ctrl/Cmd+S",
-    description: "Save the current canvas configuration.",
+    description:
+      "Save the current canvas configuration, or open Save As when no path is set.",
   },
   {
     keys: "Spacebar",
     description: "Toggle playback for selected videos.",
+  },
+  {
+    keys: "Arrow Left / Arrow Right",
+    description: "Scrub the selected video by 1 frame.",
+  },
+  {
+    keys: "Shift+Arrow Left / Shift+Arrow Right",
+    description: "Scrub the selected video by 10 frames.",
   },
   {
     keys: "Ctrl/Cmd+A",
@@ -31,6 +40,15 @@ export const HOTKEY_ROWS = [
   },
   {
     keys: "Escape",
-    description: "Clear the current selection and exit crop editing.",
+    description:
+      "Clear the current selection and exit crop editing, or open settings when nothing is selected.",
+  },
+  {
+    keys: "C",
+    description: "Enter crop mode for the active selected item.",
+  },
+  {
+    keys: "R",
+    description: "Reset the active selected item to its default size.",
   },
 ] as const;

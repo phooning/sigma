@@ -734,6 +734,79 @@ describe("InfiniteCanvas media item interactions", () => {
     expect(paused).toBe(false);
   });
 
+  it("scrubs selected video frames with arrow keys while keeping paused videos paused", async () => {
+    const videoPath = new URL(
+      "../fixtures/generated-lod-test-1080p.mp4",
+      import.meta.url,
+    ).pathname;
+    let paused = true;
+    let currentTime = 1;
+
+    setViewportSize({ width: 3000 });
+    await dropFiles([videoPath]);
+
+    await waitFor(() => {
+      expect(document.querySelector("video.media-content")).toBeInTheDocument();
+    });
+
+    const mediaItems = Array.from(
+      document.querySelectorAll(".media-item"),
+    ) as HTMLElement[];
+    const mediaItem = mediaItems.at(-1);
+    const video = Array.from(
+      document.querySelectorAll("video.media-content"),
+    ).at(-1) as HTMLVideoElement | undefined;
+
+    expect(mediaItem).toBeDefined();
+    expect(video).toBeDefined();
+    if (!mediaItem || !video) {
+      throw new Error("Expected video media item to be rendered");
+    }
+
+    Object.defineProperty(video, "paused", {
+      configurable: true,
+      get: () => paused,
+    });
+    Object.defineProperty(video, "currentTime", {
+      configurable: true,
+      get: () => currentTime,
+      set: (value) => {
+        currentTime = value;
+      },
+    });
+    Object.defineProperty(video, "play", {
+      configurable: true,
+      value: vi.fn(() => {
+        paused = false;
+        return Promise.resolve();
+      }),
+    });
+
+    await act(async () => {
+      fireEvent.pointerDown(mediaItem, {
+        button: 0,
+        clientX: 0,
+        clientY: 0,
+        pointerId: 51,
+      });
+      fireEvent.pointerUp(mediaItem, { pointerId: 51, button: 0 });
+      fireEvent.seeked(video);
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "ArrowLeft" });
+    });
+    expect(currentTime).toBeCloseTo(1 - 1 / 30, 3);
+    expect(paused).toBe(true);
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "ArrowRight", shiftKey: true });
+    });
+    expect(currentTime).toBeCloseTo(1 + 9 / 30, 3);
+    expect(paused).toBe(true);
+    expect(video.play).not.toHaveBeenCalled();
+  });
+
   it("crops an image in place from side and corner handles", async () => {
     const mediaItem = getMediaItem();
     const image = screen.getByAltText("canvas item") as HTMLImageElement;
@@ -896,5 +969,94 @@ describe("InfiniteCanvas media item interactions", () => {
     expect(parseFloat(mediaItem.style.width)).toBeCloseTo(1140);
     expect(cropBox.style.left).toBe("-120px");
     expect(parseFloat(cropBox.style.width)).toBeCloseTo(1546.667);
+  });
+
+  it("accepts crop mode on repeated C and cancels to the original crop on Escape", async () => {
+    const mediaItem = getMediaItem();
+    const startLeft = parseFloat(mediaItem.style.left);
+    const startWidth = parseFloat(mediaItem.style.width);
+
+    await act(async () => {
+      fireEvent.pointerDown(mediaItem, {
+        button: 0,
+        clientX: 0,
+        clientY: 0,
+        pointerId: 61,
+      });
+      fireEvent.pointerUp(mediaItem, { pointerId: 61, button: 0 });
+      fireEvent.keyDown(window, { key: "c" });
+    });
+
+    expect(document.querySelectorAll(".crop-handle")).toHaveLength(8);
+
+    const westHandle = document.querySelector(".crop-handle-w") as HTMLElement;
+    await act(async () => {
+      fireEvent.pointerDown(westHandle, {
+        clientX: 0,
+        clientY: 0,
+        pointerId: 62,
+        button: 0,
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerMove(mediaItem, {
+        clientX: 120,
+        clientY: 0,
+        pointerId: 62,
+        button: 0,
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerUp(mediaItem, { pointerId: 62, button: 0 });
+    });
+
+    expect(mediaItem.style.left).toBe(`${startLeft + 120}px`);
+    expect(parseFloat(mediaItem.style.width)).toBe(startWidth - 120);
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c" });
+    });
+
+    expect(document.querySelectorAll(".crop-handle")).toHaveLength(0);
+    expect(mediaItem.style.left).toBe(`${startLeft + 120}px`);
+    expect(parseFloat(mediaItem.style.width)).toBe(startWidth - 120);
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c" });
+    });
+
+    const secondWestHandle = document.querySelector(
+      ".crop-handle-w",
+    ) as HTMLElement;
+    await act(async () => {
+      fireEvent.pointerDown(secondWestHandle, {
+        clientX: 120,
+        clientY: 0,
+        pointerId: 63,
+        button: 0,
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerMove(mediaItem, {
+        clientX: 200,
+        clientY: 0,
+        pointerId: 63,
+        button: 0,
+      });
+    });
+    await act(async () => {
+      fireEvent.pointerUp(mediaItem, { pointerId: 63, button: 0 });
+    });
+
+    expect(mediaItem.style.left).toBe(`${startLeft + 200}px`);
+    expect(parseFloat(mediaItem.style.width)).toBe(startWidth - 200);
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "Escape" });
+    });
+
+    expect(document.querySelectorAll(".crop-handle")).toHaveLength(0);
+    expect(mediaItem.style.left).toBe(`${startLeft + 120}px`);
+    expect(parseFloat(mediaItem.style.width)).toBe(startWidth - 120);
   });
 });

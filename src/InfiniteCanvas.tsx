@@ -66,7 +66,12 @@ import type {
 } from "./utils/media.types";
 import { notify } from "./utils/notifications";
 import { ACTION_SELECTORS } from "./utils/press";
-import { getImageLod, getLoopRange, getVideoLod } from "./utils/videoUtils";
+import {
+  clampVideoTime,
+  getImageLod,
+  getLoopRange,
+  getVideoLod,
+} from "./utils/videoUtils";
 import { getViewBounds, pushItemToTop } from "./utils/viewport";
 
 export default function InfiniteCanvas() {
@@ -120,9 +125,6 @@ export default function InfiniteCanvas() {
     (s) => s.clearItemInteraction,
   );
   const setEditingCropItem = useInteractionStore((s) => s.setEditingCropItem);
-  const toggleEditingCropItem = useInteractionStore(
-    (s) => s.toggleEditingCropItem,
-  );
 
   // Settings
   const screenshotDirectory = useSettingsStore((s) => s.screenshotDirectory);
@@ -132,6 +134,7 @@ export default function InfiniteCanvas() {
   const canvasBackgroundPattern = useSettingsStore(
     (s) => s.canvasBackgroundPattern,
   );
+  const isSettingsOpen = useSettingsStore((s) => s.isSettingsOpen);
 
   // Audio controls
   const toggleAudioItem = useAudioPlaybackStore((s) => s.toggleItem);
@@ -167,6 +170,18 @@ export default function InfiniteCanvas() {
   const cropHandleRef = useRef<CropHandle | null>(null);
   const cropStartRef = useRef<TCropStart>(null);
   const transientItemMotionRef = useRef<TransientItemMotion | null>(null);
+  const cropEditSnapshotRef = useRef<
+    Map<
+      string,
+      {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        crop: CropInsets;
+      }
+    >
+  >(new Map());
 
   const {
     viewport,
@@ -184,17 +199,6 @@ export default function InfiniteCanvas() {
   useUploadDrop({
     getViewport,
     setItems,
-  });
-
-  useCanvasHotkeys({
-    containerRef,
-    getItems: () => useCanvasSessionStore.getState().items,
-    onSave: saveSessionToFile,
-    onToggleDevMode: useDevStore.getState().toggleDevMode,
-    selectedItemsRef,
-    setItems,
-    setSelectedItems,
-    setEditingCropItem,
   });
 
   // Canvas integrations.
@@ -299,6 +303,60 @@ export default function InfiniteCanvas() {
     setMinimapItems(null);
   }, [clearDragItemTransforms]);
 
+  const captureCropEditSnapshot = useCallback(
+    (id: string, sourceItems = useCanvasSessionStore.getState().items) => {
+      if (cropEditSnapshotRef.current.has(id)) return;
+
+      const item = sourceItems.find((entry) => entry.id === id);
+      if (!item) return;
+
+      cropEditSnapshotRef.current.set(id, {
+        x: item.x,
+        y: item.y,
+        width: item.width,
+        height: item.height,
+        crop: { ...getCrop(item) },
+      });
+    },
+    [],
+  );
+
+  const acceptCropEdit = useCallback(
+    (id: string | null) => {
+      if (!id) return false;
+
+      cropEditSnapshotRef.current.delete(id);
+      setEditingCropItem(null);
+      return true;
+    },
+    [setEditingCropItem],
+  );
+
+  const cancelCropEdit = useCallback(() => {
+    if (!editingCropItem) return false;
+
+    const snapshot = cropEditSnapshotRef.current.get(editingCropItem);
+    cropEditSnapshotRef.current.delete(editingCropItem);
+    if (snapshot) {
+      setItems((prev) =>
+        prev.map((item) =>
+          item.id === editingCropItem
+            ? {
+                ...item,
+                x: snapshot.x,
+                y: snapshot.y,
+                width: snapshot.width,
+                height: snapshot.height,
+                crop: { ...snapshot.crop },
+              }
+            : item,
+        ),
+      );
+    }
+    setEditingCropItem(null);
+    return true;
+  }, [editingCropItem, setEditingCropItem, setItems]);
+
   // Effects that keep external state in sync with the canvas.
   useEffect(() => {
     if (
@@ -348,6 +406,7 @@ export default function InfiniteCanvas() {
     clearSelectionBox();
     clearItemInteraction();
     stopPanning();
+    cropEditSnapshotRef.current.clear();
     setEditingCropItem(null);
     clearAudioItem();
     clearAllVideoExportState();
@@ -360,6 +419,7 @@ export default function InfiniteCanvas() {
     setSelectedItems(new Set());
     clearSelectionBox();
     useInteractionStore.getState().clearInteractionState();
+    cropEditSnapshotRef.current.clear();
     clearAudioItem();
     clearAllVideoExportState();
   }, [
@@ -404,6 +464,7 @@ export default function InfiniteCanvas() {
           endY: clientY,
         });
         setSelectedItems(new Set());
+        cropEditSnapshotRef.current.delete(editingCropItem ?? "");
         setEditingCropItem(null);
         e.currentTarget.setPointerCapture(e.pointerId);
       } else if (e.button === 1 || e.button === 2) {
@@ -593,6 +654,10 @@ export default function InfiniteCanvas() {
           crop: { ...getCrop(cropItem) },
         };
 
+        if (editingCropItem !== id) {
+          cropEditSnapshotRef.current.delete(editingCropItem ?? "");
+          captureCropEditSnapshot(id, reorderedItems);
+        }
         setEditingCropItem(id);
         startCropping(id);
         cropHandleRef.current = cropHandleForMotion;
@@ -644,6 +709,8 @@ export default function InfiniteCanvas() {
     [
       beginTransientItemMotion,
       cancelViewportAnimation,
+      captureCropEditSnapshot,
+      editingCropItem,
       moveItemToTop,
       selectItemForInteraction,
       setEditingCropItem,
@@ -751,6 +818,7 @@ export default function InfiniteCanvas() {
   const deleteItem = useCallback(
     (id: string, e: React.MouseEvent) => {
       e.stopPropagation();
+      cropEditSnapshotRef.current.delete(id);
       setItems((prev) => prev.filter((i) => i.id !== id));
       setSelectedItems((prev) => {
         const newSet = new Set(prev);
@@ -767,10 +835,22 @@ export default function InfiniteCanvas() {
   const startCropEdit = useCallback(
     (id: string, e: React.MouseEvent) => {
       e.stopPropagation();
-      toggleEditingCropItem(id);
       setSelectedItems(new Set([id]));
+      if (editingCropItem === id) {
+        acceptCropEdit(id);
+        return;
+      }
+
+      cropEditSnapshotRef.current.delete(editingCropItem ?? "");
+      captureCropEditSnapshot(id);
+      setEditingCropItem(id);
     },
-    [toggleEditingCropItem],
+    [
+      acceptCropEdit,
+      captureCropEditSnapshot,
+      editingCropItem,
+      setEditingCropItem,
+    ],
   );
 
   const resetSize = useCallback(
@@ -942,6 +1022,118 @@ export default function InfiniteCanvas() {
   const selectedVideoTimelineController = selectedVideoExportItem
     ? (videoTimelineControllers[selectedVideoExportItem.id] ?? null)
     : null;
+
+  const startCropActiveItem = useCallback(() => {
+    const selectedIds = Array.from(selectedItemsRef.current);
+    if (selectedIds.length !== 1) return false;
+
+    const [selectedId] = selectedIds;
+    setSelectedItems(new Set([selectedId]));
+    if (editingCropItem === selectedId) {
+      return acceptCropEdit(selectedId);
+    }
+
+    cropEditSnapshotRef.current.delete(editingCropItem ?? "");
+    captureCropEditSnapshot(selectedId);
+    setEditingCropItem(selectedId);
+    return true;
+  }, [
+    acceptCropEdit,
+    captureCropEditSnapshot,
+    editingCropItem,
+    setEditingCropItem,
+  ]);
+
+  const resetSizeActiveItem = useCallback(() => {
+    const selectedIds = Array.from(selectedItemsRef.current);
+    if (selectedIds.length !== 1) return false;
+
+    const [selectedId] = selectedIds;
+    const item = useCanvasSessionStore
+      .getState()
+      .items.find((entry) => entry.id === selectedId);
+    if (!item) return false;
+
+    const mediaElement = containerRef.current
+      ?.querySelector<HTMLElement>(`[data-media-id="${selectedId}"]`)
+      ?.querySelector("img, video") as
+      | HTMLImageElement
+      | HTMLVideoElement
+      | null;
+
+    let intrinsicWidth = item.sourceWidth ?? 0;
+    let intrinsicHeight = item.sourceHeight ?? 0;
+    if (
+      mediaElement instanceof HTMLImageElement &&
+      mediaElement.naturalWidth > 0 &&
+      mediaElement.naturalHeight > 0
+    ) {
+      intrinsicWidth = mediaElement.naturalWidth;
+      intrinsicHeight = mediaElement.naturalHeight;
+    } else if (
+      mediaElement instanceof HTMLVideoElement &&
+      mediaElement.videoWidth > 0 &&
+      mediaElement.videoHeight > 0
+    ) {
+      intrinsicWidth = mediaElement.videoWidth;
+      intrinsicHeight = mediaElement.videoHeight;
+    }
+
+    if (intrinsicWidth <= 0 || intrinsicHeight <= 0) {
+      intrinsicWidth = 400;
+      intrinsicHeight = 300;
+    }
+
+    setItems((prev) =>
+      resetFrameSize({
+        id: selectedId,
+        prev,
+        intrinsicWidth,
+        intrinsicHeight,
+      }),
+    );
+    return true;
+  }, [setItems]);
+
+  const scrubSelectedVideoFrames = useCallback(
+    (deltaFrames: number) => {
+      const controller = selectedVideoTimelineController;
+      if (!controller || controller.duration <= 0) return false;
+
+      const frameDurationSeconds = 1 / 30;
+      const nextTime = clampVideoTime(
+        controller.currentTime + deltaFrames * frameDurationSeconds,
+        controller.duration,
+      );
+      controller.seekToRatio(nextTime / controller.duration);
+      if (controller.isPaused) {
+        controller.stopTimelineAnimation();
+      }
+      return true;
+    },
+    [selectedVideoTimelineController],
+  );
+
+  useCanvasHotkeys({
+    canSave: canSaveSessionToFile,
+    containerRef,
+    getItems: () => useCanvasSessionStore.getState().items,
+    onCancelCropEditing: cancelCropEdit,
+    isSettingsOpen,
+    onCloseSettings: useSettingsStore.getState().closeSettings,
+    onOpenSettings: useSettingsStore.getState().openSettings,
+    onResetSizeActiveItem: resetSizeActiveItem,
+    onSave: saveSessionToFile,
+    onSaveAs: saveSessionToNewFile,
+    onScrubFrames: scrubSelectedVideoFrames,
+    onToggleCropActiveItem: startCropActiveItem,
+    onToggleDevMode: useDevStore.getState().toggleDevMode,
+    selectedItemsRef,
+    setItems,
+    setSelectedItems,
+    setEditingCropItem,
+  });
+
   const [isNativeImageSurfaceReady, setIsNativeImageSurfaceReady] =
     useState(false);
   const [nativeImageReadyPaths, setNativeImageReadyPaths] = useState<
