@@ -77,6 +77,7 @@ export default function InfiniteCanvas() {
   const [transientItemIds, setTransientItemIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const [minimapItems, setMinimapItems] = useState<MediaItem[] | null>(null);
   const [canvasSize, setCanvasSize] = useState(() => ({
     width: window.innerWidth,
     height: window.innerHeight,
@@ -282,6 +283,7 @@ export default function InfiniteCanvas() {
     (motion: TransientItemMotion) => {
       transientItemMotionRef.current = motion;
       setTransientItemIds(new Set(motion.activeIds));
+      setMinimapItems(motion.latestItems);
     },
     [],
   );
@@ -294,6 +296,7 @@ export default function InfiniteCanvas() {
 
     transientItemMotionRef.current = null;
     setTransientItemIds(new Set());
+    setMinimapItems(null);
   }, [clearDragItemTransforms]);
 
   // Effects that keep external state in sync with the canvas.
@@ -669,6 +672,7 @@ export default function InfiniteCanvas() {
             : item,
         );
         applyDragItemTransform(motion.activeIds, dx, dy);
+        setMinimapItems(motion.latestItems);
       } else if (
         interactionState.isResizingItem(id) &&
         motion.mode === "resize"
@@ -683,6 +687,7 @@ export default function InfiniteCanvas() {
         motion.latestItems
           .filter((item) => motion.activeIds.has(item.id))
           .forEach(applyMediaItemLayout);
+        setMinimapItems(motion.latestItems);
       } else if (
         interactionState.isCroppingItem(id) &&
         motion.mode === "crop"
@@ -700,6 +705,7 @@ export default function InfiniteCanvas() {
         motion.latestItems
           .filter((item) => motion.activeIds.has(item.id))
           .forEach(applyMediaItemLayout);
+        setMinimapItems(motion.latestItems);
       }
     },
     [applyDragItemTransform, applyMediaItemLayout, getViewport],
@@ -724,6 +730,7 @@ export default function InfiniteCanvas() {
 
           clearItemInteraction();
           setTransientItemIds(new Set());
+          setMinimapItems(null);
         });
 
         transientItemMotionRef.current = null;
@@ -1065,7 +1072,7 @@ export default function InfiniteCanvas() {
 
       {selectionBox && <SelectionBox selectionBox={selectionBox} />}
       <CanvasMinimap
-        items={items}
+        items={minimapItems ?? items}
         viewport={renderViewport}
         canvasSize={canvasSize}
         selectedItems={selectedItems}

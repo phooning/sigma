@@ -96,6 +96,28 @@ impl PerformanceProfile {
         }
     }
 
+    pub(crate) fn max_active_streams(&self) -> usize {
+        if self.base_case_validated {
+            return super::constants::SCALING_MAX_STREAMS_AFTER_VALIDATION;
+        }
+
+        if self.base_probe_ram_bandwidth_bytes_per_sec.is_some()
+            && self.base_probe_ipc_latency_p95_ms.is_some()
+            && self.base_probe_frame_drop_rate.is_some()
+        {
+            return super::constants::SOFT_CALIBRATED_MAX_STREAMS_WITH_FRONTEND_METRICS;
+        }
+
+        if self.base_probe_ram_bandwidth_bytes_per_sec.is_some()
+            || self.base_probe_ipc_latency_p95_ms.is_some()
+            || self.base_probe_frame_drop_rate.is_some()
+        {
+            return super::constants::SOFT_CALIBRATED_MAX_STREAMS_WITH_PROBE;
+        }
+
+        super::constants::BASE_CASE_MAX_STREAMS_BEFORE_VALIDATION
+    }
+
     pub(crate) fn should_measure_ram_bandwidth(&self) -> bool {
         if std::env::args().any(|arg| arg == "--recalibrate") {
             return true;
@@ -296,5 +318,21 @@ mod tests {
         profile.recompute_safe_budget();
 
         assert_eq!(profile.vram_budget_bytes, 800);
+    }
+
+    #[test]
+    fn max_active_streams_stages_calibration_progressively() {
+        let mut profile = PerformanceProfile::uncalibrated();
+        assert_eq!(profile.max_active_streams(), 1);
+
+        profile.base_probe_ipc_latency_p95_ms = Some(4.0);
+        assert_eq!(profile.max_active_streams(), 2);
+
+        profile.base_probe_ram_bandwidth_bytes_per_sec = Some(8_000_000_000.0);
+        profile.base_probe_frame_drop_rate = Some(0.02);
+        assert_eq!(profile.max_active_streams(), 4);
+
+        profile.base_case_validated = true;
+        assert_eq!(profile.max_active_streams(), 32);
     }
 }

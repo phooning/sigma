@@ -155,11 +155,7 @@ impl Arbiter {
         assets.sort_by(|a, b| priority(b, manifest).total_cmp(&priority(a, manifest)));
 
         let now = now_millis();
-        let max_active = if profile.base_case_validated {
-            SCALING_MAX_STREAMS_AFTER_VALIDATION
-        } else {
-            BASE_CASE_MAX_STREAMS_BEFORE_VALIDATION
-        };
+        let max_active = profile.max_active_streams();
         let overloaded = telemetry.broker_queue_pressure_smoothed >= DOWNGRADE_QUEUE_PRESSURE
             || telemetry.frame_drop_rate >= DOWNGRADE_DROP_RATE
             || telemetry.broker_backpressure_active
@@ -226,6 +222,9 @@ impl Arbiter {
                     last_changed_at_ms: now,
                     reason: if profile.base_case_validated {
                         "budget exhausted or rendered pixel cap below minimum tier".into()
+                    } else if max_active > BASE_CASE_MAX_STREAMS_BEFORE_VALIDATION {
+                        "soft calibration permits limited scaling while full validation remains pending"
+                            .into()
                     } else {
                         "base case is not validated; scaling remains gated".into()
                     },
@@ -641,6 +640,12 @@ fn controller_snapshot(
             "Budgets are measured on this machine and capped at 80% of the limiting subsystem."
                 .into(),
             "Decode/upload/composite factors are calibrated by base-case frontend telemetry.".into(),
+        ]
+    } else if profile.max_active_streams() > BASE_CASE_MAX_STREAMS_BEFORE_VALIDATION {
+        vec![
+            "Soft calibration allows a small number of active streams before 4K validation succeeds."
+                .into(),
+            "Additional backend probe and frontend telemetry unlock more low-risk concurrency before full validation.".into(),
         ]
     } else {
         vec![

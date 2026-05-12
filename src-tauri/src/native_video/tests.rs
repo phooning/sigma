@@ -63,7 +63,7 @@ fn rendered_pixel_cap_keeps_equal_32_way_tiles_below_4k() {
 }
 
 #[test]
-fn scaling_is_gated_until_base_case_is_validated() {
+fn uncalibrated_scaling_is_gated_to_one_active_stream() {
     let manifest = CanvasManifest {
         canvas_width: 3840,
         canvas_height: 2160,
@@ -77,6 +77,46 @@ fn scaling_is_gated_until_base_case_is_validated() {
     assert_eq!(
         decisions.iter().filter(|decision| decision.state == StreamState::Active).count(),
         1
+    );
+}
+
+#[test]
+fn soft_calibration_allows_two_active_streams_after_partial_probe_data() {
+    let manifest = CanvasManifest {
+        canvas_width: 3840,
+        canvas_height: 2160,
+        viewport_zoom: 1.0,
+        assets: (0..4).map(|index| asset(index, 1920.0, 1080.0, 1.0)).collect(),
+    };
+    let mut profile = profile_with_budget(20 * 1024 * 1024 * 1024, false);
+    profile.base_probe_ipc_latency_p95_ms = Some(4.0);
+    let decisions =
+        Arbiter::allocate(&manifest, &profile, &TelemetrySnapshot::default(), &HashMap::new());
+
+    assert_eq!(
+        decisions.iter().filter(|decision| decision.state == StreamState::Active).count(),
+        2
+    );
+}
+
+#[test]
+fn soft_calibration_allows_four_active_streams_after_probe_and_frontend_metrics() {
+    let manifest = CanvasManifest {
+        canvas_width: 3840,
+        canvas_height: 2160,
+        viewport_zoom: 1.0,
+        assets: (0..4).map(|index| asset(index, 1920.0, 1080.0, 1.0)).collect(),
+    };
+    let mut profile = profile_with_budget(20 * 1024 * 1024 * 1024, false);
+    profile.base_probe_ipc_latency_p95_ms = Some(4.0);
+    profile.base_probe_ram_bandwidth_bytes_per_sec = Some(8_000_000_000.0);
+    profile.base_probe_frame_drop_rate = Some(0.02);
+    let decisions =
+        Arbiter::allocate(&manifest, &profile, &TelemetrySnapshot::default(), &HashMap::new());
+
+    assert_eq!(
+        decisions.iter().filter(|decision| decision.state == StreamState::Active).count(),
+        4
     );
 }
 
