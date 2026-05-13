@@ -58,6 +58,7 @@ describe("Video timeline keyboard scrubbing", () => {
           filePath: "C:/video.mp4",
           url: "file:///video.mp4",
           duration: 12,
+          frameRate: 30,
           x: 0,
           y: 0,
           width: 640,

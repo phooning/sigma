@@ -467,7 +467,7 @@ export async function gotoApp(
 ) {
   await installTauriMocks(page, options);
   await page.goto("/");
-  await expect(page.getByText("SIGMA Media Canvas")).toBeVisible();
+  await expect(page.getByText("SIGMA Canvas Studio")).toBeVisible();
   await expect(page.locator(".ui-overlay .item-count")).toHaveText("0 items");
 }
 

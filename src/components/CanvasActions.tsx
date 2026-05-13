@@ -20,6 +20,7 @@ type MediaFileInfo = {
   width?: number;
   height?: number;
   duration?: number;
+  frameRate?: number;
   size?: number;
 };
 
@@ -213,7 +214,7 @@ export const onDropMedia = async ({
     .forEach((media) => {
       tasks.push(async () => {
         const { info, failed } = await probeMedia(media.filePath);
-        const { width, height, duration, size } = info;
+        const { width, height, duration, frameRate, size } = info;
         const mediaWidth = width || DEFAULT_MEDIA_WIDTH;
         const mediaHeight = height || DEFAULT_VIDEO_HEIGHT;
 
@@ -230,6 +231,7 @@ export const onDropMedia = async ({
           createItem(media, mediaWidth, mediaHeight, {
             fileSize: size,
             duration,
+            frameRate,
             sourceWidth: mediaWidth,
             sourceHeight: mediaHeight,
             deferVideoLoad:

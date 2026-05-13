@@ -45,7 +45,7 @@ export function HudToolbar({
 
   return (
     <div className="ui-overlay">
-      <div className="hud-title">SIGMA Media Canvas</div>
+      <div className="hud-title">SIGMA Canvas Studio</div>
 
       <div className="toolbar">
         <HudToolbarActions

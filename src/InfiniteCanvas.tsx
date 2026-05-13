@@ -1101,9 +1101,30 @@ export default function InfiniteCanvas() {
     [selectedVideoTimelineController],
   );
 
+  const toggleSelectedVideosPlayback = useCallback(() => {
+    const selectedControllers = Array.from(selectedItemsRef.current)
+      .map((itemId) => videoTimelineControllers[itemId] ?? null)
+      .filter(
+        (controller): controller is VideoTimelineController =>
+          controller !== null,
+      );
+
+    if (selectedControllers.length === 0) return false;
+
+    const shouldPlay = selectedControllers.every(
+      (controller) => controller.isPaused,
+    );
+    selectedControllers.forEach((controller) => {
+      if (shouldPlay ? controller.isPaused : !controller.isPaused) {
+        controller.togglePlayback();
+      }
+    });
+
+    return true;
+  }, [videoTimelineControllers]);
+
   useCanvasHotkeys({
     canSave: canSaveSessionToFile,
-    containerRef,
     getItems: () => useCanvasSessionStore.getState().items,
     onCancelCropEditing: cancelCropEdit,
     isSettingsOpen,
@@ -1113,6 +1134,7 @@ export default function InfiniteCanvas() {
     onSave: saveSessionToFile,
     onSaveAs: saveSessionToNewFile,
     onScrubFrames: scrubSelectedVideoFrames,
+    onToggleSelectedVideosPlayback: toggleSelectedVideosPlayback,
     onToggleCropActiveItem: startCropActiveItem,
     onToggleDevMode: useDevStore.getState().toggleDevMode,
     selectedItemsRef,

@@ -107,6 +107,7 @@ const MEDIA_ITEM_IDENTITY_KEYS = [
   "url",
   "fileSize",
   "duration",
+  "frameRate",
   "sourceWidth",
   "sourceHeight",
   "deferVideoLoad",

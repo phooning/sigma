@@ -28,7 +28,7 @@ interface SyncTimelineOptions {
 }
 
 const TIMELINE_STATE_WRITE_INTERVAL_MS = 100;
-const DEFAULT_VIDEO_FRAME_RATE = 30;
+const FALLBACK_VIDEO_FRAME_RATE = 30;
 
 export function useVideoTimeline({
   videoRef,
@@ -403,8 +403,15 @@ export function useVideoTimeline({
       const duration = durationStateRef.current;
       if (!video || duration <= 0) return;
 
+      const frameRate =
+        typeof item.frameRate === "number" &&
+        Number.isFinite(item.frameRate) &&
+        item.frameRate > 0
+          ? item.frameRate
+          : FALLBACK_VIDEO_FRAME_RATE;
+
       const nextTime = clampTimelineTime(
-        video.currentTime + deltaFrames / DEFAULT_VIDEO_FRAME_RATE,
+        video.currentTime + deltaFrames / frameRate,
         duration,
       );
       stopTimelineAnimation();
@@ -414,6 +421,7 @@ export function useVideoTimeline({
     [
       clampTimelineTime,
       durationStateRef,
+      item.frameRate,
       stopTimelineAnimation,
       syncTimelineFromVideo,
       videoRef,

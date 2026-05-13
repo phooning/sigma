@@ -3,7 +3,6 @@ import { useEffect, useEffectEvent } from "react";
 import type { MediaItem } from "./media.types";
 
 type CanvasHotkeyConfig = {
-  containerRef: React.RefObject<HTMLDivElement | null>;
   getItems: () => MediaItem[];
   canSave: boolean;
   onCloseSettings: () => void;
@@ -15,6 +14,7 @@ type CanvasHotkeyConfig = {
   onSaveAs: () => void | Promise<void>;
   onCancelCropEditing: () => boolean;
   onScrubFrames: (deltaFrames: number) => boolean;
+  onToggleSelectedVideosPlayback: () => boolean;
   onToggleCropActiveItem: () => boolean;
   onResetSizeActiveItem: () => boolean;
   setItems: React.Dispatch<React.SetStateAction<MediaItem[]>>;
@@ -34,7 +34,6 @@ export function useCanvasHotkeys(config: CanvasHotkeyConfig) {
   const handleKeyDown = useEffectEvent((event: KeyboardEvent) => {
     const {
       canSave,
-      containerRef,
       getItems,
       isSettingsOpen,
       onCancelCropEditing,
@@ -44,6 +43,7 @@ export function useCanvasHotkeys(config: CanvasHotkeyConfig) {
       onSave,
       onSaveAs,
       onScrubFrames,
+      onToggleSelectedVideosPlayback,
       onToggleCropActiveItem,
       onToggleDevMode,
       selectedItemsRef,
@@ -51,36 +51,6 @@ export function useCanvasHotkeys(config: CanvasHotkeyConfig) {
       setSelectedItems,
       setEditingCropItem,
     } = config;
-
-    const toggleSelectedVideosPlayback = () => {
-      const selected = selectedItemsRef.current;
-      if (selected.size === 0) return false;
-
-      const selectedVideos = getItems()
-        .filter((item) => item.type === "video" && selected.has(item.id))
-        .map((item) =>
-          containerRef.current
-            ?.querySelector<HTMLElement>(`[data-media-id="${item.id}"]`)
-            ?.querySelector("video"),
-        )
-        .filter(
-          (video): video is HTMLVideoElement =>
-            video instanceof HTMLVideoElement,
-        );
-
-      if (selectedVideos.length === 0) return false;
-
-      const shouldPlay = selectedVideos.every((video) => video.paused);
-      selectedVideos.forEach((video) => {
-        if (shouldPlay) {
-          void video.play().catch(() => {});
-        } else if (!video.paused) {
-          video.pause();
-        }
-      });
-
-      return true;
-    };
 
     if (event.defaultPrevented || isEditableTarget(event.target)) return;
 
@@ -144,7 +114,7 @@ export function useCanvasHotkeys(config: CanvasHotkeyConfig) {
     }
 
     if (event.key === " " || event.code === "Space") {
-      if (toggleSelectedVideosPlayback()) {
+      if (onToggleSelectedVideosPlayback()) {
         event.preventDefault();
       }
       return;

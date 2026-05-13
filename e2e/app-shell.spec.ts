@@ -29,7 +29,7 @@ test("persists the selected canvas background pattern across reloads", async ({
   await expect(page.locator(".canvas-background.grid")).toBeVisible();
 
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(page.getByText("SIGMA Media Canvas")).toBeVisible();
+  await expect(page.getByText("SIGMA Canvas Studio")).toBeVisible();
   await expect(page.locator(".ui-overlay .item-count")).toHaveText("0 items");
 
   await expect(page.locator(".canvas-background.grid")).toBeVisible();

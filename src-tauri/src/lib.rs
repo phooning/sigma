@@ -47,6 +47,7 @@ struct MediaMetadata {
     width: u32,
     height: u32,
     duration: f64,
+    frame_rate: f64,
     size: u64,
 }
 
@@ -69,10 +70,37 @@ async fn probe_media(path: String) -> Result<MediaMetadata, String> {
         .map_err(|err| format!("Failed to probe media: {err}"))?
 }
 
+fn parse_frame_rate_value(value: &serde_json::Value) -> Option<f64> {
+    let raw = value.as_str()?.trim();
+    if raw.is_empty() || raw == "0/0" {
+        return None;
+    }
+
+    if let Some((numerator, denominator)) = raw.split_once('/') {
+        let numerator = numerator.trim().parse::<f64>().ok()?;
+        let denominator = denominator.trim().parse::<f64>().ok()?;
+        if denominator <= 0.0 {
+            return None;
+        }
+
+        let frame_rate = numerator / denominator;
+        return (frame_rate.is_finite() && frame_rate > 0.0).then_some(frame_rate);
+    }
+
+    let frame_rate = raw.parse::<f64>().ok()?;
+    (frame_rate.is_finite() && frame_rate > 0.0).then_some(frame_rate)
+}
+
 fn probe_media_blocking(path: String) -> Result<MediaMetadata, String> {
     let metadata =
         fs::metadata(&path).map_err(|err| format!("Failed to read media file metadata: {err}"))?;
-    let fallback = MediaMetadata { width: 1280, height: 720, duration: 0.0, size: metadata.len() };
+    let fallback = MediaMetadata {
+        width: 1280,
+        height: 720,
+        duration: 0.0,
+        frame_rate: 30.0,
+        size: metadata.len(),
+    };
 
     let output = match Command::new("ffprobe")
         .args([
@@ -84,7 +112,7 @@ fn probe_media_blocking(path: String) -> Result<MediaMetadata, String> {
             "json",
             "-show_streams",
             "-show_entries",
-            "stream=codec_type,width,height,duration:stream_tags=DURATION",
+            "stream=codec_type,width,height,duration,avg_frame_rate,r_frame_rate:stream_tags=DURATION",
             &path,
         ])
         .output()
@@ -111,6 +139,9 @@ fn probe_media_blocking(path: String) -> Result<MediaMetadata, String> {
         duration: parse_duration_value(&stream["duration"])
             .or_else(|| parse_duration_value(&stream["tags"]["DURATION"]))
             .unwrap_or(fallback.duration),
+        frame_rate: parse_frame_rate_value(&stream["avg_frame_rate"])
+            .or_else(|| parse_frame_rate_value(&stream["r_frame_rate"]))
+            .unwrap_or(fallback.frame_rate),
         size: fallback.size,
     })
 }
