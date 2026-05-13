@@ -32,7 +32,7 @@ async function createSavedVideoCanvas(page: Page, filePath = savedCanvasPath) {
   await gotoApp(page);
   await dropFiles(page, [droppedVideoPath]);
 
-  await expect(page.getByText("1 items")).toBeVisible();
+  await expect(page.getByText("1 item")).toBeVisible();
   await expect(mediaItems(page)).toHaveCount(1);
 
   await saveCanvasAs(page, filePath);

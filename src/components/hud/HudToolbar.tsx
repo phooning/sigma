@@ -1,5 +1,6 @@
 import { useAudioPlaybackStore } from "@/stores/useAudioPlaybackStore";
 import type { MediaItem } from "../../utils/media.types";
+import { WindowControls } from "../WindowControls";
 import { HudAudioControl } from "./HudAudioControl";
 import { HudToolbarActions } from "./HudToolbarActions";
 import { getMediaFileName } from "./utils";
@@ -32,6 +33,7 @@ export function HudToolbar({
   onExportSelectedVideo,
 }: HudToolbarProps) {
   const activeAudioItemId = useAudioPlaybackStore((s) => s.activeItemId);
+  const itemCountLabel = `${items.length} item${items.length === 1 ? "" : "s"}`;
 
   const activeAudioItem =
     activeAudioItemId === null
@@ -44,10 +46,12 @@ export function HudToolbar({
     : "";
 
   return (
-    <div className="ui-overlay">
-      <div className="hud-title">SIGMA Canvas Studio</div>
-
-      <div className="toolbar">
+    <header
+      className="ui-overlay"
+      data-tauri-drag-region=""
+      data-testid="app-header"
+    >
+      <div className="hud-leading">
         <HudToolbarActions
           saveConfig={saveConfig}
           canSaveConfig={canSaveConfig}
@@ -60,7 +64,9 @@ export function HudToolbar({
           isExportingSelectedVideo={isExportingSelectedVideo}
           onExportSelectedVideo={onExportSelectedVideo}
         />
+      </div>
 
+      <div className="toolbar">
         {activeAudioItem && (
           <HudAudioControl
             activeAudioItem={activeAudioItem}
@@ -69,8 +75,9 @@ export function HudToolbar({
           />
         )}
 
-        <span className="item-count">{items.length} items</span>
+        <span className="item-count">{itemCountLabel}</span>
       </div>
-    </div>
+      <WindowControls />
+    </header>
   );
 }

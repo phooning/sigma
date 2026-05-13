@@ -467,7 +467,6 @@ export async function gotoApp(
 ) {
   await installTauriMocks(page, options);
   await page.goto("/");
-  await expect(page.getByText("SIGMA Canvas Studio")).toBeVisible();
   await expect(page.locator(".ui-overlay .item-count")).toHaveText("0 items");
 }
 
@@ -579,6 +578,9 @@ export async function openSettings(page: Page) {
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
 }
 
+export const itemCountLabel = (count: number) =>
+  `${count} item${count === 1 ? "" : "s"}`;
+
 const TOOLBAR_LOAD_BUTTON_NAME = /^Load$/;
 const DEFAULT_CONFIG_PATH = "/tmp/playwright-canvas.json";
 
@@ -635,7 +637,7 @@ export async function loadCanvasConfig(
   const loadStartedAt = await page.evaluate(() => performance.now());
   await page.getByRole("button", { name: TOOLBAR_LOAD_BUTTON_NAME }).click();
   await expect(page.locator(".ui-overlay .item-count")).toHaveText(
-    `${config.items.length} items`,
+    itemCountLabel(config.items.length),
   );
   await waitForAnimationFrames(page, 2);
   const loadCompletedAt = await page.evaluate(() => performance.now());
