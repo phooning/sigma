@@ -467,7 +467,9 @@ export async function gotoApp(
 ) {
   await installTauriMocks(page, options);
   await page.goto("/");
-  await expect(page.locator(".ui-overlay .item-count")).toHaveText("0 items");
+  await expect(page.locator(".ui-overlay .item-count")).toHaveText(
+    itemCountLabel(0),
+  );
 }
 
 export async function dropFiles(page: Page, paths: string[]) {
