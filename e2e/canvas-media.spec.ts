@@ -81,7 +81,7 @@ test("surfaces probe_media failures and still recovers to a playable video item"
   await expect(
     page.getByText("Using fallback dimensions for failing-probe.mp4."),
   ).toBeVisible();
-  await expect(page.getByText("1 items")).toBeVisible();
+  await expect(page.getByText("1 item")).toBeVisible();
   await expect(page.locator("video.media-content")).toHaveCount(1);
 });
 
@@ -135,7 +135,7 @@ test("upgrades image LOD requests as the user zooms in through real browser layo
       );
     })
     .toBe(true);
-  await expect(page.getByText("1 items")).toBeVisible();
+  await expect(page.getByText("1 item")).toBeVisible();
 });
 
 test("toggles a selected video's playback with the spacebar", async ({
@@ -249,7 +249,7 @@ test("does not delete a selected item while an editable element owns focus", asy
   });
 
   await page.keyboard.press("Backspace");
-  await expect(page.getByText("1 items")).toBeVisible();
+  await expect(page.getByText("1 item")).toBeVisible();
 
   await page.evaluate(() => {
     (

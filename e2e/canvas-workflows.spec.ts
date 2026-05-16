@@ -13,7 +13,7 @@ test("adds media through drag and drop, selects it, and deletes it with the keyb
   await gotoApp(page);
   await dropFiles(page, ["/tmp/moodboard-frame.png"]);
 
-  await expect(page.getByText("1 items")).toBeVisible();
+  await expect(page.getByText("1 item")).toBeVisible();
   await expect(mediaItems(page)).toHaveCount(1);
 
   const mediaItem = mediaItems(page).first();
@@ -122,7 +122,7 @@ test("shows audio controls and exports the currently selected video", async ({
   await gotoApp(page);
   await dropFiles(page, ["/tmp/selects/rough-cut.mp4"]);
 
-  await expect(page.getByText("1 items")).toBeVisible();
+  await expect(page.getByText("1 item")).toBeVisible();
 
   const mediaItem = mediaItems(page).first();
   await mediaItem.click({ position: { x: 400, y: 200 } });

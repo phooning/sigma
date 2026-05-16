@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { gotoApp, openSettings, seedCanvasItems } from "./helpers";
+import {
+  gotoApp,
+  itemCountLabel,
+  openSettings,
+  seedCanvasItems,
+} from "./helpers";
 
 test("opens the settings dialog from the HUD and closes it with Escape", async ({
   page,
@@ -17,6 +22,42 @@ test("opens the settings dialog from the HUD and closes it with Escape", async (
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeHidden();
 });
 
+test("uses the HUD as the draggable header and keeps its buttons non-draggable", async ({
+  page,
+}) => {
+  await gotoApp(page);
+
+  const header = page.getByTestId("app-header");
+  const controls = page.getByRole("toolbar", { name: "Canvas controls" });
+  const buttons = controls.getByRole("button");
+
+  await expect(header).toHaveAttribute("data-tauri-drag-region", "");
+  await expect(buttons).toHaveCount(5);
+  await expect(buttons).toHaveText(["", "Clear", "Load", "", "Save"]);
+  await expect(buttons.nth(0)).toHaveAttribute("aria-label", "Open settings");
+  await expect(buttons.nth(3)).toHaveAttribute("aria-label", "Save As");
+  for (const index of [0, 1, 2, 3, 4]) {
+    await expect(buttons.nth(index)).toHaveAttribute(
+      "data-tauri-drag-region",
+      "false",
+    );
+  }
+});
+
+test("uses singular and plural item-count labels in the HUD", async ({
+  page,
+}) => {
+  await gotoApp(page);
+  await expect(page.locator(".ui-overlay .item-count").first()).toHaveText(
+    itemCountLabel(0),
+  );
+
+  await seedCanvasItems(page, 1, "image");
+  await expect(page.locator(".ui-overlay .item-count").first()).toHaveText(
+    itemCountLabel(1),
+  );
+});
+
 test("persists the selected canvas background pattern across reloads", async ({
   page,
 }) => {
@@ -29,7 +70,6 @@ test("persists the selected canvas background pattern across reloads", async ({
   await expect(page.locator(".canvas-background.grid")).toBeVisible();
 
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(page.getByText("SIGMA Media Canvas")).toBeVisible();
   await expect(page.locator(".ui-overlay .item-count")).toHaveText("0 items");
 
   await expect(page.locator(".canvas-background.grid")).toBeVisible();

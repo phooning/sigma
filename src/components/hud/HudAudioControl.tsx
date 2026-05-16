@@ -30,6 +30,7 @@ export function HudAudioControl({
       onPointerDown={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}
       title={activeAudioName}
+      data-tauri-drag-region="false"
     >
       <button
         type="button"
@@ -38,6 +39,7 @@ export function HudAudioControl({
         aria-label={isAudioMuted ? "Unmute audio" : "Mute audio"}
         aria-pressed={isAudioMuted}
         title={isAudioMuted ? "Unmute audio" : "Mute audio"}
+        data-tauri-drag-region="false"
       >
         <svg
           width="15"
@@ -69,6 +71,7 @@ export function HudAudioControl({
         className="hud-audio-marquee"
         aria-label={`Audio clip: ${activeAudioName}`}
         onClick={onSelectActiveAudioItem}
+        data-tauri-drag-region="false"
       >
         <div className="hud-audio-marquee-track">
           {renderAudioMarqueeItem()}
@@ -85,6 +88,7 @@ export function HudAudioControl({
         aria-label={`Volume for ${activeAudioName}`}
         aria-valuetext={`${audioPercent}%`}
         onChange={(event) => setAudioVolume(Number(event.currentTarget.value))}
+        data-tauri-drag-region="false"
       />
     </div>
   );

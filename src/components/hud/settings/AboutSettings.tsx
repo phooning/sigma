@@ -10,7 +10,7 @@ export function AboutSettings() {
     <FieldGroup>
       <Field>
         <FieldTitle>
-          Developed with daily use and passion for usability and performance.
+          Developed with daily use for usability and performance.
         </FieldTitle>
         <FieldDescription>
           <a
@@ -19,14 +19,12 @@ export function AboutSettings() {
             rel="noopener noreferrer"
             className="font-medium text-primary underline underline-offset-4"
           >
-            GitHub source code
+            Source code
           </a>
         </FieldDescription>
       </Field>
 
-      <p className="mt-4 text-sm text-muted-foreground">
-        SIGMA Media Canvas: Community Version
-      </p>
+      <p className="mt-4 text-sm text-muted-foreground">SIGMA Canvas Studio</p>
     </FieldGroup>
   );
 }

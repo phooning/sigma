@@ -9,8 +9,7 @@ use super::{
     constants::{
         BASE_CASE_MAX_STREAMS_BEFORE_VALIDATION, DOWNGRADE_DROP_RATE, DOWNGRADE_QUEUE_PRESSURE,
         GPU_FRAME_RESIDENCY_MULTIPLIER, MATERIAL_OVERSAMPLE, MIN_DOWNGRADE_DWELL_MS,
-        MIN_UPGRADE_DWELL_MS, SCALING_MAX_STREAMS_AFTER_VALIDATION, UPGRADE_HEADROOM,
-        UPGRADE_QUEUE_PRESSURE,
+        MIN_UPGRADE_DWELL_MS, UPGRADE_HEADROOM, UPGRADE_QUEUE_PRESSURE,
     },
     frame_packet::yuv420_payload_len,
     profile::PerformanceProfile,
@@ -513,7 +512,8 @@ mod tests {
                 target_fps: 30,
             }],
         };
-        let budget = tier_cost_bytes_per_sec(1280, 720, 30, &profile_with_cost_factors(1.0, 0.0, 0.0));
+        let budget =
+            tier_cost_bytes_per_sec(1280, 720, 30, &profile_with_cost_factors(1.0, 0.0, 0.0));
         let without_composite = PerformanceProfile {
             base_case_validated: true,
             safe_budget_bytes_per_sec: budget,
@@ -527,10 +527,8 @@ mod tests {
             composite_cost_factor: 0.0,
             ..PerformanceProfile::uncalibrated()
         };
-        let with_composite = PerformanceProfile {
-            composite_cost_factor: 1.0,
-            ..without_composite.clone()
-        };
+        let with_composite =
+            PerformanceProfile { composite_cost_factor: 1.0, ..without_composite.clone() };
 
         let baseline = Arbiter::allocate(
             &manifest,
@@ -549,7 +547,9 @@ mod tests {
         assert_eq!(baseline[0].tier.id, 4);
         assert_eq!(constrained[0].state, StreamState::Active);
         assert!(constrained[0].tier.id < baseline[0].tier.id);
-        assert!(constrained[0].predicted_cost_bytes_per_sec <= with_composite.safe_budget_bytes_per_sec);
+        assert!(
+            constrained[0].predicted_cost_bytes_per_sec <= with_composite.safe_budget_bytes_per_sec
+        );
     }
 
     #[test]
@@ -615,12 +615,9 @@ fn tier_cost_bytes_per_sec(width: u32, height: u32, fps: u32, profile: &Performa
     // Cost modeling uses normalized frontend factors so allocation can react to decode, upload,
     // and composite pressure with the same byte/sec budgeting path.
     let raw_bytes = yuv420_payload_len(width, height) as u64 * fps.max(1) as u64;
-    let factor = (
-        profile.decode_cost_factor
-            + profile.upload_cost_factor
-            + profile.composite_cost_factor
-    )
-        .max(1.0);
+    let factor =
+        (profile.decode_cost_factor + profile.upload_cost_factor + profile.composite_cost_factor)
+            .max(1.0);
 
     (raw_bytes as f64 * factor) as u64
 }
@@ -639,7 +636,8 @@ fn controller_snapshot(
         vec![
             "Budgets are measured on this machine and capped at 80% of the limiting subsystem."
                 .into(),
-            "Decode/upload/composite factors are calibrated by base-case frontend telemetry.".into(),
+            "Decode/upload/composite factors are calibrated by base-case frontend telemetry."
+                .into(),
         ]
     } else if profile.max_active_streams() > BASE_CASE_MAX_STREAMS_BEFORE_VALIDATION {
         vec![

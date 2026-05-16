@@ -91,6 +91,7 @@ export function VideoMedia({
     durationRef,
     isScrubbing,
     isScrubbingRef,
+    seekByFrames,
     timelineRef,
     seekFromPointer,
     seekToRatio,
@@ -155,6 +156,7 @@ export function VideoMedia({
       isScrubbingRef,
       loop,
       playbackError,
+      seekByFrames,
       seekFromPointer,
       seekToRatio,
       setLoopPoint,
@@ -175,6 +177,7 @@ export function VideoMedia({
       isScrubbingRef,
       loop,
       playbackError,
+      seekByFrames,
       seekFromPointer,
       seekToRatio,
       setLoopPoint,
@@ -256,7 +259,9 @@ export function VideoMedia({
           }}
           onSeeked={(e) => {
             syncTimelineFromVideo(e.currentTarget.currentTime);
-            startTimelineAnimation();
+            if (!e.currentTarget.paused && !e.currentTarget.ended) {
+              startTimelineAnimation();
+            }
           }}
           onTimeUpdate={(e) => {
             if (!isScrubbingRef.current) {

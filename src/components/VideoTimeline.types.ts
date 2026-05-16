@@ -22,6 +22,7 @@ export type VideoTimelineProps = {
   layout?: VideoTimelineLayout;
   loop: LoopState;
   playbackError: string | null;
+  seekByFrames: (deltaFrames: number) => void;
   seekFromPointer: (clientX: number) => void;
   seekToRatio: (ratio: number) => void;
   setLoopPoint: (point: "a" | "b") => void;

@@ -3,8 +3,13 @@ name: Release
 on:
   push:
     tags:
-      - "app-v*"
+      - "v*"
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag, e.g. v0.1.0-test"
+        required: true
+        default: "v0.1.0-test"
 
 permissions:
   contents: write
@@ -30,13 +35,25 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install dependencies
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libgtk-3-dev
+
+      - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build and publish Tauri app
@@ -44,5 +61,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: app-v__VERSION__
-          releaseName: "App v__VERSION__"
+          tagName: ${{ github.event.inputs.release_tag || github.ref_name }}
+          releaseName: "SIGMA Canvas Studio ${{ github.event.inputs.release_tag || github.ref_name }}"
+          releaseBody: "Cross-platform release."
+          releaseDraft: true
+          prerelease: false

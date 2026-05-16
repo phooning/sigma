@@ -11,6 +11,7 @@ export function VideoTimeline({
   layout = "inline",
   loop,
   playbackError,
+  seekByFrames,
   seekFromPointer,
   seekToRatio,
   setLoopPoint,
@@ -89,13 +90,13 @@ export function VideoTimeline({
               startTimelineAnimation();
             }}
             onKeyDown={(e) => {
-              const step = e.shiftKey ? 10 : 5;
+              const step = e.shiftKey ? 10 : 1;
               if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
                 e.preventDefault();
-                seekToRatio((currentTime - step) / duration);
+                seekByFrames(-step);
               } else if (e.key === "ArrowRight" || e.key === "ArrowUp") {
                 e.preventDefault();
-                seekToRatio((currentTime + step) / duration);
+                seekByFrames(step);
               } else if (e.key === "Home") {
                 e.preventDefault();
                 seekToRatio(0);

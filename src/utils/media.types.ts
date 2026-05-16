@@ -25,6 +25,7 @@ export interface MediaItem {
   url: string;
   fileSize?: number;
   duration?: number;
+  frameRate?: number;
   sourceWidth?: number;
   sourceHeight?: number;
   deferVideoLoad?: boolean;
