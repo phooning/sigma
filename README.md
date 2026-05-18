@@ -1,6 +1,8 @@
-# SIGMA Studio
+<p align="center">
+  <img src="public/sigma.svg" alt="Project Title" width="700" />
+</p>
 
-**SIGMA Studio** is a high-performance, local-first infinite spatial canvas crafted for organizing, visualizing, and cutting up media assets; from 4K videos to 16K hi-res photos and more, its optimized edit tooling allows you to frame, crop, and loop any media assets you wish to drop in.
+**SIGMA Canvas Studio** is a high-performance, local-first infinite spatial canvas crafted for organizing, visualizing, and cutting up media assets; from 4K videos to 16K hi-res photos and more, its optimized edit tooling allows you to frame, crop, and loop any media assets you wish to drop in.
 
 Built on Rust and TypeScript on the Tauri Framework, it offers a lightweight universal alternative to linear file browsing.
 

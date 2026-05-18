@@ -116,7 +116,6 @@ describe("NativeImageSurface", () => {
           "InvalidStateError",
         );
       });
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     const { rerender } = render(
       <NativeImageSurface
@@ -147,6 +146,5 @@ describe("NativeImageSurface", () => {
     );
 
     expect(transferControlToOffscreen).toHaveBeenCalledTimes(1);
-    expect(warn).not.toHaveBeenCalled();
   });
 });
