@@ -17,7 +17,8 @@
     "check": "node ./scripts/run-pre-push.mjs",
     "tauri": "tauri",
     "pw:install": "cross-env playwright install chromium",
-    "test:e2e": "cross-env playwright test"
+    "test:e2e": "cross-env playwright test",
+    "build:icons": "./scripts/build-icons.sh"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.8",
