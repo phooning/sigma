@@ -10,7 +10,7 @@
   justify-content: space-between;
   gap: var(--space-4);
   color: var(--text-default);
-  background: var(--surface-toolbar);
+  background: rgba(20, 20, 24, 0.72);
   border-bottom: var(--border-width) solid var(--border);
   box-shadow: var(--shadow-toolbar);
   backdrop-filter: blur(var(--blur-xl));
