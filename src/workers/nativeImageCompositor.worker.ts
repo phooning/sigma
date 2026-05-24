@@ -38,6 +38,7 @@ type CachedBitmap = {
   lastUsedAt: number;
   status: "loading" | "ready" | "error";
   version: number;
+  loadingPath?: string;
 };
 
 const BASE_ACTIVE_IMAGES = 24;
@@ -180,6 +181,20 @@ const getNativeImagePriorityScore = (
     "visibleAreaPx" | "focusWeight" | "centerWeight"
   >,
 ) => asset.visibleAreaPx * asset.focusWeight * (0.5 + asset.centerWeight);
+
+export const shouldQueueNativeImageAssetLoad = (
+  asset: Pick<
+    NativeImageManifestAsset,
+    "path" | "isPlaceholder" | "isFallback"
+  >,
+  existing?: Pick<CachedBitmap, "path" | "status" | "loadingPath">,
+) =>
+  !asset.isPlaceholder &&
+  !asset.isFallback &&
+  !(
+    (existing?.path === asset.path && existing.status !== "error") ||
+    existing?.loadingPath === asset.path
+  );
 
 const sortByPriority = (assets: NativeImageManifestAsset[]) =>
   [...assets].sort((left, right) => {
@@ -368,10 +383,15 @@ const reconcileResources = () => {
 
   for (const [id, entry] of cache) {
     const manifestAsset = manifestById.get(id);
-    if (!manifestAsset || manifestAsset.path !== entry.path) {
+    if (!manifestAsset) {
       releaseEntry(entry);
       cache.delete(id);
       continue;
+    }
+
+    if (entry.loadingPath && entry.loadingPath !== manifestAsset.path) {
+      entry.loadingPath = undefined;
+      entry.version += 1;
     }
 
     updateEntryPriority(entry, manifestAsset);
@@ -383,7 +403,7 @@ const reconcileResources = () => {
 
   for (const asset of desiredAssets) {
     const existing = cache.get(asset.id);
-    if (existing?.path === asset.path && existing.status !== "error") {
+    if (!shouldQueueNativeImageAssetLoad(asset, existing)) {
       continue;
     }
 
@@ -397,21 +417,28 @@ const reconcileResources = () => {
 async function loadAsset(asset: NativeImageManifestAsset) {
   const previous = cache.get(asset.id);
   const version = (previous?.version ?? 0) + 1;
-  if (previous) {
-    releaseEntry(previous);
-  }
+  if (previous?.bitmap && previous.status === "ready") {
+    previous.loadingPath = asset.path;
+    previous.version = version;
+    touchEntry(previous, asset);
+  } else {
+    if (previous) {
+      releaseEntry(previous);
+    }
 
-  cache.set(asset.id, {
-    id: asset.id,
-    path: asset.path,
-    url: asset.url,
-    bitmap: null,
-    byteSize: 0,
-    priorityScore: getNativeImagePriorityScore(asset),
-    lastUsedAt: ++cacheAccessClock,
-    status: "loading",
-    version,
-  });
+    cache.set(asset.id, {
+      id: asset.id,
+      path: asset.path,
+      url: asset.url,
+      bitmap: null,
+      byteSize: 0,
+      priorityScore: getNativeImagePriorityScore(asset),
+      lastUsedAt: ++cacheAccessClock,
+      status: "loading",
+      version,
+      loadingPath: asset.path,
+    });
+  }
 
   try {
     const response = await fetch(asset.url);
@@ -425,15 +452,22 @@ async function loadAsset(asset: NativeImageManifestAsset) {
     if (
       !current ||
       current.version !== version ||
-      current.path !== asset.path
+      (current.path !== asset.path && current.loadingPath !== asset.path)
     ) {
       bitmap.close();
       return;
     }
 
+    if (current.bitmap && current.path !== asset.path) {
+      releaseEntry(current);
+    }
+
+    current.path = asset.path;
+    current.url = asset.url;
     current.bitmap = bitmap;
     current.byteSize = bitmap.width * bitmap.height * 4;
     current.status = "ready";
+    current.loadingPath = undefined;
     self.postMessage({
       type: "asset-ready",
       itemId: asset.id,
@@ -443,7 +477,10 @@ async function loadAsset(asset: NativeImageManifestAsset) {
   } catch {
     const current = cache.get(asset.id);
     if (current && current.version === version) {
-      current.status = "error";
+      current.loadingPath = undefined;
+      if (!current.bitmap) {
+        current.status = "error";
+      }
     }
   }
 }

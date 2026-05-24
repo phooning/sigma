@@ -25,11 +25,13 @@ const renderImageActions = (
     mountDomImage = true,
     showDomImage = true,
     preferPreviewForNativeHandoff = false,
+    allowFullResFallback = false,
     zoom = 0.1,
   }: {
     mountDomImage?: boolean;
     showDomImage?: boolean;
     preferPreviewForNativeHandoff?: boolean;
+    allowFullResFallback?: boolean;
     zoom?: number;
   } = {},
 ) =>
@@ -42,6 +44,7 @@ const renderImageActions = (
       mountDomImage={mountDomImage}
       showDomImage={showDomImage}
       preferPreviewForNativeHandoff={preferPreviewForNativeHandoff}
+      allowFullResFallback={allowFullResFallback}
       handleItemPointerDown={vi.fn()}
       requestImagePreview={requestImagePreview}
       onReadyChange={onReadyChange}
@@ -76,6 +79,24 @@ describe("ImageActions LOD fallback", () => {
       "src",
       "asset:///images/full-res-preview-1024.png",
     );
+  });
+
+  it("uses the full-res URL as a native handoff fallback while previews are missing", () => {
+    renderImageActions(
+      {
+        ...imageItem,
+        imagePreview256Url: "asset:///images/full-res-preview-256.png",
+      },
+      vi.fn(),
+      vi.fn(),
+      {
+        allowFullResFallback: true,
+      },
+    );
+
+    const image = screen.getByAltText("canvas item");
+    expect(image).toHaveAttribute("src", "asset:///images/full-res.png");
+    expect(image).toHaveClass("image-lod-full");
   });
 
   it("reports readiness only after the current image source loads", () => {

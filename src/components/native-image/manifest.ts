@@ -14,6 +14,7 @@ const ACTIVE_IMAGE_Z_INDEX = 10_000;
 const NATIVE_IMAGE_PREVIEW_HANDOFF_MIN_LONG_EDGE = 4096;
 const IMAGE_PLACEHOLDER_URL =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%231f2937'/%3E%3C/svg%3E";
+const NATIVE_IMAGE_SOURCE_URL_PATTERN = /^(?:asset|blob|data|file|https?):/;
 
 export const shouldUseNativeImagePreviewHandoff = (
   item: Pick<
@@ -64,6 +65,7 @@ const getNativeImageSourceDescriptor = (item: MediaItem, zoom: number) => {
         lod,
         path,
         isPlaceholder: path === IMAGE_PLACEHOLDER_URL,
+        isFallback: path === fallbackUrl,
       };
     }
 
@@ -71,6 +73,7 @@ const getNativeImageSourceDescriptor = (item: MediaItem, zoom: number) => {
       lod,
       path: item.imagePreview256Path,
       isPlaceholder: false,
+      isFallback: false,
     };
   }
 
@@ -81,6 +84,7 @@ const getNativeImageSourceDescriptor = (item: MediaItem, zoom: number) => {
         lod,
         path,
         isPlaceholder: path === IMAGE_PLACEHOLDER_URL,
+        isFallback: true,
       };
     }
 
@@ -88,6 +92,7 @@ const getNativeImageSourceDescriptor = (item: MediaItem, zoom: number) => {
       lod,
       path: item.imagePreview1024Path,
       isPlaceholder: false,
+      isFallback: false,
     };
   }
 
@@ -97,6 +102,7 @@ const getNativeImageSourceDescriptor = (item: MediaItem, zoom: number) => {
         lod,
         path: item.imagePreview1024Path,
         isPlaceholder: false,
+        isFallback: false,
       };
     }
 
@@ -105,6 +111,7 @@ const getNativeImageSourceDescriptor = (item: MediaItem, zoom: number) => {
       lod,
       path,
       isPlaceholder: path === IMAGE_PLACEHOLDER_URL,
+      isFallback: true,
     };
   }
 
@@ -112,6 +119,7 @@ const getNativeImageSourceDescriptor = (item: MediaItem, zoom: number) => {
     lod,
     path: item.filePath,
     isPlaceholder: false,
+    isFallback: false,
   };
 };
 
@@ -119,7 +127,10 @@ export const getNativeImageSource = (item: MediaItem, zoom: number) => {
   const source = getNativeImageSourceDescriptor(item, zoom);
   return {
     ...source,
-    url: source.isPlaceholder ? source.path : convertFileSrc(source.path),
+    url:
+      source.isPlaceholder || NATIVE_IMAGE_SOURCE_URL_PATTERN.test(source.path)
+        ? source.path
+        : convertFileSrc(source.path),
   };
 };
 
@@ -129,7 +140,9 @@ export const isNativeImageSourceReady = (
   readyPath?: string,
 ) => {
   const source = getNativeImageSourceDescriptor(item, zoom);
-  return !source.isPlaceholder && readyPath === source.path;
+  return (
+    !source.isPlaceholder && !source.isFallback && readyPath === source.path
+  );
 };
 
 export const getNativeImagePriorityScore = (
@@ -216,6 +229,8 @@ export function buildNativeImageManifest({
         focusWeight: isSelected ? 2.5 : 1,
         centerWeight,
         isSelected,
+        isPlaceholder: source.isPlaceholder,
+        isFallback: source.isFallback,
       },
     ];
   });

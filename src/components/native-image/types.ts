@@ -20,6 +20,8 @@ export type NativeImageManifestAsset = {
   focusWeight: number;
   centerWeight: number;
   isSelected: boolean;
+  isPlaceholder?: boolean;
+  isFallback?: boolean;
 };
 
 export type NativeImageManifest = {

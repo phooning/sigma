@@ -2,15 +2,19 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MediaItem } from "../utils/media.types";
+import { getImageLod } from "../utils/videoUtils";
 import { CanvasMediaItem } from "./CanvasMediaItem";
 import type { CanvasMediaItemProps } from "./CanvasMediaItem.types";
+import { isNativeImageSourceReady } from "./native-image/manifest";
 
 vi.mock("./ImageActions", () => ({
   ImageActions: ({
+    allowFullResFallback,
     mountDomImage,
     onReadyChange,
     showDomImage,
   }: {
+    allowFullResFallback: boolean;
     mountDomImage: boolean;
     onReadyChange?: (isReady: boolean) => void;
     showDomImage: boolean;
@@ -19,6 +23,7 @@ vi.mock("./ImageActions", () => ({
       <button
         type="button"
         data-testid="image-ready"
+        data-full-res-fallback={allowFullResFallback}
         data-visible={showDomImage}
         onClick={() => onReadyChange?.(true)}
       >
@@ -178,6 +183,122 @@ describe("CanvasMediaItem readiness mask", () => {
     });
 
     expect(mask).toHaveStyle({ opacity: "0" });
+  });
+
+  it("keeps DOM visible when native ready path belongs to the previous LOD", () => {
+    const animationFrames: FrameRequestCallback[] = [];
+    let animationFrameHandle = 0;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      animationFrames.push(callback);
+      animationFrameHandle += 1;
+      return animationFrameHandle;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+
+    const itemWithPreview: MediaItem = {
+      ...imageItem,
+      width: 3000,
+      height: 2000,
+      sourceWidth: 3000,
+      sourceHeight: 2000,
+      imagePreview1024Path: "/images/full-res-preview-1024.png",
+      imagePreview1024Url: "asset:///images/full-res-preview-1024.png",
+    };
+    const zoom = 0.1;
+
+    expect(getImageLod(zoom, itemWithPreview)).toBe("preview1024");
+    expect(
+      isNativeImageSourceReady(
+        itemWithPreview,
+        zoom,
+        "/images/full-res-preview-1024.png",
+      ),
+    ).toBe(true);
+    expect(
+      isNativeImageSourceReady(itemWithPreview, zoom, "/images/full-res.png"),
+    ).toBe(false);
+
+    const { container, rerender } = render(
+      <CanvasMediaItem
+        {...baseProps}
+        item={itemWithPreview}
+        nativeImageReadyPath="/images/full-res.png"
+        useNativeImageSurface
+        zoom={zoom}
+      />,
+    );
+
+    expect(screen.getByTestId("image-ready")).toHaveAttribute(
+      "data-visible",
+      "true",
+    );
+    expect(screen.getByTestId("image-ready")).toHaveAttribute(
+      "data-full-res-fallback",
+      "true",
+    );
+
+    rerender(
+      <CanvasMediaItem
+        {...baseProps}
+        item={itemWithPreview}
+        isSelected
+        nativeImageReadyPath="/images/full-res.png"
+        useNativeImageSurface
+        zoom={zoom}
+      />,
+    );
+
+    expect(screen.getByTestId("image-ready")).toHaveAttribute(
+      "data-visible",
+      "true",
+    );
+    expect(screen.getByTestId("image-ready")).toHaveAttribute(
+      "data-full-res-fallback",
+      "true",
+    );
+
+    fireEvent.click(screen.getByTestId("image-ready"));
+    expect(animationFrames).toHaveLength(1);
+
+    act(() => {
+      animationFrames[0]?.(16);
+    });
+
+    expect(container.querySelector(".media-visibility-mask")).toHaveStyle({
+      opacity: "0",
+    });
+
+    rerender(
+      <CanvasMediaItem
+        {...baseProps}
+        item={itemWithPreview}
+        nativeImageReadyPath="/images/full-res-preview-1024.png"
+        useNativeImageSurface
+        zoom={zoom}
+      />,
+    );
+
+    expect(screen.queryByTestId("image-ready")).not.toBeInTheDocument();
+  });
+
+  it("does not use full-res DOM fallback for unready unselected native images without a prior full-res path", () => {
+    render(
+      <CanvasMediaItem
+        {...baseProps}
+        item={{
+          ...imageItem,
+          imagePreview1024Path: "/images/full-res-preview-1024.png",
+          imagePreview1024Url: "asset:///images/full-res-preview-1024.png",
+        }}
+        useNativeImageSurface
+        zoom={0.1}
+      />,
+    );
+
+    expect(screen.getByTestId("image-ready")).toHaveAttribute(
+      "data-visible",
+      "true",
+    );
   });
 
   it("skips the mask while the item is actively transforming", () => {

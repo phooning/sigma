@@ -168,7 +168,10 @@ const getImagePreviewUrl = (
   item: MediaItem,
   lod: ImageLod,
   preferPreview = false,
+  allowFullResFallback = false,
 ) => {
+  if (allowFullResFallback) return item.url;
+
   const fallbackUrl =
     item.thumbnailUrl ?? item.lowResProxyUrl ?? IMAGE_PLACEHOLDER_URL;
 
@@ -229,6 +232,7 @@ export function ImageActions({
   mountDomImage,
   showDomImage,
   preferPreviewForNativeHandoff,
+  allowFullResFallback,
   handleItemPointerDown,
   requestImagePreview,
   onReadyChange,
@@ -241,6 +245,7 @@ export function ImageActions({
   mountDomImage: boolean;
   showDomImage: boolean;
   preferPreviewForNativeHandoff: boolean;
+  allowFullResFallback: boolean;
   handleItemPointerDown: (id: string, e: React.PointerEvent) => void;
   requestImagePreview: (item: MediaItem, maxDimension: 256 | 1024) => void;
   onReadyChange?: (isReady: boolean) => void;
@@ -251,7 +256,9 @@ export function ImageActions({
     item,
     lod,
     preferPreviewForNativeHandoff,
+    allowFullResFallback,
   );
+  const isShowingFullRes = displayUrl === item.url;
   const imageRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
@@ -297,9 +304,7 @@ export function ImageActions({
             ref={imageRef}
             className={[
               "media-content",
-              lod === "full" && !preferPreviewForNativeHandoff
-                ? "image-lod-full"
-                : "image-lod-preview",
+              isShowingFullRes ? "image-lod-full" : "image-lod-preview",
             ].join(" ")}
             src={displayUrl}
             alt="canvas item"

@@ -178,20 +178,28 @@ export const CanvasMediaItem = memo(function CanvasMediaItem({
     shouldUseNativePreviewHandoff &&
     hasNativePreviewHandoffSource &&
     (isTransforming || isNativePreviewHandoffHolding);
+
   const shouldPreferNativePreviewHandoff =
     item.type === "image" &&
     shouldUseNativePreviewHandoff &&
     hasNativePreviewHandoffSource;
+
+  const shouldUseFullResDomFallback =
+    item.type === "image" && useNativeImageSurface && !nativeImageReady;
+
   const shouldMountDomImage =
     item.type === "image" &&
     (!useNativeImageSurface ||
+      !nativeImageReady ||
       isTransforming ||
       isCropping ||
       isCropEditing ||
       (shouldUseNativePreviewHandoff && hasNativePreviewHandoffSource));
+
   const shouldShowDomImage =
     item.type === "image" &&
     (!useNativeImageSurface ||
+      !nativeImageReady ||
       isTransforming ||
       isCropping ||
       isCropEditing ||
@@ -257,6 +265,7 @@ export const CanvasMediaItem = memo(function CanvasMediaItem({
           mountDomImage={shouldMountDomImage}
           showDomImage={shouldShowDomImage}
           preferPreviewForNativeHandoff={shouldPreferNativePreviewHandoff}
+          allowFullResFallback={shouldUseFullResDomFallback}
           handleItemPointerDown={handleItemPointerDown}
           requestImagePreview={requestImagePreview}
           onReadyChange={setIsMediaReady}

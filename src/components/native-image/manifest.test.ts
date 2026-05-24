@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { MediaItem } from "../../utils/media.types";
-import { buildNativeImageManifest } from "./manifest";
+import {
+  buildNativeImageManifest,
+  getNativeImageSource,
+  isNativeImageSourceReady,
+} from "./manifest";
 
 vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: (path: string) => `asset://${path}`,
@@ -21,6 +25,30 @@ const baseImage = (overrides: Partial<MediaItem> = {}): MediaItem => ({
 });
 
 describe("buildNativeImageManifest", () => {
+  it("passes fallback image URLs to the worker without converting them as file paths", () => {
+    const source = getNativeImageSource(
+      baseImage({
+        thumbnailUrl: "asset:///images/example-thumbnail.png",
+      }),
+      0.1,
+    );
+
+    expect(source).toMatchObject({
+      path: "asset:///images/example-thumbnail.png",
+      url: "asset:///images/example-thumbnail.png",
+      isFallback: true,
+    });
+    expect(
+      isNativeImageSourceReady(
+        baseImage({
+          thumbnailUrl: "asset:///images/example-thumbnail.png",
+        }),
+        0.1,
+        "asset:///images/example-thumbnail.png",
+      ),
+    ).toBe(false);
+  });
+
   it("derives cropped source ratios and preview requests for visible images", () => {
     const item = baseImage({
       crop: {
@@ -86,6 +114,7 @@ describe("buildNativeImageManifest", () => {
       id: "image-1",
       path: expect.stringMatching(/^data:image\/svg\+xml/),
       url: expect.stringMatching(/^data:image\/svg\+xml/),
+      isFallback: true,
     });
     expect(manifest.assets[1]).toMatchObject({
       id: "with-preview",

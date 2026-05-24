@@ -4,6 +4,7 @@ import {
   compareNativeImageCacheEvictionCandidates,
   getNativeImageResourcePolicy,
   selectDesiredNativeImageAssets,
+  shouldQueueNativeImageAssetLoad,
 } from "./nativeImageCompositor.worker";
 
 const asset = (
@@ -102,5 +103,50 @@ describe("native image resource policy", () => {
     });
 
     expect(desired.map((candidate) => candidate.id)).toContain("selected");
+  });
+
+  it("queues a new LOD path while retaining the last ready bitmap", () => {
+    expect(
+      shouldQueueNativeImageAssetLoad(
+        asset("image", { path: "/preview.png" }),
+        {
+          path: "/full.png",
+          status: "ready",
+        },
+      ),
+    ).toBe(true);
+
+    expect(
+      shouldQueueNativeImageAssetLoad(
+        asset("image", { path: "/preview.png" }),
+        {
+          loadingPath: "/preview.png",
+          path: "/full.png",
+          status: "ready",
+        },
+      ),
+    ).toBe(false);
+  });
+
+  it("does not queue placeholder native image loads", () => {
+    expect(
+      shouldQueueNativeImageAssetLoad(
+        asset("placeholder", {
+          isPlaceholder: true,
+          path: "data:image/svg+xml,%3Csvg%3E%3C/svg%3E",
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("does not queue fallback native image loads", () => {
+    expect(
+      shouldQueueNativeImageAssetLoad(
+        asset("fallback", {
+          isFallback: true,
+          path: "asset:///images/fallback-thumbnail.png",
+        }),
+      ),
+    ).toBe(false);
   });
 });
