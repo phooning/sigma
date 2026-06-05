@@ -742,10 +742,28 @@ pub fn manage_native_video_state<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     }
 }
 
+#[cfg(target_os = "macos")]
+fn configure_system_macos_window_frame<R: tauri::Runtime>(
+    app: &tauri::App<R>,
+) -> tauri::Result<()> {
+    use tauri::Manager;
+
+    if let Some(window) = app.get_webview_window("main") {
+        window.set_decorations(true)?;
+        window.set_shadow(true)?;
+        window.set_title_bar_style(tauri::TitleBarStyle::Overlay)?;
+    }
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn configure_tauri_builder<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     builder
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            configure_system_macos_window_frame(app)?;
+
             let app_handle = app.handle().clone();
             app.manage(native_video::NativeVideoState::new(&app_handle));
             let max_parallel = std::thread::available_parallelism()
