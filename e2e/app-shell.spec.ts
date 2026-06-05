@@ -3,11 +3,11 @@ import {
   gotoApp,
   itemCountLabel,
   openSettings,
-  seedCanvasItems
+  seedCanvasItems,
 } from "./helpers";
 
 test("opens the settings dialog from the HUD and closes it with Escape", async ({
-  page
+  page,
 }) => {
   await gotoApp(page);
   await openSettings(page);
@@ -23,7 +23,7 @@ test("opens the settings dialog from the HUD and closes it with Escape", async (
 });
 
 test("uses the HUD as the draggable header and keeps its buttons non-draggable", async ({
-  page
+  page,
 }) => {
   await gotoApp(page);
 
@@ -46,13 +46,13 @@ test("uses the HUD as the draggable header and keeps its buttons non-draggable",
   for (const index of [0, 1, 2, 3, 4]) {
     await expect(buttons.nth(index)).toHaveAttribute(
       "data-tauri-drag-region",
-      "false"
+      "false",
     );
   }
 });
 
 test("keeps the macOS HUD controls flush with the rounded frame edge", async ({
-  page
+  page,
 }) => {
   await gotoApp(page, { platform: "macos" });
 
@@ -66,34 +66,34 @@ test("keeps the macOS HUD controls flush with the rounded frame edge", async ({
   await expect(firstHudButton).toHaveAttribute("aria-label", "Open settings");
   await expect(firstHudButton).toHaveCSS("margin-left", "0px");
   await expect(page.getByRole("button", { name: "Close window" })).toHaveCount(
-    0
+    0,
   );
   await expect(
-    page.getByRole("button", { name: "Minimize window" })
+    page.getByRole("button", { name: "Minimize window" }),
   ).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Maximize window" })
+    page.getByRole("button", { name: "Maximize window" }),
   ).toHaveCount(0);
   await expect(header).toHaveCSS("border-top-left-radius", "10px");
   await expect(header).toHaveCSS("border-top-right-radius", "10px");
 });
 
 test("uses singular and plural item-count labels in the HUD", async ({
-  page
+  page,
 }) => {
   await gotoApp(page);
   await expect(page.locator(".ui-overlay .item-count").first()).toHaveText(
-    itemCountLabel(0)
+    itemCountLabel(0),
   );
 
   await seedCanvasItems(page, 1, "image");
   await expect(page.locator(".ui-overlay .item-count").first()).toHaveText(
-    itemCountLabel(1)
+    itemCountLabel(1),
   );
 });
 
 test("persists the selected canvas background pattern across reloads", async ({
-  page
+  page,
 }) => {
   await gotoApp(page);
   await openSettings(page);
@@ -110,12 +110,12 @@ test("persists the selected canvas background pattern across reloads", async ({
   await openSettings(page);
   await page.getByRole("tab", { name: "Appearance" }).click();
   await expect(
-    page.getByRole("radio", { name: "Grid background" })
+    page.getByRole("radio", { name: "Grid background" }),
   ).toHaveAttribute("data-state", "on");
 });
 
 test("shows the development overlay when debug mode is enabled", async ({
-  page
+  page,
 }) => {
   await gotoApp(page);
   await openSettings(page);
@@ -140,7 +140,7 @@ test("renders a minimap summary after media is loaded", async ({ page }) => {
   await expect(minimap).toBeVisible();
   await expect(minimap.locator(".canvas-minimap__label")).toHaveText("1.00x");
   await expect(minimap.locator(".canvas-minimap__count")).toHaveText(
-    "0 of 6 selected"
+    "0 of 6 selected",
   );
   await expect(canvas).toBeVisible();
   await expect(canvas).toHaveCSS("width", "220px");
