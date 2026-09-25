@@ -22,19 +22,20 @@ name = "tauri_app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["protocol-asset", "test"] }
-tauri-plugin-opener = "2"
+tauri = { version = "2.11.6", features = ["protocol-asset", "test"] }
+tauri-plugin-opener = "2.5.5"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["io-util", "macros", "process", "sync", "time"] }
 libc = "0.2"
-tauri-plugin-fs = "2.4.5"
-tauri-plugin-dialog = "2.6.0"
+tauri-plugin-fs = "2.5.2"
+tauri-plugin-dialog = "2.7.3"
 tauri-plugin-os = "2.3.2"
-tauri-plugin-shell = "2.3.5"
+tauri-plugin-shell = "2.3.6"
+tauri-plugin-persisted-scope = { version = "2.3.8", features = ["protocol-asset"] }
 image = { version = "0.25", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"

@@ -1,6 +1,17 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
 export type CanvasSeedKind = "image" | "deferredVideo";
+export type TauriPlatform =
+  | "linux"
+  | "macos"
+  | "windows"
+  | "ios"
+  | "android"
+  | "freebsd"
+  | "dragonfly"
+  | "netbsd"
+  | "openbsd"
+  | "solaris";
 
 export type FrameSamplerResult = {
   frameDeltas: number[];
@@ -29,6 +40,16 @@ type TauriEventPluginInternals = {
   unregisterListener: (event: string, eventId: number) => void;
 };
 
+type TauriOsPluginInternals = {
+  arch: string;
+  eol: string;
+  exe_extension: string;
+  family: "unix" | "windows";
+  os_type: TauriPlatform;
+  platform: TauriPlatform;
+  version: string;
+};
+
 type TauriInternals = {
   metadata: {
     currentWindow: { label: string };
@@ -49,6 +70,7 @@ type SigmaE2EWindow = Window &
     __SIGMA_E2E__: SigmaE2EHandle;
     __TAURI_EVENT_PLUGIN_INTERNALS__: TauriEventPluginInternals;
     __TAURI_INTERNALS__: TauriInternals;
+    __TAURI_OS_PLUGIN_INTERNALS__: TauriOsPluginInternals;
   };
 
 const MOCK_IMAGE_DATA_URL =
@@ -68,13 +90,17 @@ const PLAYWRIGHT_VIDEO_FIXTURE_URL = "/fixtures/generated-lod-test-1080p.webm";
 
 export async function installTauriMocks(
   page: Page,
-  options: { disableNativeImageSurface?: boolean } = {},
+  options: {
+    disableNativeImageSurface?: boolean;
+    platform?: TauriPlatform;
+  } = {},
 ) {
   await page.addInitScript(
     ({
       mockImageDataUrl,
       playwrightVideoFixtureUrl,
       disableNativeImageSurface,
+      platform,
     }) => {
       type Callback = (payload: unknown) => void;
       type ListenerRecord = {
@@ -105,6 +131,7 @@ export async function installTauriMocks(
       const invokeCalls: InvokeCall[] = [];
       const invokeFailures: InvokeFailure[] = [];
       const tauriWindow = window as SigmaE2EWindow;
+      const osFamily = platform === "windows" ? "windows" : "unix";
       let nextCallbackId = 1;
       let nextEventId = 1;
       let openDialogResult: string | string[] | null = null;
@@ -210,6 +237,16 @@ export async function installTauriMocks(
         },
       };
 
+      tauriWindow.__TAURI_OS_PLUGIN_INTERNALS__ = {
+        arch: "x86_64",
+        eol: osFamily === "windows" ? "\r\n" : "\n",
+        exe_extension: osFamily === "windows" ? "exe" : "",
+        family: osFamily,
+        os_type: platform,
+        platform,
+        version: "playwright",
+      };
+
       tauriWindow.__TAURI_INTERNALS__ = {
         metadata: {
           currentWindow: { label: "main" },
@@ -292,6 +329,12 @@ export async function installTauriMocks(
 
             case "plugin:opener|reveal_item_in_dir":
               return null;
+
+            case "plugin:os|hostname":
+              return "playwright-host";
+
+            case "plugin:os|locale":
+              return "en-US";
 
             case "plugin:shell|execute": {
               if (objectArgs.program === "gpu-info") {
@@ -457,13 +500,17 @@ export async function installTauriMocks(
       mockImageDataUrl: MOCK_IMAGE_DATA_URL,
       playwrightVideoFixtureUrl: PLAYWRIGHT_VIDEO_FIXTURE_URL,
       disableNativeImageSurface: options.disableNativeImageSurface ?? false,
+      platform: options.platform ?? "linux",
     },
   );
 }
 
 export async function gotoApp(
   page: Page,
-  options: { disableNativeImageSurface?: boolean } = {},
+  options: {
+    disableNativeImageSurface?: boolean;
+    platform?: TauriPlatform;
+  } = {},
 ) {
   await installTauriMocks(page, options);
   await page.goto("/");

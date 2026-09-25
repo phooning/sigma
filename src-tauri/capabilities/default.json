@@ -4,31 +4,15 @@
   "description": "Capability for the main window",
   "windows": ["main"],
   "permissions": [
-    "core:default",
-    "opener:default",
-    "fs:default",
-    "dialog:default",
-    "dialog:allow-save",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "opener:allow-reveal-item-in-dir",
+    "fs:allow-read-text-file",
     "fs:allow-write-text-file",
-    "os:default",
-    {
-      "identifier": "shell:allow-execute",
-      "allow": [
-        {
-          "name": "gpu-info",
-          "cmd": "system_profiler",
-          "args": ["SPDisplaysDataType", "-json"]
-        },
-        {
-          "name": "gpu-usage",
-          "cmd": "ioreg",
-          "args": ["-l", "-w", "0", "-c", "AGXStatistics"]
-        }
-      ]
-    },
-    "core:window:default",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "os:allow-platform",
     "core:window:allow-start-dragging",
-    "core:event:default",
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-close",

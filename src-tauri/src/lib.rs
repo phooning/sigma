@@ -17,6 +17,8 @@ mod native_video;
 const MEDIA_CACHE_DIRS: [&str; 2] = ["image-previews", "video-thumbnails"];
 const MEDIA_CACHE_MAX_BYTES: u64 = 512 * 1024 * 1024;
 const MEDIA_CACHE_MAX_AGE_SECS: u64 = 90 * 24 * 60 * 60;
+const MAX_IMAGE_PREVIEW_DIMENSION: u32 = 4096;
+const MAX_IMAGE_PROBE_BATCH: usize = 64;
 
 static MEDIA_CACHE_HITS: AtomicU64 = AtomicU64::new(0);
 static MEDIA_CACHE_MISSES: AtomicU64 = AtomicU64::new(0);
@@ -63,8 +65,54 @@ struct CropRatio {
     box_height: Option<f64>,
 }
 
+pub(crate) fn validate_media_source_path<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    path: &str,
+) -> Result<PathBuf, String> {
+    validate_scoped_path(app, path, "Media source")
+}
+
+fn validate_scoped_path<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    path: &str,
+    label: &str,
+) -> Result<PathBuf, String> {
+    let path = PathBuf::from(path);
+    if !path.is_absolute() {
+        return Err(format!("{label} path must be absolute"));
+    }
+    if !app.asset_protocol_scope().is_allowed(&path) {
+        return Err(format!("{label} path is outside the application file scope"));
+    }
+    Ok(path)
+}
+
+fn validate_video_output_path<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    path: &str,
+) -> Result<PathBuf, String> {
+    let output_path = PathBuf::from(path);
+    if !output_path.is_absolute() {
+        return Err("Video output path must be absolute".to_string());
+    }
+
+    let scope = app.asset_protocol_scope();
+    let exact_path_allowed = scope.is_allowed(&output_path);
+    let dialog_path_before_mp4_suffix_allowed =
+        output_path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("mp4"))
+            && scope.is_allowed(output_path.with_extension(""));
+    if !exact_path_allowed && !dialog_path_before_mp4_suffix_allowed {
+        return Err("Video output path is outside the application file scope".to_string());
+    }
+    Ok(output_path)
+}
+
 #[tauri::command]
-async fn probe_media(path: String) -> Result<MediaMetadata, String> {
+async fn probe_media<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    path: String,
+) -> Result<MediaMetadata, String> {
+    validate_media_source_path(&app, &path)?;
     tauri::async_runtime::spawn_blocking(move || probe_media_blocking(path))
         .await
         .map_err(|err| format!("Failed to probe media: {err}"))?
@@ -147,7 +195,16 @@ fn probe_media_blocking(path: String) -> Result<MediaMetadata, String> {
 }
 
 #[tauri::command]
-async fn probe_images(paths: Vec<String>) -> Result<Vec<ImageProbe>, String> {
+async fn probe_images<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    paths: Vec<String>,
+) -> Result<Vec<ImageProbe>, String> {
+    if paths.len() > MAX_IMAGE_PROBE_BATCH {
+        return Err(format!("Image probe batch cannot exceed {MAX_IMAGE_PROBE_BATCH} files"));
+    }
+    for path in &paths {
+        validate_media_source_path(&app, path)?;
+    }
     tauri::async_runtime::spawn_blocking(move || {
         paths.into_iter().map(probe_image_blocking).collect::<Result<Vec<_>, _>>()
     })
@@ -344,6 +401,7 @@ async fn generate_video_thumbnail<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     path: String,
 ) -> Result<Option<String>, String> {
+    validate_media_source_path(&app, &path)?;
     tauri::async_runtime::spawn_blocking(move || generate_video_thumbnail_blocking(app, path))
         .await
         .map_err(|err| format!("Failed to generate video thumbnail: {err}"))?
@@ -412,6 +470,7 @@ async fn generate_image_preview<R: tauri::Runtime>(
     path: String,
     max_dimension: u32,
 ) -> Result<Option<String>, String> {
+    validate_media_source_path(&app, &path)?;
     tauri::async_runtime::spawn_blocking(move || {
         generate_image_preview_blocking(app, path, max_dimension)
     })
@@ -424,8 +483,10 @@ pub(crate) fn generate_image_preview_blocking<R: tauri::Runtime>(
     path: String,
     max_dimension: u32,
 ) -> Result<Option<String>, String> {
-    if max_dimension == 0 {
-        return Err("Image preview size must be greater than zero".to_string());
+    if !(1..=MAX_IMAGE_PREVIEW_DIMENSION).contains(&max_dimension) {
+        return Err(format!(
+            "Image preview size must be between 1 and {MAX_IMAGE_PREVIEW_DIMENSION} pixels"
+        ));
     }
 
     let cache_root = media_cache_root(&app)?;
@@ -470,7 +531,8 @@ pub(crate) fn generate_image_preview_blocking<R: tauri::Runtime>(
 }
 
 #[tauri::command]
-async fn request_decode(
+async fn request_decode<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     arbiter: tauri::State<'_, decode_arbiter::DecodeArbiter>,
     item_id: String,
     path: String,
@@ -478,20 +540,29 @@ async fn request_decode(
     generation: u64,
     priority: decode_arbiter::DecodePriority,
 ) -> Result<Option<String>, String> {
+    let path = validate_media_source_path(&app, &path)?;
     arbiter
-        .request_decode(item_id, PathBuf::from(path), lod, generation, priority)
+        .request_decode(item_id, path, lod, generation, priority)
         .await
         .map(|path| path.map(|path| path.to_string_lossy().into_owned()))
 }
 
 #[tauri::command]
-async fn save_media_screenshot(
+async fn save_media_screenshot<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     path: String,
     media_type: String,
     output_directory: Option<String>,
     current_time: Option<f64>,
     crop: CropRatio,
 ) -> Result<String, String> {
+    validate_media_source_path(&app, &path)?;
+    if let Some(output_directory) = output_directory.as_deref() {
+        validate_scoped_path(&app, output_directory, "Screenshot output directory")?;
+    }
+    if media_type != "video" && media_type != "image" {
+        return Err("Media type must be either video or image".to_string());
+    }
     tauri::async_runtime::spawn_blocking(move || {
         save_media_screenshot_blocking(path, media_type, output_directory, current_time, crop)
     })
@@ -500,13 +571,16 @@ async fn save_media_screenshot(
 }
 
 #[tauri::command]
-async fn export_video(
+async fn export_video<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     path: String,
     output_path: String,
     crop: CropRatio,
     start_time: Option<f64>,
     end_time: Option<f64>,
 ) -> Result<String, String> {
+    validate_media_source_path(&app, &path)?;
+    validate_video_output_path(&app, &output_path)?;
     tauri::async_runtime::spawn_blocking(move || {
         export_video_blocking(path, output_path, crop, start_time, end_time)
     })
@@ -742,10 +816,28 @@ pub fn manage_native_video_state<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     }
 }
 
+#[cfg(target_os = "macos")]
+fn configure_system_macos_window_frame<R: tauri::Runtime>(
+    app: &tauri::App<R>,
+) -> tauri::Result<()> {
+    use tauri::Manager;
+
+    if let Some(window) = app.get_webview_window("main") {
+        window.set_decorations(true)?;
+        window.set_shadow(true)?;
+        window.set_title_bar_style(tauri::TitleBarStyle::Overlay)?;
+    }
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn configure_tauri_builder<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     builder
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            configure_system_macos_window_frame(app)?;
+
             let app_handle = app.handle().clone();
             app.manage(native_video::NativeVideoState::new(&app_handle));
             let max_parallel = std::thread::available_parallelism()
@@ -782,6 +874,7 @@ pub fn run() {
             .plugin(tauri_plugin_os::init())
             .plugin(tauri_plugin_dialog::init())
             .plugin(tauri_plugin_fs::init())
+            .plugin(tauri_plugin_persisted_scope::init())
             .plugin(tauri_plugin_shell::init())
             .plugin(tauri_plugin_opener::init()),
     )
@@ -811,6 +904,37 @@ mod tests {
             .expect("system clock should be after Unix epoch")
             .as_nanos();
         std::env::temp_dir().join(format!("sigma-{name}-{}-{test_id}", std::process::id()))
+    }
+
+    #[test]
+    fn media_commands_require_paths_from_the_runtime_scope() {
+        let app = tauri::test::mock_app();
+        let scope = app.asset_protocol_scope();
+        let root = unique_temp_dir("media-scope");
+        let selected_source = root.join("selected.mov");
+        let unselected_source = root.join("unselected.mov");
+        let selected_output = root.join("export");
+        let suffixed_output = root.join("export.mp4");
+
+        scope.allow_file(&selected_source).expect("allow selected source");
+        scope.allow_file(&selected_output).expect("allow selected output");
+
+        assert_eq!(
+            validate_media_source_path(app.handle(), selected_source.to_str().expect("UTF-8 path"))
+                .expect("selected source should be allowed"),
+            selected_source
+        );
+        assert!(validate_media_source_path(
+            app.handle(),
+            unselected_source.to_str().expect("UTF-8 path")
+        )
+        .is_err());
+        assert!(validate_media_source_path(app.handle(), "relative.mov").is_err());
+        assert_eq!(
+            validate_video_output_path(app.handle(), suffixed_output.to_str().expect("UTF-8 path"))
+                .expect("the UI may append an MP4 suffix to the selected path"),
+            suffixed_output
+        );
     }
 
     #[test]

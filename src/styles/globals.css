@@ -136,6 +136,7 @@
   --radius-sm-app: 0.375rem;
   --radius-md-app: var(--radius);
   --radius-round: 999rem;
+  --window-frame-radius: 0.625rem;
 
   --blur-sm: 0.3125rem;
   --blur-md: 0.5rem;
@@ -277,4 +278,18 @@
     color: var(--primary-foreground);
     background: var(--primary);
   }
+}
+
+html:has(.window-controls-macos),
+body:has(.window-controls-macos) {
+  background: transparent;
+}
+
+body:has(.window-controls-macos),
+body:has(.window-controls-macos) #root,
+body:has(.window-controls-macos) .canvas-container,
+body:has(.window-controls-macos) .canvas-background,
+body:has(.window-controls-macos) .native-image-surface,
+body:has(.window-controls-macos) .native-video-surface {
+  border-radius: var(--window-frame-radius);
 }

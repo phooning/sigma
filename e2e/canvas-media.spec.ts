@@ -312,13 +312,15 @@ test("passes a real non-zero currentTime when saving a video screenshot", async 
   const screenshotCall = calls.find(
     (call) => call.cmd === "save_media_screenshot",
   );
-  expect(screenshotCall).toBeTruthy();
-  expect((screenshotCall?.args as { path?: string }).path).toBe(
-    videoFixturePath,
-  );
-  expect(
-    (screenshotCall?.args as { currentTime?: number }).currentTime ?? 0,
-  ).toBeGreaterThan(2);
+  if (!screenshotCall) {
+    throw new Error("save_media_screenshot was not invoked");
+  }
+  const screenshotArgs = screenshotCall.args as {
+    path?: string;
+    currentTime?: number;
+  };
+  expect(screenshotArgs.path).toBe(videoFixturePath);
+  expect(screenshotArgs.currentTime ?? 0).toBeGreaterThan(2);
 });
 
 test("keeps playback aligned after dragging the playhead during active playback", async ({
