@@ -234,12 +234,14 @@ impl Arbiter {
                 decision = apply_hysteresis(
                     previous,
                     decision,
-                    overloaded,
-                    upgrades_allowed,
-                    remaining_budget,
-                    remaining_vram_budget,
-                    now,
-                    profile,
+                    HysteresisContext {
+                        overloaded,
+                        upgrades_allowed,
+                        remaining_budget,
+                        remaining_vram_budget,
+                        now,
+                        profile,
+                    },
                 );
             }
 
@@ -277,17 +279,21 @@ fn choose_candidate(
     None
 }
 
-fn apply_hysteresis(
-    previous: &QualityDecision,
-    mut next: QualityDecision,
+struct HysteresisContext<'a> {
     overloaded: bool,
     upgrades_allowed: bool,
     remaining_budget: u64,
     remaining_vram_budget: u64,
     now: u64,
-    profile: &PerformanceProfile,
+    profile: &'a PerformanceProfile,
+}
+
+fn apply_hysteresis(
+    previous: &QualityDecision,
+    mut next: QualityDecision,
+    context: HysteresisContext<'_>,
 ) -> QualityDecision {
-    let dwell_ms = now.saturating_sub(previous.last_changed_at_ms);
+    let dwell_ms = context.now.saturating_sub(previous.last_changed_at_ms);
     let previous_rank = previous.tier.id;
     let next_rank = next.tier.id;
 
@@ -299,15 +305,17 @@ fn apply_hysteresis(
     let is_upgrade = next_rank > previous_rank;
     let is_downgrade = next_rank < previous_rank || next.state != StreamState::Active;
 
-    if is_upgrade && (!upgrades_allowed || dwell_ms < MIN_UPGRADE_DWELL_MS) {
+    if is_upgrade && (!context.upgrades_allowed || dwell_ms < MIN_UPGRADE_DWELL_MS) {
         let previous_cost = tier_cost_bytes_per_sec(
             previous.decode_width,
             previous.decode_height,
             previous.fps,
-            profile,
+            context.profile,
         );
         let previous_vram = tier_vram_bytes(previous.decode_width, previous.decode_height);
-        if previous_cost <= remaining_budget && previous_vram <= remaining_vram_budget {
+        if previous_cost <= context.remaining_budget
+            && previous_vram <= context.remaining_vram_budget
+        {
             let mut held = previous.clone();
             held.predicted_cost_bytes_per_sec = previous_cost;
             held.reason =
@@ -316,24 +324,100 @@ fn apply_hysteresis(
         }
     }
 
-    if is_downgrade && !overloaded && dwell_ms < MIN_DOWNGRADE_DWELL_MS {
+    if is_downgrade && !context.overloaded && dwell_ms < MIN_DOWNGRADE_DWELL_MS {
         let mut held = previous.clone();
         held.reason = "held by downgrade hysteresis to avoid quality flapping".into();
         return held;
     }
 
-    next.last_changed_at_ms = now;
-    if is_downgrade && overloaded {
+    next.last_changed_at_ms = context.now;
+    if is_downgrade && context.overloaded {
         next.reason = "downgraded after sustained queue, drop, or budget pressure".into();
     }
     next
+}
+
+fn priority(asset: &VisibleAsset, manifest: &CanvasManifest) -> f64 {
+    let canvas_area = (manifest.canvas_width as f64 * manifest.canvas_height as f64).max(1.0);
+    let area_score = (asset.visible_area_px.max(0.0) / canvas_area).sqrt().min(1.0);
+    let focus = asset.focus_weight.clamp(0.0, 4.0);
+    let center = asset.center_weight.clamp(0.0, 1.0);
+    focus * 4.0 + center * 2.0 + area_score
+}
+
+fn tier_dimensions(asset: &VisibleAsset, tier: QualityTier) -> Option<(u32, u32)> {
+    let source_width = asset.source_width.max(1) as f64;
+    let source_height = asset.source_height.max(1) as f64;
+    let rendered_cap_width = (asset.rendered_width_px * MATERIAL_OVERSAMPLE).max(1.0);
+    let rendered_cap_height = (asset.rendered_height_px * MATERIAL_OVERSAMPLE).max(1.0);
+    let cap_width = asset.source_width.max(1).min(rendered_cap_width.floor() as u32);
+    let cap_height = asset.source_height.max(1).min(rendered_cap_height.floor() as u32);
+
+    if cap_width < 64 || cap_height < 64 {
+        return None;
+    }
+
+    let scale =
+        (tier.max_width as f64 / source_width).min(tier.max_height as f64 / source_height).min(1.0);
+    let width = even_dimension((source_width * scale).round() as u32).max(2);
+    let height = even_dimension((source_height * scale).round() as u32).max(2);
+
+    if width > cap_width || height > cap_height {
+        return None;
+    }
+
+    Some((width, height))
+}
+
+fn tier_cost_bytes_per_sec(width: u32, height: u32, fps: u32, profile: &PerformanceProfile) -> u64 {
+    // Cost modeling uses normalized frontend factors so allocation can react to decode, upload,
+    // and composite pressure with the same byte/sec budgeting path.
+    let raw_bytes = yuv420_payload_len(width, height) as u64 * fps.max(1) as u64;
+    let factor =
+        (profile.decode_cost_factor + profile.upload_cost_factor + profile.composite_cost_factor)
+            .max(1.0);
+
+    (raw_bytes as f64 * factor) as u64
+}
+
+fn tier_vram_bytes(width: u32, height: u32) -> u64 {
+    yuv420_payload_len(width, height) as u64 * GPU_FRAME_RESIDENCY_MULTIPLIER
+}
+
+fn controller_snapshot(
+    profile: &PerformanceProfile,
+    telemetry: &Arc<Mutex<TelemetrySnapshot>>,
+    allocations: Vec<QualityDecision>,
+) -> ControllerSnapshot {
+    let telemetry = telemetry.lock().map(|snapshot| snapshot.clone()).unwrap_or_default();
+    let assumptions = if profile.base_case_validated {
+        vec![
+            "Budgets are measured on this machine and capped at 80% of the limiting subsystem."
+                .into(),
+            "Decode/upload/composite factors are calibrated by base-case frontend telemetry."
+                .into(),
+        ]
+    } else if profile.max_active_streams() > BASE_CASE_MAX_STREAMS_BEFORE_VALIDATION {
+        vec![
+            "Soft calibration allows a small number of active streams before 4K validation succeeds."
+                .into(),
+            "Additional backend probe and frontend telemetry unlock more low-risk concurrency before full validation.".into(),
+        ]
+    } else {
+        vec![
+            "Scaling is gated until base-case calibration validates a 4K presentation path.".into(),
+            "VRAM capacity is read from platform telemetry when available and otherwise falls back to the persisted profile default.".into(),
+        ]
+    };
+
+    ControllerSnapshot { profile: profile.clone(), telemetry, allocations, assumptions }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
         apply_hysteresis, choose_candidate, tier_cost_bytes_per_sec, tier_vram_bytes, Arbiter,
-        MIN_UPGRADE_DWELL_MS, QUALITY_TIERS,
+        HysteresisContext, MIN_UPGRADE_DWELL_MS, QUALITY_TIERS,
     };
     use crate::native_video::{
         profile::PerformanceProfile,
@@ -400,12 +484,14 @@ mod tests {
         let result = apply_hysteresis(
             &previous,
             next.clone(),
-            false,
-            false,
-            remaining_budget,
-            u64::MAX,
-            now,
-            &profile,
+            HysteresisContext {
+                overloaded: false,
+                upgrades_allowed: false,
+                remaining_budget,
+                remaining_vram_budget: u64::MAX,
+                now,
+                profile: &profile,
+            },
         );
         let current_previous_cost = tier_cost_bytes_per_sec(
             previous.decode_width,
@@ -434,12 +520,14 @@ mod tests {
         let result = apply_hysteresis(
             &previous,
             next,
-            false,
-            false,
-            current_previous_cost.saturating_sub(1),
-            u64::MAX,
-            now,
-            &profile,
+            HysteresisContext {
+                overloaded: false,
+                upgrades_allowed: false,
+                remaining_budget: current_previous_cost.saturating_sub(1),
+                remaining_vram_budget: u64::MAX,
+                now,
+                profile: &profile,
+            },
         );
 
         assert_eq!(result.tier.id, QUALITY_TIERS[2].id);
@@ -577,80 +665,4 @@ mod tests {
 
         assert_eq!(candidate.0.id, 1);
     }
-}
-
-fn priority(asset: &VisibleAsset, manifest: &CanvasManifest) -> f64 {
-    let canvas_area = (manifest.canvas_width as f64 * manifest.canvas_height as f64).max(1.0);
-    let area_score = (asset.visible_area_px.max(0.0) / canvas_area).sqrt().min(1.0);
-    let focus = asset.focus_weight.clamp(0.0, 4.0);
-    let center = asset.center_weight.clamp(0.0, 1.0);
-    focus * 4.0 + center * 2.0 + area_score
-}
-
-fn tier_dimensions(asset: &VisibleAsset, tier: QualityTier) -> Option<(u32, u32)> {
-    let source_width = asset.source_width.max(1) as f64;
-    let source_height = asset.source_height.max(1) as f64;
-    let rendered_cap_width = (asset.rendered_width_px * MATERIAL_OVERSAMPLE).max(1.0);
-    let rendered_cap_height = (asset.rendered_height_px * MATERIAL_OVERSAMPLE).max(1.0);
-    let cap_width = asset.source_width.max(1).min(rendered_cap_width.floor() as u32);
-    let cap_height = asset.source_height.max(1).min(rendered_cap_height.floor() as u32);
-
-    if cap_width < 64 || cap_height < 64 {
-        return None;
-    }
-
-    let scale =
-        (tier.max_width as f64 / source_width).min(tier.max_height as f64 / source_height).min(1.0);
-    let width = even_dimension((source_width * scale).round() as u32).max(2);
-    let height = even_dimension((source_height * scale).round() as u32).max(2);
-
-    if width > cap_width || height > cap_height {
-        return None;
-    }
-
-    Some((width, height))
-}
-
-fn tier_cost_bytes_per_sec(width: u32, height: u32, fps: u32, profile: &PerformanceProfile) -> u64 {
-    // Cost modeling uses normalized frontend factors so allocation can react to decode, upload,
-    // and composite pressure with the same byte/sec budgeting path.
-    let raw_bytes = yuv420_payload_len(width, height) as u64 * fps.max(1) as u64;
-    let factor =
-        (profile.decode_cost_factor + profile.upload_cost_factor + profile.composite_cost_factor)
-            .max(1.0);
-
-    (raw_bytes as f64 * factor) as u64
-}
-
-fn tier_vram_bytes(width: u32, height: u32) -> u64 {
-    yuv420_payload_len(width, height) as u64 * GPU_FRAME_RESIDENCY_MULTIPLIER
-}
-
-fn controller_snapshot(
-    profile: &PerformanceProfile,
-    telemetry: &Arc<Mutex<TelemetrySnapshot>>,
-    allocations: Vec<QualityDecision>,
-) -> ControllerSnapshot {
-    let telemetry = telemetry.lock().map(|snapshot| snapshot.clone()).unwrap_or_default();
-    let assumptions = if profile.base_case_validated {
-        vec![
-            "Budgets are measured on this machine and capped at 80% of the limiting subsystem."
-                .into(),
-            "Decode/upload/composite factors are calibrated by base-case frontend telemetry."
-                .into(),
-        ]
-    } else if profile.max_active_streams() > BASE_CASE_MAX_STREAMS_BEFORE_VALIDATION {
-        vec![
-            "Soft calibration allows a small number of active streams before 4K validation succeeds."
-                .into(),
-            "Additional backend probe and frontend telemetry unlock more low-risk concurrency before full validation.".into(),
-        ]
-    } else {
-        vec![
-            "Scaling is gated until base-case calibration validates a 4K presentation path.".into(),
-            "VRAM capacity is read from platform telemetry when available and otherwise falls back to the persisted profile default.".into(),
-        ]
-    };
-
-    ControllerSnapshot { profile: profile.clone(), telemetry, allocations, assumptions }
 }
