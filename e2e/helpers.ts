@@ -73,18 +73,9 @@ type SigmaE2EWindow = Window &
     __TAURI_OS_PLUGIN_INTERNALS__: TauriOsPluginInternals;
   };
 
-const MOCK_IMAGE_DATA_URL =
-  "data:image/svg+xml;charset=utf-8," +
-  encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
-      <rect width="640" height="360" fill="#111827" />
-      <rect x="24" y="24" width="592" height="312" rx="24" fill="#1f2937" />
-      <circle cx="168" cy="180" r="78" fill="#10b981" />
-      <rect x="284" y="118" width="198" height="28" rx="14" fill="#f9fafb" />
-      <rect x="284" y="170" width="132" height="20" rx="10" fill="#9ca3af" />
-      <rect x="284" y="206" width="174" height="20" rx="10" fill="#9ca3af" />
-    </svg>
-  `);
+// Use a raster fixture: the native image worker decodes fetched blobs with
+// createImageBitmap, which cannot decode the SVG used by the DOM-only mock.
+const MOCK_IMAGE_URL = "/fixtures/mock-image.png";
 
 const PLAYWRIGHT_VIDEO_FIXTURE_URL = "/fixtures/generated-lod-test-1080p.webm";
 
@@ -97,7 +88,7 @@ export async function installTauriMocks(
 ) {
   await page.addInitScript(
     ({
-      mockImageDataUrl,
+      mockImageUrl,
       playwrightVideoFixtureUrl,
       disableNativeImageSurface,
       platform,
@@ -122,7 +113,7 @@ export async function installTauriMocks(
         observer: PerformanceObserver | null;
         rafId: number | null;
         startedAt: number;
-        lastFrameAt: number;
+        lastFrameAt: number | null;
       };
 
       const callbacks = new Map<number, Callback>();
@@ -193,7 +184,7 @@ export async function installTauriMocks(
       const toMediaUrl = (filePath: string) => {
         const extension = getExtension(filePath);
         if (["png", "jpg", "jpeg", "gif", "webp"].includes(extension)) {
-          return mockImageDataUrl;
+          return mockImageUrl;
         }
 
         if (["mp4", "webm", "mov", "mkv"].includes(extension)) {
@@ -384,6 +375,15 @@ export async function installTauriMocks(
                 : {};
             }
 
+            case "request_decode":
+              // Image LOD requests must resolve to an asset so the native
+              // compositor can leave the loading-mask state during pan tests.
+              return /\.(png|jpg|jpeg|gif|webp)$/i.test(
+                String(objectArgs.path ?? ""),
+              )
+                ? `${objectArgs.path}.preview-${objectArgs.lod}.png`
+                : null;
+
             case "generate_video_thumbnail":
               return "/tmp/playwright-thumbnail.png";
 
@@ -447,7 +447,7 @@ export async function installTauriMocks(
             observer: null,
             rafId: null,
             startedAt: performance.now(),
-            lastFrameAt: performance.now(),
+            lastFrameAt: null,
           };
 
           if (
@@ -460,11 +460,15 @@ export async function installTauriMocks(
                 state.longTasks.push(entry.duration);
               }
             });
-            state.observer.observe({ type: "longtask", buffered: true });
+            state.observer.observe({ type: "longtask" });
           }
 
           const sampleFrame = (timestamp: number) => {
-            state.frameDeltas.push(timestamp - state.lastFrameAt);
+            // The first rAF timestamp establishes the clock; time from
+            // startFrameSampler to that callback is only a partial frame.
+            if (state.lastFrameAt !== null) {
+              state.frameDeltas.push(timestamp - state.lastFrameAt);
+            }
             state.lastFrameAt = timestamp;
             state.rafId = requestAnimationFrame(sampleFrame);
           };
@@ -484,6 +488,9 @@ export async function installTauriMocks(
           if (frameSamplerState.rafId !== null) {
             cancelAnimationFrame(frameSamplerState.rafId);
           }
+          for (const entry of frameSamplerState.observer?.takeRecords() ?? []) {
+            frameSamplerState.longTasks.push(entry.duration);
+          }
           frameSamplerState.observer?.disconnect();
 
           const result = {
@@ -497,7 +504,7 @@ export async function installTauriMocks(
       };
     },
     {
-      mockImageDataUrl: MOCK_IMAGE_DATA_URL,
+      mockImageUrl: MOCK_IMAGE_URL,
       playwrightVideoFixtureUrl: PLAYWRIGHT_VIDEO_FIXTURE_URL,
       disableNativeImageSurface: options.disableNativeImageSurface ?? false,
       platform: options.platform ?? "linux",

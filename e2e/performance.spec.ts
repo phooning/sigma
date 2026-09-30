@@ -23,12 +23,15 @@ type TransformLatencyResult = {
 type FrameBudgetSummary = {
   averageFrameMs: number;
   fps: number;
+  frameDeltas: number[];
   frameCount: number;
   jankLongTasks: number;
   longTaskDurations: number[];
   maxFrameMs: number;
   observationMs: number;
   p50FrameMs: number;
+  p90FrameMs: number;
+  p95FrameMs: number;
   p99FrameMs: number;
 };
 
@@ -36,6 +39,8 @@ type ScalabilityMetric = FrameBudgetSummary & {
   count: number;
   kind: "image" | "deferredVideo";
   loadMs: number;
+  panDeltaX: number;
+  panDeltaY: number;
 };
 
 test.describe("canvas performance", () => {
@@ -201,6 +206,13 @@ test.describe("canvas performance", () => {
     for (const kind of ["image", "deferredVideo"] as const) {
       for (const count of [50, 200, 500]) {
         const seeded = await seedCanvasItems(page, count, kind);
+        if (kind === "image") {
+          // Do not benchmark permanent loading masks when the decode mock or
+          // native compositor is broken. Wait for an actual displayed asset.
+          await expect(
+            mediaItems(page).first().getByTestId("media-visibility-mask"),
+          ).toHaveAttribute("data-visible", "true");
+        }
         const summary = await measureWheelPanPerformance(page);
 
         const metric = {
@@ -211,16 +223,31 @@ test.describe("canvas performance", () => {
         };
         results.push(metric);
 
-        expect(metric.p50FrameMs).toBeLessThan(70);
+        // Keep diagnostics even when this fixture fails, and identify the
+        // fixture directly in the assertion instead of losing later results.
+        await attachJson(testInfo, `scalability-${kind}-${count}`, metric);
+        const label = `${kind} (${count} items)`;
+        expect.soft(metric.frameCount, label).toBeGreaterThanOrEqual(40);
+        expect.soft(metric.panDeltaX, label).toBeCloseTo(-720, 1);
+        expect.soft(metric.panDeltaY, label).toBeCloseTo(-480, 1);
+        expect.soft(metric.p50FrameMs, label).toBeLessThan(70);
         if (!isCi) {
           // Shared CI runners can inject isolated frame spikes that do not
           // reflect the steady-state pan cost this test is meant to track.
-          expect(metric.maxFrameMs).toBeLessThan(225);
+          expect.soft(metric.maxFrameMs, label).toBeLessThan(225);
         }
       }
     }
 
     await attachJson(testInfo, "scalability-metrics", {
+      browserVersion: page.context().browser()?.version(),
+      nodeVersion: process.version,
+      platform: process.platform,
+      browserEnvironment: await page.evaluate(() => ({
+        hardwareConcurrency: navigator.hardwareConcurrency,
+        visibilityState: document.visibilityState,
+        devicePixelRatio: window.devicePixelRatio,
+      })),
       loadConfig100ItemsMs: ttiFixture.loadMs,
       results,
     });
@@ -309,6 +336,11 @@ async function measureWheelPanPerformance(page: Page) {
     }
   });
 
+  const panStart = extractTranslate(
+    await page.locator(".canvas-world").evaluate((element) => {
+      return (element as HTMLElement).style.transform;
+    }),
+  );
   await startFrameSampler(page);
 
   await page.evaluate(async () => {
@@ -336,7 +368,18 @@ async function measureWheelPanPerformance(page: Page) {
 
   await waitForAnimationFrames(page, 2);
 
-  return summarizeFrameSampler(await stopFrameSampler(page));
+  const summary = summarizeFrameSampler(await stopFrameSampler(page));
+  const panEnd = extractTranslate(
+    await page.locator(".canvas-world").evaluate((element) => {
+      return (element as HTMLElement).style.transform;
+    }),
+  );
+
+  return {
+    ...summary,
+    panDeltaX: panEnd.x - panStart.x,
+    panDeltaY: panEnd.y - panStart.y,
+  };
 }
 
 async function measureTransformLatency(
@@ -416,12 +459,15 @@ function summarizeFrameSampler(result: FrameSamplerResult): FrameBudgetSummary {
     return {
       averageFrameMs: 0,
       fps: 0,
+      frameDeltas,
       frameCount: 0,
       jankLongTasks: result.longTasks.length,
       longTaskDurations: result.longTasks,
       maxFrameMs: 0,
       observationMs: result.observationMs,
       p50FrameMs: 0,
+      p90FrameMs: 0,
+      p95FrameMs: 0,
       p99FrameMs: 0,
     };
   }
@@ -433,12 +479,15 @@ function summarizeFrameSampler(result: FrameSamplerResult): FrameBudgetSummary {
   return {
     averageFrameMs,
     fps: averageFrameMs > 0 ? 1000 / averageFrameMs : 0,
+    frameDeltas,
     frameCount: frameDeltas.length,
     jankLongTasks: result.longTasks.filter((duration) => duration >= 50).length,
     longTaskDurations: result.longTasks,
     maxFrameMs: sorted[sorted.length - 1],
     observationMs: result.observationMs,
     p50FrameMs: percentile(sorted, 0.5),
+    p90FrameMs: percentile(sorted, 0.9),
+    p95FrameMs: percentile(sorted, 0.95),
     p99FrameMs: percentile(sorted, 0.99),
   };
 }

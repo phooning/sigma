@@ -7,6 +7,7 @@ import {
   gotoApp,
   loadCanvasConfig,
   mediaItems,
+  seedCanvasItems,
   setInvokeFailure,
   setOpenDialogResult,
   waitForAnimationFrames,
@@ -83,6 +84,20 @@ test("surfaces probe_media failures and still recovers to a playable video item"
   ).toBeVisible();
   await expect(page.getByText("1 item")).toBeVisible();
   await expect(page.locator("video.media-content")).toHaveCount(1);
+});
+
+test("displays decoded image previews through the native compositor", async ({
+  page,
+}) => {
+  await gotoApp(page);
+  await seedCanvasItems(page, 1, "image");
+
+  const item = mediaItems(page).first();
+  await expect(item).toHaveClass(/native-image-item/);
+  await expect(item.getByTestId("media-visibility-mask")).toHaveAttribute(
+    "data-visible",
+    "true",
+  );
 });
 
 test("upgrades image LOD requests as the user zooms in through real browser layout", async ({
