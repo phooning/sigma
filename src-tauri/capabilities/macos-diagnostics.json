@@ -1,0 +1,24 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "macos-diagnostics",
+  "description": "Read-only GPU diagnostics for the development overlay on macOS",
+  "windows": ["main"],
+  "platforms": ["macOS"],
+  "permissions": [
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "gpu-info",
+          "cmd": "system_profiler",
+          "args": ["SPDisplaysDataType", "-json"]
+        },
+        {
+          "name": "gpu-usage",
+          "cmd": "ioreg",
+          "args": ["-l", "-w", "0", "-c", "AGXStatistics"]
+        }
+      ]
+    }
+  ]
+}

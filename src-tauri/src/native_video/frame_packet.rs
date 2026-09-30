@@ -4,6 +4,16 @@ use super::constants::{
 };
 use super::util::even_dimension;
 
+#[derive(Clone, Copy)]
+pub(crate) struct FramePacketMetadata {
+    pub(crate) stream_id: u64,
+    pub(crate) sequence: u64,
+    pub(crate) pts_us: u64,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) tier_id: u8,
+}
+
 pub(crate) fn yuv420_payload_len(width: u32, height: u32) -> usize {
     let width = even_dimension(width) as u64;
     let height = even_dimension(height) as u64;
@@ -40,49 +50,26 @@ pub(crate) fn make_frame_packet_from_payload(
     // SVF1 payloads are packed as YUV420 planar bytes at 1.5 Bpp.
     let payload_len = yuv420_payload_len(width, height);
     let mut packet = vec![0_u8; FRAME_PACKET_HEADER_LEN + payload_len];
-    write_header(
-        &mut packet,
-        stream_id,
-        sequence,
-        pts_us,
-        width,
-        height,
-        tier_id,
-        payload_len,
-        even_dimension(width),
-    );
+    let metadata = FramePacketMetadata { stream_id, sequence, pts_us, width, height, tier_id };
+    write_header(&mut packet, &metadata, payload_len, even_dimension(width));
     packet[FRAME_PACKET_HEADER_LEN..].copy_from_slice(&payload[..payload_len]);
     packet
 }
 
 pub(crate) fn write_yuv420_packet_from_payload(
     packet: &mut [u8],
-    stream_id: u64,
-    sequence: u64,
-    pts_us: u64,
-    width: u32,
-    height: u32,
-    tier_id: u8,
+    metadata: FramePacketMetadata,
     payload: &[u8],
 ) -> usize {
-    let width = even_dimension(width);
-    let height = even_dimension(height);
+    let width = even_dimension(metadata.width);
+    let height = even_dimension(metadata.height);
     let payload_len = yuv420_payload_len(width, height);
     let packet_len = FRAME_PACKET_HEADER_LEN + payload_len;
     assert!(packet.len() >= packet_len);
     assert!(payload.len() >= payload_len);
 
-    write_header(
-        &mut packet[..packet_len],
-        stream_id,
-        sequence,
-        pts_us,
-        width,
-        height,
-        tier_id,
-        payload_len,
-        width,
-    );
+    let metadata = FramePacketMetadata { width, height, ..metadata };
+    write_header(&mut packet[..packet_len], &metadata, payload_len, width);
     packet[FRAME_PACKET_HEADER_LEN..packet_len].copy_from_slice(&payload[..payload_len]);
     packet_len
 }
@@ -102,17 +89,8 @@ pub(crate) fn write_synthetic_yuv420_packet(
     let packet_len = FRAME_PACKET_HEADER_LEN + payload_len;
     assert!(packet.len() >= packet_len);
 
-    write_header(
-        &mut packet[..packet_len],
-        stream_id,
-        sequence,
-        pts_us,
-        width,
-        height,
-        tier_id,
-        payload_len,
-        width,
-    );
+    let metadata = FramePacketMetadata { stream_id, sequence, pts_us, width, height, tier_id };
+    write_header(&mut packet[..packet_len], &metadata, payload_len, width);
     fill_synthetic_yuv420(
         &mut packet[FRAME_PACKET_HEADER_LEN..packet_len],
         width,
@@ -125,12 +103,7 @@ pub(crate) fn write_synthetic_yuv420_packet(
 
 fn write_header(
     packet: &mut [u8],
-    stream_id: u64,
-    sequence: u64,
-    pts_us: u64,
-    width: u32,
-    height: u32,
-    tier_id: u8,
+    metadata: &FramePacketMetadata,
     payload_len: usize,
     stride: u32,
 ) {
@@ -139,27 +112,28 @@ fn write_header(
     packet[5] = FRAME_PACKET_HEADER_LEN as u8;
     packet[6] = PIXEL_FORMAT_YUV420;
     packet[7] = 0;
-    write_u64(packet, 8, sequence);
-    write_u64(packet, 16, pts_us);
-    write_u64(packet, 24, stream_id);
-    write_u32(packet, 32, width);
-    write_u32(packet, 36, height);
+    write_u64(packet, 8, metadata.sequence);
+    write_u64(packet, 16, metadata.pts_us);
+    write_u64(packet, 24, metadata.stream_id);
+    write_u32(packet, 32, metadata.width);
+    write_u32(packet, 36, metadata.height);
     write_u32(packet, 40, stride);
     write_u32(packet, 44, payload_len as u32);
-    write_u16(packet, 48, tier_id as u16);
+    write_u16(packet, 48, metadata.tier_id as u16);
     write_u16(packet, 50, 0);
     write_u32(packet, 52, FRAME_PACKET_HEADER_LEN as u32);
     write_u32(
         packet,
         56,
-        FRAME_PACKET_HEADER_LEN as u32 + (width as usize * height as usize) as u32,
+        FRAME_PACKET_HEADER_LEN as u32
+            + (metadata.width as usize * metadata.height as usize) as u32,
     );
     write_u32(
         packet,
         60,
         FRAME_PACKET_HEADER_LEN as u32
-            + (width as usize * height as usize) as u32
-            + ((width as usize / 2) * (height as usize / 2)) as u32,
+            + (metadata.width as usize * metadata.height as usize) as u32
+            + ((metadata.width as usize / 2) * (metadata.height as usize / 2)) as u32,
     );
 }
 

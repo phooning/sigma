@@ -109,28 +109,6 @@
   z-index: var(--z-media-action);
 }
 
-.media-item.selected .reset-btn,
-.media-item.selected .delete-btn,
-.media-item.selected .reveal-btn,
-.media-item.selected .screenshot-btn,
-.media-item.selected .audio-btn,
-.media-item.selected .crop-btn,
-.media-item.is-transforming .reset-btn,
-.media-item.is-transforming .delete-btn,
-.media-item.is-transforming .reveal-btn,
-.media-item.is-transforming .screenshot-btn,
-.media-item.is-transforming .audio-btn,
-.media-item.is-transforming .crop-btn,
-.media-item.crop-editing .reset-btn,
-.media-item.crop-editing .delete-btn,
-.media-item.crop-editing .reveal-btn,
-.media-item.crop-editing .screenshot-btn,
-.media-item.crop-editing .audio-btn,
-.media-item.crop-editing .crop-btn {
-  backdrop-filter: blur(var(--blur-md));
-  -webkit-backdrop-filter: blur(var(--blur-md));
-}
-
 .delete-btn {
   right: var(--media-action-offset);
   font-size: var(--text-3xl);
@@ -156,6 +134,28 @@
   right: calc(var(--media-action-offset) + var(--media-action-step) * 5);
   font-size: var(--text-icon);
   font-weight: 700;
+}
+
+.media-item.selected .reset-btn,
+.media-item.selected .delete-btn,
+.media-item.selected .reveal-btn,
+.media-item.selected .screenshot-btn,
+.media-item.selected .audio-btn,
+.media-item.selected .crop-btn,
+.media-item.is-transforming .reset-btn,
+.media-item.is-transforming .delete-btn,
+.media-item.is-transforming .reveal-btn,
+.media-item.is-transforming .screenshot-btn,
+.media-item.is-transforming .audio-btn,
+.media-item.is-transforming .crop-btn,
+.media-item.crop-editing .reset-btn,
+.media-item.crop-editing .delete-btn,
+.media-item.crop-editing .reveal-btn,
+.media-item.crop-editing .screenshot-btn,
+.media-item.crop-editing .audio-btn,
+.media-item.crop-editing .crop-btn {
+  backdrop-filter: blur(var(--blur-md));
+  -webkit-backdrop-filter: blur(var(--blur-md));
 }
 
 .media-item:hover .delete-btn,

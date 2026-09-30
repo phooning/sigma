@@ -69,7 +69,7 @@ export function HudToolbarActions({
         className="hud-toolbar-actions"
         role="toolbar"
         aria-label="Canvas controls"
-        data-tauri-drag-region="false"
+        data-tauri-drag-region=""
       >
         <button
           type="button"
@@ -169,7 +169,7 @@ export function HudToolbarActions({
           </svg>{" "}
           Load
         </button>
-        <div className="hud-btn-cluster">
+        <div className="hud-btn-cluster" data-tauri-drag-region="">
           <ActionTooltip label="Save As">
             <button
               type="button"

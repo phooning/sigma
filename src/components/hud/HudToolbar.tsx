@@ -51,7 +51,11 @@ export function HudToolbar({
       data-tauri-drag-region=""
       data-testid="app-header"
     >
-      <div className="hud-leading">
+      <div
+        className="hud-leading"
+        data-tauri-drag-region=""
+        data-testid="hud-leading"
+      >
         <HudToolbarActions
           saveConfig={saveConfig}
           canSaveConfig={canSaveConfig}
@@ -66,7 +70,11 @@ export function HudToolbar({
         />
       </div>
 
-      <div className="toolbar">
+      <div
+        className="toolbar"
+        data-tauri-drag-region=""
+        data-testid="hud-trailing"
+      >
         {activeAudioItem && (
           <HudAudioControl
             activeAudioItem={activeAudioItem}
@@ -75,7 +83,13 @@ export function HudToolbar({
           />
         )}
 
-        <span className="item-count">{itemCountLabel}</span>
+        <span
+          className="item-count"
+          data-tauri-drag-region=""
+          data-testid="hud-item-count"
+        >
+          {itemCountLabel}
+        </span>
       </div>
       <WindowControls />
     </header>

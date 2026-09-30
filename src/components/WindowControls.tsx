@@ -1,7 +1,7 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { platform } from "@tauri-apps/plugin-os";
 import { Copy, Minus, Square, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const getAppWindow = () => {
   try {
@@ -19,10 +19,14 @@ const getPlatformName = () => {
   }
 };
 
+const isNavigatorMacOS = () =>
+  /mac/i.test(navigator.platform) || navigator.userAgent.includes("Macintosh");
+
 export function WindowControls() {
-  const os = getPlatformName();
+  const os = useMemo(getPlatformName, []);
   const [isMaximized, setIsMaximized] = useState(false);
-  const appWindow = getAppWindow();
+  const appWindow = useMemo(getAppWindow, []);
+  const isMacOSWindow = os === "macos" || (os === null && isNavigatorMacOS());
 
   useEffect(() => {
     if (!appWindow) {
@@ -40,8 +44,18 @@ export function WindowControls() {
     };
   }, [appWindow]);
 
-  // macOS usually should keep native traffic lights instead of fake Windows buttons.
-  if (os === "macos" || !appWindow) {
+  if (isMacOSWindow) {
+    return (
+      <div
+        aria-hidden="true"
+        className="window-controls window-controls-macos window-controls-macos-system"
+        data-tauri-drag-region=""
+        data-testid="macos-titlebar-spacer"
+      ></div>
+    );
+  }
+
+  if (!appWindow) {
     return null;
   }
 

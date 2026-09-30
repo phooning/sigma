@@ -18,7 +18,7 @@ use tokio::{
 
 use super::{
     constants::BROKER_QUEUE_CAPACITY,
-    frame_packet::{write_yuv420_packet_from_payload, yuv420_payload_len},
+    frame_packet::{write_yuv420_packet_from_payload, yuv420_payload_len, FramePacketMetadata},
     telemetry::{update_telemetry, TelemetrySnapshot},
     types::{QualityDecision, StreamState},
 };
@@ -168,7 +168,8 @@ impl FramePool {
         packet: PooledFramePacket,
         on_frame: &Channel<InvokeResponseBody>,
     ) -> bool {
-        self.dispatch_to_subscribers(packet, &[on_frame.clone()]).await.delivered_frames > 0
+        self.dispatch_to_subscribers(packet, std::slice::from_ref(on_frame)).await.delivered_frames
+            > 0
     }
 
     pub(crate) async fn dispatch_to_subscribers(
@@ -403,12 +404,15 @@ fn spawn_decode_worker(
 
                                 let len = write_yuv420_packet_from_payload(
                                     bytes,
-                                    stream_id,
-                                    sequence,
-                                    sequence.saturating_mul(1_000_000) / fps.max(1) as u64,
-                                    width,
-                                    height,
-                                    tier_id,
+                                    FramePacketMetadata {
+                                        stream_id,
+                                        sequence,
+                                        pts_us: sequence.saturating_mul(1_000_000)
+                                            / fps.max(1) as u64,
+                                        width,
+                                        height,
+                                        tier_id,
+                                    },
                                     &payload,
                                 );
                                 packet.set_len(len);

@@ -6,7 +6,7 @@ use std::{
 
 use tauri::{
     ipc::{Channel, InvokeResponseBody},
-    State,
+    AppHandle, Runtime, State,
 };
 use tokio::{io::AsyncReadExt, process::Command as TokioCommand, sync::oneshot, time};
 
@@ -26,6 +26,8 @@ use super::{
     },
     util::{now_millis, p95_index, stable_stream_id},
 };
+
+use crate::validate_media_source_path;
 
 #[tauri::command]
 pub async fn native_video_get_profile(
@@ -173,7 +175,8 @@ pub async fn native_video_reset_profile(
 }
 
 #[tauri::command]
-pub async fn native_video_run_base_case_probe(
+pub async fn native_video_run_base_case_probe<R: Runtime>(
+    app: AppHandle<R>,
     state: State<'_, NativeVideoState>,
     config: BaseCaseProbeConfig,
     on_frame: Channel<InvokeResponseBody>,
@@ -186,6 +189,7 @@ pub async fn native_video_run_base_case_probe(
     if let Some(source_path) =
         config.source_path.as_deref().map(str::trim).filter(|path| !path.is_empty())
     {
+        validate_media_source_path(&app, source_path)?;
         let report =
             run_ffmpeg_base_case_probe(source_path, width, height, fps, frames, on_frame).await?;
         persist_base_case_probe_metrics(&state, &report).await?;

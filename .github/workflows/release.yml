@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Release tag, e.g. v0.1.0-test"
+        description: "v0.1.1"
         required: true
-        default: "v0.1.0-test"
+        default: "v0.1.1"
 
 permissions:
   contents: write
@@ -25,21 +25,21 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
         with:
-          version: 10
+          version: 10.32.1
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 24
+          node-version-file: .node-version
           cache: pnpm
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.96.1 --profile minimal --component clippy,rustfmt
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -57,12 +57,22 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build and publish Tauri app
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.event.inputs.release_tag || github.ref_name }}
           releaseName: "SIGMA Canvas Studio ${{ github.event.inputs.release_tag || github.ref_name }}"
-          releaseBody: "Cross-platform release."
+          releaseBody: |
+            Initial public build of SIGMA Canvas Studio.
+
+            SIGMA is a spatial canvas for structuring and editing photos and videos.
+
+            ### Downloads
+            - Windows: `.exe` / `.msi`
+            - macOS: `.dmg`
+            - Linux: `.AppImage` / `.deb`
+
+            This is an early development release. Feedback and issue reports are welcome.
           releaseDraft: true
           prerelease: false

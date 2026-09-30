@@ -28,10 +28,17 @@ test("uses the HUD as the draggable header and keeps its buttons non-draggable",
   await gotoApp(page);
 
   const header = page.getByTestId("app-header");
+  const leading = page.getByTestId("hud-leading");
+  const trailing = page.getByTestId("hud-trailing");
+  const itemCount = page.getByTestId("hud-item-count");
   const controls = page.getByRole("toolbar", { name: "Canvas controls" });
   const buttons = controls.getByRole("button");
 
   await expect(header).toHaveAttribute("data-tauri-drag-region", "");
+  await expect(leading).toHaveAttribute("data-tauri-drag-region", "");
+  await expect(trailing).toHaveAttribute("data-tauri-drag-region", "");
+  await expect(itemCount).toHaveAttribute("data-tauri-drag-region", "");
+  await expect(controls).toHaveAttribute("data-tauri-drag-region", "");
   await expect(buttons).toHaveCount(5);
   await expect(buttons).toHaveText(["", "Clear", "Load", "", "Save"]);
   await expect(buttons.nth(0)).toHaveAttribute("aria-label", "Open settings");
@@ -42,6 +49,33 @@ test("uses the HUD as the draggable header and keeps its buttons non-draggable",
       "false",
     );
   }
+});
+
+test("keeps the macOS HUD controls flush with the rounded frame edge", async ({
+  page,
+}) => {
+  await gotoApp(page, { platform: "macos" });
+
+  const header = page.getByTestId("app-header");
+  const controls = page.getByRole("toolbar", { name: "Canvas controls" });
+  const firstHudButton = controls.getByRole("button").first();
+  const titlebarSpacer = page.getByTestId("macos-titlebar-spacer");
+
+  await expect(titlebarSpacer).toBeHidden();
+  await expect(titlebarSpacer).toHaveAttribute("data-tauri-drag-region", "");
+  await expect(firstHudButton).toHaveAttribute("aria-label", "Open settings");
+  await expect(firstHudButton).toHaveCSS("margin-left", "0px");
+  await expect(page.getByRole("button", { name: "Close window" })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByRole("button", { name: "Minimize window" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Maximize window" }),
+  ).toHaveCount(0);
+  await expect(header).toHaveCSS("border-top-left-radius", "10px");
+  await expect(header).toHaveCSS("border-top-right-radius", "10px");
 });
 
 test("uses singular and plural item-count labels in the HUD", async ({

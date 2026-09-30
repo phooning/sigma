@@ -7,22 +7,36 @@
     "beforeDevCommand": "pnpm run dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "pnpm run build",
-    "frontendDist": "../dist"
+    "frontendDist": "../dist",
+    "removeUnusedCommands": true
   },
   "app": {
     "windows": [
       {
         "title": "SIGMA Canvas Studio",
         "decorations": false,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
         "width": 1280,
         "height": 720
       }
     ],
     "security": {
-      "csp": null,
+      "csp": {
+        "default-src": "'self'",
+        "connect-src": "ipc: http://ipc.localhost asset: http://asset.localhost",
+        "font-src": "'self' data:",
+        "img-src": "'self' asset: http://asset.localhost blob: data:",
+        "media-src": "'self' asset: http://asset.localhost blob:",
+        "style-src": "'self' 'unsafe-inline'",
+        "worker-src": "'self' blob:",
+        "object-src": "'none'",
+        "base-uri": "'none'",
+        "frame-ancestors": "'none'"
+      },
       "assetProtocol": {
         "enable": true,
-        "scope": ["**"]
+        "scope": ["$APPCACHE/**/*"]
       }
     }
   },

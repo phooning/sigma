@@ -247,15 +247,15 @@
   cursor: pointer;
 }
 
+.video-playback-btn {
+  min-width: calc(var(--space-12) - var(--space-0-5));
+}
+
 .video-timeline-footer .video-playback-btn,
 .video-timeline-footer .video-loop-btn {
   border-color: var(--border);
   background: var(--surface-control);
   color: var(--text-control);
-}
-
-.video-playback-btn {
-  min-width: calc(var(--space-12) - var(--space-0-5));
 }
 
 .video-playback-btn:hover,

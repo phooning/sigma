@@ -30,7 +30,13 @@ fn invoke_request(command: &str, body: serde_json::Value) -> InvokeRequest {
         cmd: command.into(),
         callback: CallbackFn(0),
         error: CallbackFn(1),
-        url: "http://tauri.localhost".parse().expect("valid test URL"),
+        url: if cfg!(any(windows, target_os = "android")) {
+            "http://tauri.localhost"
+        } else {
+            "tauri://localhost"
+        }
+        .parse()
+        .expect("valid test URL"),
         body: InvokeBody::Json(body),
         headers: Default::default(),
         invoke_key: INVOKE_KEY.to_string(),

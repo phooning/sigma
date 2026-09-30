@@ -46,8 +46,9 @@ Video/images are first class assets active in spatial state.
 
 ### Prerequisites
 
-- [Rust](https://www.rust-lang.org/tools/install) (latest stable)
-- [Node.js](https://nodejs.org/) (v18+)
+- [Rust](https://www.rust-lang.org/tools/install) (the version pinned in `rust-toolchain.toml`)
+- [Node.js](https://nodejs.org/) 24
+- [pnpm](https://pnpm.io/) 10.32.x
 - [FFmpeg](https://ffmpeg.org/) (installed in your system PATH for export features)
 
 ### Installation

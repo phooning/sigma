@@ -1,4 +1,6 @@
 name: Test and Build
+permissions:
+  contents: read
 
 on:
   push:
@@ -14,18 +16,32 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
         with:
-          version: 10
+          version: 10.32.1
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 24
+          node-version-file: .node-version
           cache: pnpm
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libgtk-3-dev
+
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.96.1 --profile minimal --component clippy,rustfmt
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -36,8 +52,23 @@ jobs:
       - name: Run tests
         run: pnpm test
 
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+
+      - name: Check Rust
+        run: cargo check --manifest-path src-tauri/Cargo.toml --all-targets --all-features
+
+      - name: Lint Rust
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
+
+      - name: Test Rust
+        run: cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features
+
       - name: Check benchmark baselines
         run: pnpm bench:check
 
       - name: Build
         run: pnpm build
+
+      - name: Build Tauri application
+        run: pnpm tauri build --no-bundle

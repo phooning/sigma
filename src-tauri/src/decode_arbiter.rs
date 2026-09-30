@@ -100,7 +100,7 @@ impl DecodeArbiter {
                     _ = completion_rx.recv() => {}
                 }
 
-                while let Some(permit) = semaphore.clone().try_acquire_owned().ok() {
+                while let Ok(permit) = semaphore.clone().try_acquire_owned() {
                     let Some(queued) = queue.pop() else {
                         drop(permit);
                         break;
