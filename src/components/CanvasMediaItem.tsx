@@ -286,6 +286,7 @@ export const CanvasMediaItem = memo(function CanvasMediaItem({
       <div
         aria-hidden="true"
         className="media-visibility-mask"
+        data-testid="media-visibility-mask"
         data-visible={isVisible}
         style={{
           opacity: isVisible ? 0 : 1,
