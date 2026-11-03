@@ -4,7 +4,7 @@ use tauri::{
     ipc::{CallbackFn, InvokeBody},
     test::{get_ipc_response, mock_builder, mock_context, noop_assets, INVOKE_KEY},
     webview::InvokeRequest,
-    App, WebviewWindow, WebviewWindowBuilder,
+    App, Manager, WebviewWindow, WebviewWindowBuilder,
 };
 
 struct BenchHarness {
@@ -17,6 +17,11 @@ fn create_harness() -> BenchHarness {
         .build(mock_context(noop_assets()))
         .expect("failed to build mock app");
     tauri_app_lib::manage_native_video_state(app.handle());
+    for index in 0..32 {
+        app.asset_protocol_scope()
+            .allow_file(std::env::temp_dir().join(format!("asset-{index}.mp4")))
+            .expect("allow benchmark source");
+    }
 
     let webview = WebviewWindowBuilder::new(&app, "main", Default::default())
         .build()
@@ -53,7 +58,7 @@ fn sample_manifest(asset_count: usize) -> serde_json::Value {
                 .map(|index| {
                     json!({
                         "id": format!("asset-{index}"),
-                        "path": format!("/tmp/asset-{index}.mp4"),
+                        "path": std::env::temp_dir().join(format!("asset-{index}.mp4")),
                         "sourceWidth": 3840,
                         "sourceHeight": 2160,
                         "screenX": (index % 8) as f64 * 180.0,

@@ -37,11 +37,15 @@ pub async fn native_video_get_profile(
 }
 
 #[tauri::command]
-pub async fn native_video_update_manifest(
+pub async fn native_video_update_manifest<R: Runtime>(
+    app: AppHandle<R>,
     state: State<'_, NativeVideoState>,
     manifest: CanvasManifest,
 ) -> Result<ControllerSnapshot, String> {
     let started_at = Instant::now();
+    for asset in &manifest.assets {
+        validate_media_source_path(&app, &asset.path)?;
+    }
     let (respond_to, response) = oneshot::channel();
     state
         .control_tx
