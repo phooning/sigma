@@ -1,7 +1,11 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { loadFromStorage, saveToStorage, saveToStorageAs } from "../utils/fs";
+import {
+  loadFromStorage,
+  saveToStorage,
+  selectCanvasSavePath,
+} from "../utils/fs";
 import type { MediaItem, Viewport } from "../utils/media.types";
 import { notify } from "../utils/notifications";
 import { markPerformance } from "../utils/performance";
@@ -9,6 +13,21 @@ import { useDevStore } from "./useDevStore";
 import { getSessionSettings, useSettingsStore } from "./useSettingsStore";
 
 const SESSION_STORAGE_KEY = "sigma:canvas-session";
+
+// Persistence operations share one queue so a load cannot read a destination
+// before an earlier save commits, and writes commit in request order.
+let persistenceTail: Promise<void> = Promise.resolve();
+let sessionGeneration = 0;
+let latestLoadRequest = 0;
+
+const enqueuePersistence = <T>(operation: () => Promise<T>): Promise<T> => {
+  const result = persistenceTail.then(operation);
+  persistenceTail = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+};
 
 export const INITIAL_VIEWPORT: Viewport = { x: 0, y: 0, zoom: 1 };
 
@@ -246,7 +265,8 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
             lastSavedSignature: state.lastSavedSignature,
           }),
         })),
-      replaceSession: (snapshot) =>
+      replaceSession: (snapshot) => {
+        sessionGeneration += 1;
         set((state) => {
           const items = normalizeAndReconcileItems(
             snapshot.items ?? state.items,
@@ -272,119 +292,159 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
               lastSavedSignature,
             }),
           };
-        }),
-      saveSessionToFile: async () => {
+        });
+      },
+      saveSessionToFile: () => {
         const { items, viewport, saveFilePath, isDirty } = get();
-        if (!saveFilePath || !isDirty) {
-          return;
-        }
-
-        const result = await saveToStorage(
-          items,
-          viewport,
-          saveFilePath,
-          getSessionSettings(),
-          useDevStore.getState().devMode,
-        );
-
-        if (!result.ok) {
-          if (result.reason === "cancelled") return;
-
-          const text =
-            result.error instanceof Error
-              ? result.error.message
-              : "Unknown error while saving.";
-
-          console.error("Failed to save config:", result.error);
-          notify.error("Save failed", {
-            description: text,
-          });
-          return;
-        }
-
-        set({
-          saveFilePath: result.filePath,
-          lastSavedSignature: getDirtySignature(items),
-          isDirty: false,
-        });
-        notify.success("Save completed", {
-          description: "Config saved successfully.",
-        });
-      },
-      saveSessionToNewFile: async () => {
-        const { items, viewport, saveFilePath } = get();
-        const result = await saveToStorageAs(
-          items,
-          viewport,
-          saveFilePath ?? "canvas.json",
-          getSessionSettings(),
-          useDevStore.getState().devMode,
-        );
-
-        if (!result.ok) {
-          if (result.reason === "cancelled") return;
-
-          const text =
-            result.error instanceof Error
-              ? result.error.message
-              : "Unknown error while saving.";
-
-          console.error("Failed to save config:", result.error);
-          notify.error("Save failed", {
-            description: text,
-          });
-          return;
-        }
-
-        set({
-          saveFilePath: result.filePath,
-          lastSavedSignature: getDirtySignature(items),
-          isDirty: false,
-        });
-        notify.success("Save completed", {
-          description: "Config saved successfully.",
-        });
-      },
-      loadSessionFromFile: async () => {
-        const result = await loadFromStorage();
-
-        if (!result.ok) {
-          if (result.reason !== "cancelled") {
-            const description =
-              result.error ??
-              (result.reason === "invalid"
-                ? "Selected file is not a valid Sigma config."
-                : "Failed to load config.");
-
-            notify.error("Load failed", {
-              description,
-            });
+        if (!saveFilePath || !isDirty) return Promise.resolve();
+        const generation = sessionGeneration;
+        const settings = getSessionSettings();
+        const devMode = useDevStore.getState().devMode;
+        const savedSignature = getDirtySignature(items, settings, devMode);
+        return enqueuePersistence(async () => {
+          if (generation !== sessionGeneration) return;
+          const destination = get().saveFilePath;
+          if (!destination) return;
+          const result = await saveToStorage(
+            items,
+            viewport,
+            destination,
+            settings,
+            devMode,
+          );
+          if (generation !== sessionGeneration) return;
+          if (!result.ok) {
+            if (result.reason !== "cancelled") {
+              console.error("Failed to save config:", result.error);
+              notify.error("Save failed", {
+                description:
+                  result.error instanceof Error
+                    ? result.error.message
+                    : String(result.error ?? "Unknown error while saving."),
+              });
+            }
+            return;
           }
-
-          return false;
-        }
-
-        const nextViewport = result.data.viewport ?? INITIAL_VIEWPORT;
-        const nextSettings = result.data.settings ?? {
-          screenshotDirectory: "",
-          canvasBackgroundPattern: "dots" as const,
-        };
-        const nextDevMode = result.data.devMode ?? false;
-
-        useSettingsStore.getState().replaceSessionSettings(nextSettings);
-        useDevStore.getState().setDevMode(nextDevMode);
-
-        get().replaceSession({
-          saveFilePath: result.filePath,
-          lastSavedSignature: getDirtySignature(
-            result.data.items,
-            nextSettings,
-            nextDevMode,
-          ),
-          items: result.data.items,
-          viewport: nextViewport,
+          set((state) => ({
+            saveFilePath: result.filePath,
+            lastSavedSignature: savedSignature,
+            isDirty: getDirtySignature(state.items) !== savedSignature,
+          }));
+          notify.success("Save completed", {
+            description: "Config saved successfully.",
+          });
         });
-        return true;
+      },
+      saveSessionToNewFile: () => {
+        const { items, viewport, saveFilePath } = get();
+        const generation = sessionGeneration;
+        const settings = getSessionSettings();
+        const devMode = useDevStore.getState().devMode;
+        const savedSignature = getDirtySignature(items, settings, devMode);
+        return enqueuePersistence(async () => {
+          if (generation !== sessionGeneration) return;
+          let destination: string | null;
+          try {
+            destination = await selectCanvasSavePath(
+              get().saveFilePath ?? saveFilePath ?? "canvas.json",
+            );
+          } catch (error) {
+            if (generation === sessionGeneration) {
+              console.error("Failed to select save destination:", error);
+              notify.error("Save failed", { description: String(error) });
+            }
+            return;
+          }
+          if (!destination || generation !== sessionGeneration) return;
+          const result = await saveToStorage(
+            items,
+            viewport,
+            destination,
+            settings,
+            devMode,
+          );
+          if (generation !== sessionGeneration) return;
+          if (!result.ok) {
+            if (result.reason !== "cancelled") {
+              console.error("Failed to save config:", result.error);
+              notify.error("Save failed", {
+                description:
+                  result.error instanceof Error
+                    ? result.error.message
+                    : String(result.error ?? "Unknown error while saving."),
+              });
+            }
+            return;
+          }
+          set((state) => ({
+            saveFilePath: result.filePath,
+            lastSavedSignature: savedSignature,
+            isDirty: getDirtySignature(state.items) !== savedSignature,
+          }));
+          notify.success("Save completed", {
+            description: "Config saved successfully.",
+          });
+        });
+      },
+      loadSessionFromFile: () => {
+        const generation = sessionGeneration;
+        const request = ++latestLoadRequest;
+        const initial = get();
+        const initialSignature = getDirtySignature(initial.items);
+        const initialViewport = JSON.stringify(initial.viewport);
+        return enqueuePersistence(async () => {
+          if (generation !== sessionGeneration || request !== latestLoadRequest)
+            return false;
+          const result = await loadFromStorage();
+          const current = get();
+          if (generation !== sessionGeneration || request !== latestLoadRequest)
+            return false;
+          if (!result.ok && result.reason === "cancelled") return false;
+          if (
+            initialSignature !== getDirtySignature(current.items) ||
+            initialViewport !== JSON.stringify(current.viewport)
+          ) {
+            notify.warning("Load canceled", {
+              description:
+                "The canvas changed while the file was opening. Try loading it again.",
+            });
+            return false;
+          }
+          if (!result.ok) {
+            if (result.reason !== "cancelled") {
+              const description =
+                result.error ??
+                (result.reason === "invalid"
+                  ? "Selected file is not a valid Sigma config."
+                  : "Failed to load config.");
+              notify.error("Load failed", { description });
+            }
+            return false;
+          }
+          const nextViewport = result.data.viewport ?? INITIAL_VIEWPORT;
+          const nextSettings = result.data.settings ?? {
+            screenshotDirectory: "",
+            canvasBackgroundPattern: "dots" as const,
+          };
+          const nextDevMode = result.data.devMode ?? false;
+          const loadedItems = normalizeAndReconcileItems(
+            result.data.items,
+            current.items,
+          );
+          useSettingsStore.getState().replaceSessionSettings(nextSettings);
+          useDevStore.getState().setDevMode(nextDevMode);
+          get().replaceSession({
+            saveFilePath: result.filePath,
+            lastSavedSignature: getDirtySignature(
+              loadedItems,
+              nextSettings,
+              nextDevMode,
+            ),
+            items: loadedItems,
+            viewport: nextViewport,
+          });
+          return true;
+        });
       },
     }),
     {

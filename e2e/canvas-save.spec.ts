@@ -1,10 +1,13 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import {
   clearInvokeCalls,
+  clearInvokeFailures,
   dropFiles,
   getInvokeCalls,
   gotoApp,
   mediaItems,
+  setInvokeFailure,
+  setMockFileText,
   setOpenDialogResult,
   setSaveDialogResult,
 } from "./helpers";
@@ -79,6 +82,28 @@ async function readMediaItemPosition(locator: Locator) {
 }
 
 test.describe("canvas save states", () => {
+  test("keeps the current canvas when a malformed file is loaded", async ({
+    page,
+  }) => {
+    await gotoApp(page);
+    await dropFiles(page, [droppedVideoPath]);
+    await expect(mediaItems(page)).toHaveCount(1);
+    await setMockFileText(
+      page,
+      savedCanvasPath,
+      JSON.stringify({ items: [{ filePath: 5 }] }),
+    );
+    await setOpenDialogResult(page, savedCanvasPath);
+
+    await loadButton(page).click();
+
+    await expect(page.getByText("Load failed")).toBeVisible();
+    await expect(
+      page.getByText("Selected file is not a valid Sigma config."),
+    ).toBeVisible();
+    await expect(mediaItems(page)).toHaveCount(1);
+  });
+
   test("disables Save after saving a newly placed video with Save As", async ({
     page,
   }) => {
@@ -119,7 +144,7 @@ test.describe("canvas save states", () => {
             (call) => call.cmd === "plugin:dialog|save",
           ),
           wroteCanvasFile: calls.some(
-            (call) => call.cmd === "plugin:fs|write_text_file",
+            (call) => call.cmd === "save_canvas_atomic",
           ),
         };
       })
@@ -127,6 +152,23 @@ test.describe("canvas save states", () => {
         openedSaveDialog: false,
         wroteCanvasFile: true,
       });
+  });
+
+  test("keeps edits unsaved after a failed write and allows a retry", async ({
+    page,
+  }) => {
+    await createSavedVideoCanvas(page);
+    await moveFirstMediaItem(page, 180, 120);
+    await expect(saveButton(page)).toBeEnabled();
+    await setInvokeFailure(page, "save_canvas_atomic", {
+      message: "Disk full",
+    });
+    await saveButton(page).click();
+    await expect(page.getByText("Save failed")).toBeVisible();
+    await expect(saveButton(page)).toBeEnabled();
+    await clearInvokeFailures(page);
+    await saveButton(page).click();
+    await expect(saveButton(page)).toBeDisabled();
   });
 
   test("restores the saved asset after clearing the canvas and loading the saved file", async ({

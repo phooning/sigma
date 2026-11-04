@@ -1,5 +1,6 @@
+import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile } from "@tauri-apps/plugin-fs";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { SessionSettings } from "../stores/useSettingsStore";
 import type { MediaItem, Viewport } from "./media.types";
@@ -15,7 +16,7 @@ type TLoadResult =
       filePath: string;
       data: {
         items: MediaItem[];
-        viewport: Viewport;
+        viewport?: Viewport;
         settings?: SessionSettings;
         devMode?: boolean;
       };
@@ -233,6 +234,64 @@ const hydrateItemFromStorage = (
   url: "",
 });
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value);
+
+const isStoredCanvasConfig = (
+  value: unknown,
+): value is {
+  items: StoredMediaItem[];
+  viewport?: Viewport;
+  settings?: SessionSettings;
+  devMode?: boolean;
+} => {
+  if (!isRecord(value) || !Array.isArray(value.items)) return false;
+  if (
+    !value.items.every(
+      (item: unknown) =>
+        isRecord(item) &&
+        typeof item.id === "string" &&
+        item.id.length > 0 &&
+        (item.type === "image" || item.type === "video") &&
+        typeof item.filePath === "string" &&
+        item.filePath.length > 0 &&
+        isFiniteNumber(item.x) &&
+        isFiniteNumber(item.y) &&
+        isFiniteNumber(item.width) &&
+        item.width > 0 &&
+        isFiniteNumber(item.height) &&
+        item.height > 0,
+    )
+  )
+    return false;
+
+  if (value.viewport !== undefined) {
+    const viewport = value.viewport;
+    if (
+      !isRecord(viewport) ||
+      !isFiniteNumber(viewport.x) ||
+      !isFiniteNumber(viewport.y) ||
+      !isFiniteNumber(viewport.zoom) ||
+      viewport.zoom <= 0
+    )
+      return false;
+  }
+  if (value.settings !== undefined) {
+    const settings = value.settings;
+    if (
+      !isRecord(settings) ||
+      typeof settings.screenshotDirectory !== "string" ||
+      (settings.canvasBackgroundPattern !== "dots" &&
+        settings.canvasBackgroundPattern !== "grid")
+    )
+      return false;
+  }
+  return value.devMode === undefined || typeof value.devMode === "boolean";
+};
+
 export const getCanvasConfigData = (
   items: MediaItem[],
   viewport: Viewport,
@@ -266,7 +325,10 @@ const writeCanvasConfig = async (
       devMode,
     );
 
-    await writeTextFile(filePath, configData);
+    await invoke("save_canvas_atomic", {
+      path: filePath,
+      contents: configData,
+    });
 
     return { ok: true, filePath };
   } catch (err) {
@@ -293,16 +355,7 @@ export const saveToStorageAs = async (
   devMode?: boolean,
 ): Promise<TSaveResult> => {
   try {
-    const filePath = await save({
-      title: "Save canvas",
-      defaultPath,
-      filters: [
-        {
-          name: "Canvas Config",
-          extensions: ["json"],
-        },
-      ],
-    });
+    const filePath = await selectCanvasSavePath(defaultPath);
 
     if (!filePath) {
       return { ok: false, reason: "cancelled" };
@@ -321,25 +374,31 @@ export const saveToStorageAs = async (
   }
 };
 
-export const loadFromStorage = async (): Promise<TLoadResult> => {
-  try {
-    const selected = await open({
-      filters: [
-        {
-          name: "Canvas Config",
-          extensions: ["json"],
-        },
-      ],
-    });
+export const selectCanvasSavePath = async (defaultPath = "canvas.json") =>
+  save({
+    title: "Save canvas",
+    defaultPath,
+    filters: [
+      {
+        name: "Canvas Config",
+        extensions: ["json"],
+      },
+    ],
+  });
 
-    if (!selected || typeof selected !== "string") {
-      return { ok: false, reason: "cancelled" };
+export const loadCanvasFromPath = async (
+  selected: string,
+): Promise<TLoadResult> => {
+  try {
+    const contents = await readTextFile(selected);
+    let data: unknown;
+    try {
+      data = JSON.parse(contents);
+    } catch {
+      return { ok: false, reason: "invalid" };
     }
 
-    const contents = await readTextFile(selected);
-    const data = JSON.parse(contents);
-
-    if (!data.items) {
+    if (!isStoredCanvasConfig(data)) {
       return { ok: false, reason: "invalid" };
     }
 
@@ -357,6 +416,20 @@ export const loadFromStorage = async (): Promise<TLoadResult> => {
   } catch (err) {
     console.error("Failed to load:", err);
     return { ok: false, reason: "error", error: err };
+  }
+};
+
+export const loadFromStorage = async (): Promise<TLoadResult> => {
+  try {
+    const selected = await open({
+      filters: [{ name: "Canvas Config", extensions: ["json"] }],
+    });
+    if (!selected || typeof selected !== "string")
+      return { ok: false, reason: "cancelled" };
+    return loadCanvasFromPath(selected);
+  } catch (error) {
+    console.error("Failed to load:", error);
+    return { ok: false, reason: "error", error };
   }
 };
 

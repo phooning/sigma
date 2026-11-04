@@ -14,3 +14,12 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <App />
   </React.StrictMode>,
 );
+
+if (
+  import.meta.env.MODE === "desktop-test" &&
+  import.meta.env.VITE_SIGMA_DESKTOP_TEST === "1"
+) {
+  void import("./test/desktopBridge").then(({ desktopBridge }) => {
+    window.__SIGMA_DESKTOP_TEST__ = desktopBridge;
+  });
+}

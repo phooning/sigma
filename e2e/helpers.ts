@@ -130,7 +130,6 @@ export async function installTauriMocks(
       let frameSamplerState: FrameSamplerState | null = null;
 
       const textEncoder = new TextEncoder();
-      const textDecoder = new TextDecoder();
 
       const waitForAnimationFrames = async (count = 1) => {
         for (let index = 0; index < count; index += 1) {
@@ -255,7 +254,6 @@ export async function installTauriMocks(
         invoke: async (
           cmd: string,
           args: Record<string, unknown> | Uint8Array = {},
-          options?: { headers?: Record<string, string> },
         ) => {
           invokeCalls.push({
             cmd,
@@ -294,18 +292,11 @@ export async function installTauriMocks(
             case "plugin:dialog|save":
               return saveDialogResult;
 
-            case "plugin:fs|write_text_file": {
-              const path = decodeURIComponent(
-                String(options?.headers?.path ?? ""),
+            case "save_canvas_atomic": {
+              mockFiles.set(
+                String(objectArgs.path),
+                String(objectArgs.contents),
               );
-              const bytes =
-                args instanceof Uint8Array
-                  ? args
-                  : Array.isArray(args)
-                    ? Uint8Array.from(args)
-                    : new Uint8Array();
-
-              mockFiles.set(path, textDecoder.decode(bytes));
               return null;
             }
 

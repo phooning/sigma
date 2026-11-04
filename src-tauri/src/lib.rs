@@ -11,6 +11,7 @@ use std::{
 
 use tauri::Manager;
 
+mod canvas_persistence;
 mod decode_arbiter;
 mod native_video;
 
@@ -835,6 +836,24 @@ fn configure_system_macos_window_frame<R: tauri::Runtime>(
 pub fn configure_tauri_builder<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     builder
         .setup(|app| {
+            #[cfg(all(debug_assertions, feature = "tauri-plugin-wdio-webdriver"))]
+            if let Ok(directory) = std::env::var("SIGMA_DESKTOP_FIXTURE_DIR") {
+                use tauri_plugin_fs::FsExt;
+                let directory = PathBuf::from(directory).canonicalize()?;
+                let temp = std::env::temp_dir().canonicalize()?;
+                if !directory.starts_with(&temp)
+                    || !directory
+                        .file_name()
+                        .is_some_and(|name| name.to_string_lossy().starts_with("sigma-desktop-"))
+                {
+                    return Err("invalid desktop fixture directory".into());
+                }
+                for name in ["canvas.json", "fixture.png", "fixture.mp4"] {
+                    let path = directory.join(name);
+                    app.fs_scope().allow_file(&path)?;
+                    app.asset_protocol_scope().allow_file(&path)?;
+                }
+            }
             #[cfg(target_os = "macos")]
             configure_system_macos_window_frame(app)?;
 
@@ -847,6 +866,7 @@ pub fn configure_tauri_builder<R: tauri::Runtime>(builder: tauri::Builder<R>) ->
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            canvas_persistence::save_canvas_atomic,
             probe_media,
             probe_images,
             media_cache_stats,
@@ -869,8 +889,11 @@ pub fn configure_tauri_builder<R: tauri::Runtime>(builder: tauri::Builder<R>) ->
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let builder = tauri::Builder::default();
+    #[cfg(all(debug_assertions, feature = "tauri-plugin-wdio-webdriver"))]
+    let builder = builder.plugin(tauri_plugin_wdio_webdriver::init());
     configure_tauri_builder(
-        tauri::Builder::default()
+        builder
             .plugin(tauri_plugin_os::init())
             .plugin(tauri_plugin_dialog::init())
             .plugin(tauri_plugin_fs::init())

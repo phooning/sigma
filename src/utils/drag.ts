@@ -2,6 +2,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useEffect, useRef } from "react";
 import { onDropMedia } from "../components/CanvasActions";
 import type { MediaItem, Viewport } from "./media.types";
+import { notify } from "./notifications";
 
 export function attachDragPrevention(target: Window) {
   const prevent = (e: DragEvent) => {
@@ -35,10 +36,13 @@ export function useTauriDrop({ getViewport, setItems }: UseTauriDropOptions) {
   useEffect(() => {
     const removeDragPrevention = attachDragPrevention(window);
     let isActive = true;
-    let unlistenPromise: Promise<() => void> | null = null;
+    let unlisten: (() => void) | undefined;
+    const onRegistrationError = (error: unknown) => {
+      console.warn("Native drag/drop unavailable.", error);
+    };
 
     try {
-      unlistenPromise = getCurrentWebview().onDragDropEvent((event) => {
+      const registration = getCurrentWebview().onDragDropEvent((event) => {
         const payload = event.payload;
         if (payload.type !== "drop") return;
 
@@ -50,19 +54,26 @@ export function useTauriDrop({ getViewport, setItems }: UseTauriDropOptions) {
 
           if (!isActive || items.length === 0) return;
           setItemsRef.current((prev) => [...prev, ...items]);
-        })();
+        })().catch((error: unknown) => {
+          if (!isActive) return;
+          console.error("Failed to import dropped media:", error);
+          notify.error("Media import failed", { description: String(error) });
+        });
       });
+      void registration
+        .then((dispose) => {
+          if (isActive) unlisten = dispose;
+          else dispose();
+        })
+        .catch(onRegistrationError);
     } catch (error) {
-      console.warn(
-        "Native drag/drop unavailable; falling back to browser-only mode.",
-        error,
-      );
+      onRegistrationError(error);
     }
 
     return () => {
       isActive = false;
       removeDragPrevention();
-      void unlistenPromise?.then((unlisten) => unlisten?.());
+      unlisten?.();
     };
   }, []);
 }

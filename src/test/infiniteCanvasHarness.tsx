@@ -17,8 +17,12 @@ const {
   toastMock,
   writeTextFileMock,
 } = vi.hoisted(() => {
+  const writeTextFileMock = vi.fn();
   const invokeMock = vi.fn(
     (command: string, args?: Record<string, unknown>) => {
+      if (command === "save_canvas_atomic") {
+        return Promise.resolve(writeTextFileMock(args?.path, args?.contents));
+      }
       if (command === "probe_media") {
         return Promise.resolve({
           width: String(args?.path).includes("heavy_video.mkv") ? 3840 : 1920,
@@ -99,7 +103,7 @@ const {
       warning: vi.fn(),
       error: vi.fn(),
     },
-    writeTextFileMock: vi.fn(),
+    writeTextFileMock,
   };
 });
 

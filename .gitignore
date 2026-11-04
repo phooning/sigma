@@ -27,6 +27,7 @@ fixtures/heavy_video.mkv
 
 # Playwright
 /test-results/
+/desktop-test-results/
 /playwright-report/
 /blob-report/
 /playwright/.cache/

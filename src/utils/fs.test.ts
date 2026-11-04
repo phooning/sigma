@@ -1,5 +1,6 @@
+import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile } from "@tauri-apps/plugin-fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getCanvasConfigData,
@@ -17,9 +18,10 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
   save: vi.fn(),
 }));
 
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: vi.fn(),
-  writeTextFile: vi.fn(),
 }));
 
 const baseItem: MediaItem = {
@@ -74,9 +76,13 @@ describe("canvas config storage", () => {
       ok: true,
       filePath: "/Users/test/project/canvas.json",
     });
-    expect(writeTextFile).toHaveBeenCalledOnce();
+    expect(invoke).toHaveBeenCalledOnce();
 
-    const [filePath, contents] = vi.mocked(writeTextFile).mock.calls[0];
+    const [, args] = vi.mocked(invoke).mock.calls[0];
+    const { path: filePath, contents } = args as {
+      path: string;
+      contents: string;
+    };
     const config = JSON.parse(contents);
 
     expect(filePath).toBe("/Users/test/project/canvas.json");
@@ -180,5 +186,33 @@ describe("canvas config storage", () => {
 
     expect(result.filePath).toBe("/Users/test/project/canvas.json");
     expect(result.data.items[0].filePath).toBe(baseItem.filePath);
+  });
+
+  it.each([
+    "{",
+    "null",
+    JSON.stringify({ items: {} }),
+    JSON.stringify({ items: [{ ...baseItem, filePath: 5 }] }),
+    JSON.stringify({ items: [{ ...baseItem, width: 0 }] }),
+    JSON.stringify({ items: [baseItem], viewport: { x: 0, y: 0, zoom: 0 } }),
+    JSON.stringify({ items: [], settings: { screenshotDirectory: 5 } }),
+  ])(
+    "rejects malformed canvas data without returning a session: %s",
+    async (contents) => {
+      vi.mocked(open).mockResolvedValue("/Users/test/project/canvas.json");
+      vi.mocked(readTextFile).mockResolvedValue(contents);
+      await expect(loadFromStorage()).resolves.toEqual({
+        ok: false,
+        reason: "invalid",
+      });
+    },
+  );
+
+  it("accepts older configs without optional viewport or settings", async () => {
+    vi.mocked(open).mockResolvedValue("/Users/test/project/canvas.json");
+    vi.mocked(readTextFile).mockResolvedValue(
+      JSON.stringify({ items: [baseItem] }),
+    );
+    expect((await loadFromStorage()).ok).toBe(true);
   });
 });
