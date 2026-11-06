@@ -2,9 +2,9 @@
   <img src="public/sigma.svg" alt="Project Title" width="700" />
 </p>
 
-**SIGMA Canvas Studio** is a high-performance, local-first infinite spatial canvas crafted for organizing, visualizing, and cutting up media assets; from 4K videos to 16K hi-res photos and more, its optimized edit tooling allows you to frame, crop, and loop any media assets you wish to drop in.
+**Sigma Canvas** is the operating workspace for creative media. A high-performance, local, spatial canvas crafted for organizing, visualizing, and touching up media assets in pre-production; from 4K videos to raw hi-res photos and more, its true scale and direct tooling allows you to frame, crop, and loop media assets you wish to drop.
 
-Built on Rust and TypeScript on the Tauri Framework, it offers a lightweight universal alternative to linear file browsing.
+This current preview is built on Rust and TypeScript on the Tauri Framework, it offers a lightweight universal alternative to typical file browsing.
 
 [![License](https://img.shields.io/github/license/phooning/sigma)](LICENSE)&nbsp;
 [![License](https://img.shields.io/github/last-commit/phooning/sigma)](LICENSE)&nbsp;
@@ -107,7 +107,7 @@ pnpm bench:ipc:rust
 
 ## Roadmap & Tiers
 
-This Studio edition provides the core visualization and light editing capabilities. A planned **SIGMA Render Lab** offers advanced features for pros, more technical needs, and lab applications:
+This Studio edition provides the core visualization and light editing capabilities. A planned **Sigma Render Lab** offers advanced features for pros, more technical needs, and lab applications:
 
 | Feature           | Studio                            | Render Lab                                    |
 | :---------------- | :-------------------------------- | :-------------------------------------------- |
@@ -121,7 +121,3 @@ This Studio edition provides the core visualization and light editing capabiliti
 ## License
 
 Licensed under the **Apache 2.0**.
-
----
-
-_Created by [David Pham](https://github.com/phooning/)._
