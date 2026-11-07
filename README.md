@@ -2,9 +2,9 @@
   <img src="public/sigma.svg" alt="Project Title" width="700" />
 </p>
 
-**Sigma Canvas** is the operating workspace for creative media. A high-performance, local, spatial canvas crafted for organizing, visualizing, and touching up media assets in pre-production; from 4K videos to raw hi-res photos and more, its true scale and direct tooling allows you to frame, crop, and loop media assets you wish to drop.
+**Sigma Canvas** is the operating workspace for creative media. A high-performance, locally friendly, spatial canvas crafted for organizing, visualizing, and refining media assets in pre-production; from 4K videos to raw hi-res photos and more, its seamless native scale and direct manipulation allows you to frame, crop, and loop media assets you wish to drop in real-time. Sigma Canvas provides a foundation for connecting human expression and intent with external AI tools and automated processing pipelines.
 
-This current preview is built on Rust and TypeScript on the Tauri Framework, it offers a lightweight universal alternative to typical file browsing.
+**This current experimental, working preview is built on Rust and TypeScript on the Tauri Framework, it offers a lightweight universal alternative to typical file browsing.**
 
 [![License](https://img.shields.io/github/license/phooning/sigma)](LICENSE)&nbsp;
 [![License](https://img.shields.io/github/last-commit/phooning/sigma)](LICENSE)&nbsp;
