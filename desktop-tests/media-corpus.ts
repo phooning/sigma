@@ -391,11 +391,41 @@ try {
     closingDecoders = decoderPids(child?.pid);
     await delay(100);
   }
-  // Also leave a thumbnail request in flight while closing.
+  // Clear the test cache so this request cannot reuse the earlier IPC result.
+  await run(
+    "return await window.__TAURI_INTERNALS__.invoke('clear_media_cache');",
+  );
+  const source = decodeAssets[0]?.path;
+  assert.ok(source, "shutdown scenario requires a thumbnail source");
   void sync(
     "window.__TAURI_INTERNALS__.invoke('request_decode', { itemId: 'closing', path: arguments[0], lod: 256, generation: 99, priority: 'visible' }); return true;",
-    [decodeAssets[0]?.path],
+    [source],
   ).catch(() => undefined);
+  let thumbnailPidsAtClose: number[] = [];
+  for (
+    let attempt = 0;
+    attempt < 500 && thumbnailPidsAtClose.length === 0;
+    attempt += 1
+  ) {
+    thumbnailPidsAtClose = decoderPids(child?.pid).filter((pid) => {
+      try {
+        const command = execFileSync(
+          "ps",
+          ["-p", String(pid), "-o", "command="],
+          { encoding: "utf8" },
+        );
+        return command.includes("-vframes 1") && command.includes(source);
+      } catch {
+        return false;
+      }
+    });
+    if (!thumbnailPidsAtClose.length) await delay(10);
+  }
+  assert.ok(
+    thumbnailPidsAtClose.some(alive),
+    "cold thumbnail FFmpeg was not observed in flight",
+  );
+  closingDecoders = [...new Set([...closingDecoders, ...thumbnailPidsAtClose])];
   const exit = await closeWindow();
   for (
     let attempt = 0;
@@ -406,6 +436,7 @@ try {
   report.shutdown = {
     exit,
     decodersAtClose: closingDecoders,
+    thumbnailPidsAtClose,
     survivingDecoders: closingDecoders.filter(alive),
   };
   console.log(`[desktop-media] shutdown ${JSON.stringify(report.shutdown)}`);

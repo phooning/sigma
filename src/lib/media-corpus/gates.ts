@@ -39,7 +39,7 @@ export const correctnessGate = ({
       detail: unsupportedReason ?? "check did not execute",
     };
   }
-  if (checked === 0) {
+  if (checked === 0 && failures.length === 0) {
     // A gate that evaluated nothing is vacuous; refuse to call it a pass.
     return {
       id,
@@ -148,3 +148,68 @@ export const performanceGate = ({
 /** Overall exit decision: only correctness failures and calibrated perf failures block. */
 export const blockingFailures = (gates: readonly GateResult[]) =>
   gates.filter((gate) => gate.status === "FAIL");
+
+/** Validate runner-level completion before accepting individual browser results. */
+export const browserRunFailure = (
+  result: { code: number | null; timedOut: boolean },
+  report: { suites?: unknown[]; errors?: unknown[] } | null,
+): string | null => {
+  if (result.timedOut) return "Playwright timed out";
+  if (result.code !== 0) return `Playwright exited with code ${result.code}`;
+  if (!report) return "Playwright produced no JSON report";
+  if (report.errors?.length) return "Playwright reported runner errors";
+  if (!report.suites?.length) return "Playwright reported no suites";
+  return null;
+};
+
+/** A requested scenario must execute, even when Playwright exits successfully. */
+export const browserScenarioFailures = (
+  ok: boolean,
+  results: readonly { status: string; error?: { message?: string } }[],
+): string[] => {
+  if (
+    results.length === 0 ||
+    results.some((result) => result.status === "skipped")
+  )
+    return ["browser scenario did not execute"];
+  return ok
+    ? []
+    : results.map(
+        (result) => result.error?.message?.split("\n")[0] ?? result.status,
+      );
+};
+
+export const previewWorkloadFailure = (level: {
+  count: number;
+  mounted: number;
+  advancing: number;
+  totalFrames: number;
+}): string | null => {
+  if (
+    level.mounted < level.count ||
+    level.advancing < level.count ||
+    level.totalFrames <= 0
+  )
+    return `requested ${level.count}, mounted ${level.mounted}, advancing ${level.advancing}, frames ${level.totalFrames}`;
+  return null;
+};
+
+export const shutdownFailures = (shutdown: {
+  exit: { code: number | null; signal: string | null };
+  decodersAtClose: number[];
+  thumbnailPidsAtClose?: number[];
+  survivingDecoders: number[];
+}): string[] => [
+  ...(shutdown.exit.code === 0
+    ? []
+    : [`exit ${JSON.stringify(shutdown.exit)}`]),
+  ...(shutdown.decodersAtClose.length
+    ? []
+    : ["no decoder was active at close (scenario vacuous)"]),
+  ...(shutdown.thumbnailPidsAtClose?.length
+    ? []
+    : ["no cold thumbnail decode was active at close"]),
+  ...shutdown.survivingDecoders.map(
+    (pid) => `decoder ${pid} survived shutdown`,
+  ),
+];

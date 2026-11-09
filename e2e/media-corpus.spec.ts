@@ -6,6 +6,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
+import { previewWorkloadFailure } from "../src/lib/media-corpus/gates";
 import {
   gotoApp,
   itemCountLabel,
@@ -368,18 +369,16 @@ test.describe("real media corpus in the browser", () => {
         items,
         viewport: { x: 20, y: 20, zoom: 1 },
       });
-      await page
-        .waitForFunction(
-          (count) =>
-            [
-              ...document.querySelectorAll<HTMLVideoElement>(
-                "video.media-content",
-              ),
-            ].filter((video) => video.readyState >= 2).length >= count,
-          count,
-          { timeout: 60_000 },
-        )
-        .catch(() => undefined);
+      await page.waitForFunction(
+        (count) =>
+          [
+            ...document.querySelectorAll<HTMLVideoElement>(
+              "video.media-content",
+            ),
+          ].filter((video) => video.readyState >= 2).length >= count,
+        count,
+        { timeout: 60_000 },
+      );
       await startFrameSampler(page);
       const before = await page.evaluate(() =>
         [
@@ -408,7 +407,8 @@ test.describe("real media corpus in the browser", () => {
       );
       const sampler = await stopFrameSampler(page);
       const advancing = after.filter(
-        (entry, index) => entry.t - (before[index]?.t ?? 0) > 0.5,
+        (entry, index) =>
+          entry.q.totalVideoFrames > (before[index]?.q.totalVideoFrames ?? 0),
       ).length;
       const dropped = after.reduce(
         (sum, entry, index) =>
@@ -424,6 +424,13 @@ test.describe("real media corpus in the browser", () => {
           (before[index]?.q.totalVideoFrames ?? 0),
         0,
       );
+      const failure = previewWorkloadFailure({
+        count,
+        mounted: after.length,
+        advancing,
+        totalFrames: total,
+      });
+      expect(failure, `preview workload at concurrency ${count}`).toBeNull();
       levels.push({
         count,
         mounted: after.length,

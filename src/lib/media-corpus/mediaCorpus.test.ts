@@ -7,7 +7,14 @@ import {
   detectVariableFrameRateFromPts,
   selectRepresentativeSubset,
 } from "./classify";
-import { correctnessGate, performanceGate } from "./gates";
+import {
+  browserRunFailure,
+  browserScenarioFailures,
+  correctnessGate,
+  performanceGate,
+  previewWorkloadFailure,
+  shutdownFailures,
+} from "./gates";
 import {
   checkCanvasInvariants,
   diffNormalizedItems,
@@ -130,6 +137,98 @@ describe("statistics", () => {
 });
 
 describe("gates", () => {
+  it("requires a cold thumbnail process and checks its cleanup at shutdown", () => {
+    const shutdown = {
+      exit: { code: 0, signal: null },
+      decodersAtClose: [1],
+      survivingDecoders: [] as number[],
+    };
+    expect(shutdownFailures(shutdown)).toContain(
+      "no cold thumbnail decode was active at close",
+    );
+    expect(
+      shutdownFailures({
+        ...shutdown,
+        thumbnailPidsAtClose: [2],
+        survivingDecoders: [2],
+      }),
+    ).toContain("decoder 2 survived shutdown");
+    expect(
+      shutdownFailures({ ...shutdown, thumbnailPidsAtClose: [2] }),
+    ).toEqual([]);
+  });
+  it("keeps explicit failures when no items were imported", () => {
+    const result = correctnessGate({
+      id: "import",
+      invariant: "imports",
+      tier: "full",
+      checked: 0,
+      failures: ["0 items imported"],
+    });
+    expect(result.status).toBe("FAIL");
+    expect(result.detail).toContain("0 items imported");
+  });
+
+  it("rejects unsuccessful and empty Playwright runs", () => {
+    const report = { suites: [{}], errors: [] };
+    expect(
+      browserRunFailure({ code: 1, timedOut: false }, report),
+    ).not.toBeNull();
+    expect(
+      browserRunFailure({ code: 0, timedOut: true }, report),
+    ).not.toBeNull();
+    expect(
+      browserRunFailure(
+        { code: 0, timedOut: false },
+        { suites: [], errors: ["runner error"] },
+      ),
+    ).not.toBeNull();
+    expect(
+      browserRunFailure({ code: 0, timedOut: false }, { suites: [] }),
+    ).not.toBeNull();
+    expect(browserRunFailure({ code: 0, timedOut: false }, report)).toBeNull();
+    expect(browserScenarioFailures(true, [])).not.toEqual([]);
+    expect(browserScenarioFailures(true, [{ status: "skipped" }])).not.toEqual(
+      [],
+    );
+    expect(browserScenarioFailures(true, [{ status: "passed" }])).toEqual([]);
+  });
+
+  it("rejects incomplete or nonfunctional preview workloads", () => {
+    expect(
+      previewWorkloadFailure({
+        count: 4,
+        mounted: 0,
+        advancing: 0,
+        totalFrames: 0,
+      }),
+    ).not.toBeNull();
+    expect(
+      previewWorkloadFailure({
+        count: 4,
+        mounted: 4,
+        advancing: 3,
+        totalFrames: 10,
+      }),
+    ).not.toBeNull();
+    expect(
+      previewWorkloadFailure({
+        count: 4,
+        mounted: 4,
+        advancing: 4,
+        totalFrames: 0,
+      }),
+    ).not.toBeNull();
+    expect(
+      previewWorkloadFailure({
+        count: 4,
+        mounted: 4,
+        advancing: 4,
+        totalFrames: 10,
+      }),
+    ).toBeNull();
+  });
+
   it("never reports PASS for checks that did not run or checked nothing", () => {
     expect(
       correctnessGate({

@@ -27,8 +27,11 @@ import {
 import { join, relative } from "node:path";
 import { parseArgs } from "node:util";
 import {
+  browserRunFailure,
+  browserScenarioFailures,
   correctnessGate,
   performanceGate,
+  shutdownFailures,
 } from "../../src/lib/media-corpus/gates.ts";
 import { parseSeed } from "../../src/lib/media-corpus/random.ts";
 import {
@@ -1088,33 +1091,31 @@ if (!wantBrowser) {
         },
         90 * 60_000,
       );
-      const report = readJson<{ suites: PlaywrightSuite[] }>(jsonPath);
-      if (!report)
-        throw new Error(`playwright produced no JSON (exit ${result.code})`);
+      const report = readJson<{
+        suites: PlaywrightSuite[];
+        errors?: unknown[];
+      }>(jsonPath);
+      const runnerFailure = browserRunFailure(result, report);
+      if (runnerFailure) throw new Error(runnerFailure);
+      if (!report) throw new Error("Playwright report missing");
       const walk = (
         suite: PlaywrightSuite,
       ): NonNullable<PlaywrightSuite["specs"]> => [
         ...(suite.specs ?? []),
         ...(suite.suites ?? []).flatMap(walk),
       ];
-      for (const spec of report.suites.flatMap(walk)) {
+      const specs = report.suites.flatMap(walk);
+      if (!specs.some((spec) => /^\[browser\./.test(spec.title)))
+        throw new Error("Playwright reported no browser scenarios");
+      for (const spec of specs) {
         const id = spec.title.match(/^\[([^\]]+)\]/)?.[1];
         if (!id) continue;
         const results = spec.tests.flatMap((test) => test.results);
-        const statuses = results.map((entry) => entry.status);
         gate({
           id,
           invariant: spec.title.replace(/^\[[^\]]+\]\s*/, ""),
           tier,
-          failures:
-            statuses.includes("skipped") || statuses.length === 0
-              ? null
-              : spec.ok
-                ? []
-                : results.map(
-                    (entry) =>
-                      entry.error?.message?.split("\n")[0] ?? entry.status,
-                  ),
+          failures: browserScenarioFailures(spec.ok, results),
           checked: 1,
         });
       }
@@ -1295,6 +1296,7 @@ type DesktopReport = {
   shutdown?: {
     exit: { code: number | null; signal: string | null };
     decodersAtClose: number[];
+    thumbnailPidsAtClose: number[];
     survivingDecoders: number[];
   };
   stages?: Array<{ name: string; rssBytes: number | null }>;
@@ -1510,17 +1512,7 @@ if (!wantNative) {
         tier,
         failures: !report.shutdown
           ? ["not exercised"]
-          : [
-              ...(report.shutdown.exit.code === 0
-                ? []
-                : [`exit ${JSON.stringify(report.shutdown.exit)}`]),
-              ...(report.shutdown.decodersAtClose.length > 0
-                ? []
-                : ["no decoder was active at close (scenario vacuous)"]),
-              ...report.shutdown.survivingDecoders.map(
-                (pid) => `decoder ${pid} survived shutdown`,
-              ),
-            ],
+          : shutdownFailures(report.shutdown),
         checked: 1,
       });
       addMetric(
