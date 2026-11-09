@@ -87,10 +87,11 @@ impl DecodeArbiter {
                 tokio::select! {
                     request = rx.recv(), if accepting_requests => {
                         if let Some(request) = request {
-                            worker_generations
-                                .write()
-                                .await
-                                .insert(request.item_id.clone(), request.generation);
+                            record_generation(
+                                &mut *worker_generations.write().await,
+                                &request.item_id,
+                                request.generation,
+                            );
                             queue.push(QueuedDecodeRequest { sequence, request });
                             sequence = sequence.wrapping_add(1);
                         } else {
@@ -167,6 +168,17 @@ impl DecodeArbiter {
     }
 }
 
+/// Records the newest generation requested for an item. Tauri dispatches each
+/// invoke on its own task, so two requests can reach the channel out of order;
+/// an older generation arriving late must not demote the newer one (which
+/// would discard the current request as stale and decode the obsolete one).
+fn record_generation(generations: &mut HashMap<String, u64>, item_id: &str, generation: u64) {
+    generations
+        .entry(item_id.to_string())
+        .and_modify(|latest| *latest = (*latest).max(generation))
+        .or_insert(generation);
+}
+
 fn decode_preview_to_cache<R: Runtime>(app: AppHandle<R>, path: PathBuf, lod: u32) -> DecodeResult {
     let path_string = path.to_string_lossy().into_owned();
 
@@ -224,6 +236,18 @@ mod tests {
 
         assert_eq!(queue.pop().map(|request| request.sequence), Some(2));
         assert_eq!(queue.pop().map(|request| request.sequence), Some(1));
+    }
+
+    #[test]
+    fn late_arriving_older_generation_does_not_demote_newer_request() {
+        let mut generations = HashMap::new();
+        record_generation(&mut generations, "item-1", 7);
+        record_generation(&mut generations, "item-1", 5);
+        assert_eq!(generations.get("item-1"), Some(&7));
+        record_generation(&mut generations, "item-1", 9);
+        assert_eq!(generations.get("item-1"), Some(&9));
+        record_generation(&mut generations, "item-2", 1);
+        assert_eq!(generations.get("item-2"), Some(&1));
     }
 
     #[test]

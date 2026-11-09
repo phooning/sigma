@@ -79,11 +79,22 @@ const MOCK_IMAGE_URL = "/fixtures/mock-image.png";
 
 const PLAYWRIGHT_VIDEO_FIXTURE_URL = "/fixtures/generated-lod-test-1080p.webm";
 
+/**
+ * Optional real-media mapping used by e2e/media-corpus.spec.ts: maps a file
+ * path to a dev-server URL and to the metadata `probe_media` should return.
+ * When omitted, every video resolves to the single generated fixture.
+ */
+export type MediaCorpusMocks = {
+  urls: Record<string, string>;
+  probes: Record<string, Record<string, number>>;
+};
+
 export async function installTauriMocks(
   page: Page,
   options: {
     disableNativeImageSurface?: boolean;
     platform?: TauriPlatform;
+    mediaCorpus?: MediaCorpusMocks;
   } = {},
 ) {
   await page.addInitScript(
@@ -92,6 +103,7 @@ export async function installTauriMocks(
       playwrightVideoFixtureUrl,
       disableNativeImageSurface,
       platform,
+      mediaCorpus,
     }) => {
       type Callback = (payload: unknown) => void;
       type ListenerRecord = {
@@ -181,6 +193,8 @@ export async function installTauriMocks(
       };
 
       const toMediaUrl = (filePath: string) => {
+        const corpusUrl = mediaCorpus?.urls[filePath];
+        if (corpusUrl) return corpusUrl;
         const extension = getExtension(filePath);
         if (["png", "jpg", "jpeg", "gif", "webp"].includes(extension)) {
           return mockImageUrl;
@@ -354,6 +368,8 @@ export async function installTauriMocks(
 
             case "probe_media": {
               const path = String(objectArgs.path ?? "");
+              const corpusProbe = mediaCorpus?.probes[path];
+              if (corpusProbe) return corpusProbe;
               const isVideo = /\.(mp4|webm|mov|mkv)$/i.test(path);
 
               return isVideo
@@ -499,6 +515,7 @@ export async function installTauriMocks(
       playwrightVideoFixtureUrl: PLAYWRIGHT_VIDEO_FIXTURE_URL,
       disableNativeImageSurface: options.disableNativeImageSurface ?? false,
       platform: options.platform ?? "linux",
+      mediaCorpus: options.mediaCorpus ?? null,
     },
   );
 }
@@ -508,6 +525,7 @@ export async function gotoApp(
   options: {
     disableNativeImageSurface?: boolean;
     platform?: TauriPlatform;
+    mediaCorpus?: MediaCorpusMocks;
   } = {},
 ) {
   await installTauriMocks(page, options);

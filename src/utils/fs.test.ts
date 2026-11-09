@@ -96,6 +96,30 @@ describe("canvas config storage", () => {
     expect(config.devMode).toBe(true);
   });
 
+  it("persists probed video frame rates so frame stepping survives reload", async () => {
+    const video: MediaItem = {
+      ...baseItem,
+      id: "video-1",
+      type: "video",
+      filePath: "/Users/test/project/clips/film.mp4",
+      duration: 10.88,
+      frameRate: 24000 / 1001,
+    };
+    const config = JSON.parse(
+      getCanvasConfigData(
+        [video],
+        { x: 0, y: 0, zoom: 1 },
+        "/Users/test/project/canvas.json",
+      ),
+    );
+    expect(config.items[0].frameRate).toBeCloseTo(23.976, 3);
+
+    vi.mocked(open).mockResolvedValue("/Users/test/project/canvas.json");
+    vi.mocked(readTextFile).mockResolvedValue(JSON.stringify(config));
+    const loaded = await loadFromStorage();
+    expect(loaded.ok && loaded.data.items[0].frameRate).toBeCloseTo(23.976, 3);
+  });
+
   it("opens a picker for save as and returns the selected path", async () => {
     vi.mocked(save).mockResolvedValue("/Users/test/project/scene.json");
 

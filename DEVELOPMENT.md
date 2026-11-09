@@ -43,3 +43,7 @@ pnpm bench:ipc:rust
 Commit `benchmarks/vitest-bench-baseline.json` and `benchmarks/vitest-bench-baseline.verbose.txt` whenever the accepted benchmark baseline changes so CI can diff against git-tracked numbers.
 
 The JS-side IPC bench uses a mocked `invoke` boundary to keep Vitest stable and focused on frontend serialization/promise overhead. The Rust-side IPC bench uses `tauri::test` plus Criterion so command dispatch timing is measured without spinning up a real window.
+
+## Real-world media corpus suite
+
+Place the clip corpus in `fixtures/clips/` (git-ignored) and run `pnpm test:media:smoke`, `:full`, `:perf` or `:soak`. See [docs/media-benchmarking.md](docs/media-benchmarking.md) for tiers, gates, baselines and reports.

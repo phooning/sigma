@@ -29,7 +29,12 @@
     "pw:install": "cross-env playwright install chromium",
     "test:e2e": "cross-env playwright test",
     "build:icons": "./scripts/build-icons.sh",
-    "test:desktop": "node scripts/run-desktop-tests.mjs"
+    "test:desktop": "node scripts/run-desktop-tests.mjs",
+    "test:media:manifest": "node scripts/media/build-manifest.ts",
+    "test:media:smoke": "node scripts/media/run-media-suite.ts --tier smoke",
+    "test:media:full": "node scripts/media/run-media-suite.ts --tier full",
+    "test:media:perf": "node scripts/media/run-media-suite.ts --tier perf",
+    "test:media:soak": "node scripts/media/run-media-suite.ts --tier soak"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",

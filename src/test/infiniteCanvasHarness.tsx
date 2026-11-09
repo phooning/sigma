@@ -13,6 +13,7 @@ const {
   dragDropState,
   invokeMock,
   openMock,
+  readTextFileMock,
   saveMock,
   toastMock,
   writeTextFileMock,
@@ -96,6 +97,7 @@ const {
     },
     invokeMock,
     openMock: vi.fn(),
+    readTextFileMock: vi.fn(),
     saveMock: vi.fn(),
     toastMock: {
       success: vi.fn(),
@@ -150,7 +152,7 @@ vi.mock("sonner", () => ({
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
   writeTextFile: writeTextFileMock,
-  readTextFile: vi.fn(),
+  readTextFile: readTextFileMock,
 }));
 
 vi.mock("@tauri-apps/plugin-shell", () => ({
@@ -238,6 +240,7 @@ beforeEach(() => {
 export {
   invokeMock as invoke,
   openMock as open,
+  readTextFileMock as readTextFile,
   revealItemInDirMock,
   saveMock as save,
   toastMock as toast,

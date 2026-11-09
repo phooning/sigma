@@ -1,0 +1,12 @@
+{
+  // Type-checks the Node 26 scripts (run directly via native type stripping)
+  // and the desktop media harness: pnpm exec tsc -p tsconfig.scripts.json
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "noEmit": true
+  },
+  "include": ["scripts/media/**/*.ts", "desktop-tests/**/*.ts"],
+  "exclude": []
+}
