@@ -1,0 +1,242 @@
+{
+  "schema": "sigma.media-baseline.v1",
+  "environment": "darwin|arm64|Apple-M5|10c|16g|node26|ffmpeg9",
+  "recordedAt": "2026-11-09",
+  "method": "node scripts/media/run-media-suite.ts --tier perf --update-baseline (seed 20261108); p50/p95 of measured samples; metrics with fewer than 5 samples are omitted",
+  "thresholds": {
+    "default": 0.25
+  },
+  "metrics": {
+    "rust.probe_ms": {
+      "key": "rust.probe_ms",
+      "unit": "ms",
+      "p50": 45.712458,
+      "p95": 101.381916,
+      "n": 126
+    },
+    "rust.thumbnail_cold_ms": {
+      "key": "rust.thumbnail_cold_ms",
+      "unit": "ms",
+      "p50": 181.64041699999999,
+      "p95": 382.82237499999997,
+      "n": 18
+    },
+    "rust.thumbnail_warm_ms": {
+      "key": "rust.thumbnail_warm_ms",
+      "unit": "ms",
+      "p50": 0.281125,
+      "p95": 0.36174999999999996,
+      "n": 18
+    },
+    "frontend.import.batch_ms": {
+      "key": "frontend.import.batch_ms",
+      "unit": "ms",
+      "p50": 78.2305,
+      "p95": 78.60520799999995,
+      "n": 5
+    },
+    "frontend.import.cycle_ms": {
+      "key": "frontend.import.cycle_ms",
+      "unit": "ms",
+      "p50": 0.030875000000150976,
+      "p95": 0.08083299999998417,
+      "n": 25
+    },
+    "frontend.workload.op_ms": {
+      "key": "frontend.workload.op_ms",
+      "unit": "ms",
+      "p50": 0.03899999999998727,
+      "p95": 0.31491699999992306,
+      "n": 1000
+    },
+    "frontend.persist.save_ms": {
+      "key": "frontend.persist.save_ms",
+      "unit": "ms",
+      "p50": 0.04016599999999926,
+      "p95": 0.045457999999825915,
+      "n": 7
+    },
+    "frontend.persist.load_ms": {
+      "key": "frontend.persist.load_ms",
+      "unit": "ms",
+      "p50": 0.0572500000000673,
+      "p95": 0.06583399999999529,
+      "n": 7
+    },
+    "frontend.state.move_one_ms@1": {
+      "key": "frontend.state.move_one_ms@1",
+      "unit": "ms",
+      "p50": 0.002165999999988344,
+      "p95": 0.004500000000007276,
+      "n": 40
+    },
+    "frontend.persist.serialize_ms@1": {
+      "key": "frontend.persist.serialize_ms@1",
+      "unit": "ms",
+      "p50": 0.0016249999998763087,
+      "p95": 0.005709000000024389,
+      "n": 20
+    },
+    "frontend.state.move_one_ms@10": {
+      "key": "frontend.state.move_one_ms@10",
+      "unit": "ms",
+      "p50": 0.007041999999955806,
+      "p95": 0.012791999999990367,
+      "n": 40
+    },
+    "frontend.persist.serialize_ms@10": {
+      "key": "frontend.persist.serialize_ms@10",
+      "unit": "ms",
+      "p50": 0.010374999999839929,
+      "p95": 0.012917000000015832,
+      "n": 20
+    },
+    "frontend.state.move_one_ms@25": {
+      "key": "frontend.state.move_one_ms@25",
+      "unit": "ms",
+      "p50": 0.016875000000027285,
+      "p95": 0.022375000000010914,
+      "n": 40
+    },
+    "frontend.persist.serialize_ms@25": {
+      "key": "frontend.persist.serialize_ms@25",
+      "unit": "ms",
+      "p50": 0.026915999999800988,
+      "p95": 0.03033400000003894,
+      "n": 20
+    },
+    "frontend.state.move_one_ms@50": {
+      "key": "frontend.state.move_one_ms@50",
+      "unit": "ms",
+      "p50": 0.03283400000009351,
+      "p95": 0.05058299999996052,
+      "n": 40
+    },
+    "frontend.persist.serialize_ms@50": {
+      "key": "frontend.persist.serialize_ms@50",
+      "unit": "ms",
+      "p50": 0.049042000000099506,
+      "p95": 0.05491700000015953,
+      "n": 20
+    },
+    "frontend.state.move_one_ms@100": {
+      "key": "frontend.state.move_one_ms@100",
+      "unit": "ms",
+      "p50": 0.03270799999995688,
+      "p95": 0.06658300000003692,
+      "n": 40
+    },
+    "frontend.persist.serialize_ms@100": {
+      "key": "frontend.persist.serialize_ms@100",
+      "unit": "ms",
+      "p50": 0.09699999999997999,
+      "p95": 0.11599999999998545,
+      "n": 20
+    },
+    "frontend.state.move_one_ms@250": {
+      "key": "frontend.state.move_one_ms@250",
+      "unit": "ms",
+      "p50": 0.15312500000004547,
+      "p95": 0.18637499999999818,
+      "n": 40
+    },
+    "frontend.persist.serialize_ms@250": {
+      "key": "frontend.persist.serialize_ms@250",
+      "unit": "ms",
+      "p50": 0.24358399999982794,
+      "p95": 0.3272500000000491,
+      "n": 20
+    },
+    "browser.playback_ready_ms": {
+      "key": "browser.playback_ready_ms",
+      "unit": "ms",
+      "p50": 134,
+      "p95": 227,
+      "n": 16
+    },
+    "browser.seek_ms": {
+      "key": "browser.seek_ms",
+      "unit": "ms",
+      "p50": 160.5999999642372,
+      "p95": 607,
+      "n": 48
+    },
+    "browser.pan_frame_ms@1": {
+      "key": "browser.pan_frame_ms@1",
+      "unit": "ms",
+      "p50": 16.699999999999818,
+      "p95": 16.700000000000273,
+      "n": 119
+    },
+    "browser.pan_frame_ms@10": {
+      "key": "browser.pan_frame_ms@10",
+      "unit": "ms",
+      "p50": 16.699999999999818,
+      "p95": 16.799999999999727,
+      "n": 123
+    },
+    "browser.pan_frame_ms@25": {
+      "key": "browser.pan_frame_ms@25",
+      "unit": "ms",
+      "p50": 33.29999999999927,
+      "p95": 33.400000000000546,
+      "n": 138
+    },
+    "browser.pan_frame_ms@50": {
+      "key": "browser.pan_frame_ms@50",
+      "unit": "ms",
+      "p50": 16.700000000000728,
+      "p95": 33.399999999999636,
+      "n": 125
+    },
+    "browser.pan_frame_ms@100": {
+      "key": "browser.pan_frame_ms@100",
+      "unit": "ms",
+      "p50": 16.700000000000728,
+      "p95": 33.399999999999636,
+      "n": 133
+    },
+    "browser.pan_frame_ms@250": {
+      "key": "browser.pan_frame_ms@250",
+      "unit": "ms",
+      "p50": 16.700000000000728,
+      "p95": 33.400000000001455,
+      "n": 146
+    },
+    "browser.preview_frame_ms@1": {
+      "key": "browser.preview_frame_ms@1",
+      "unit": "ms",
+      "p50": 16.699999999999932,
+      "p95": 16.700000000000045,
+      "n": 119
+    },
+    "browser.preview_frame_ms@2": {
+      "key": "browser.preview_frame_ms@2",
+      "unit": "ms",
+      "p50": 33.29999999999973,
+      "p95": 33.400000000000546,
+      "n": 70
+    },
+    "browser.preview_frame_ms@4": {
+      "key": "browser.preview_frame_ms@4",
+      "unit": "ms",
+      "p50": 33.30000000000018,
+      "p95": 33.399999999999636,
+      "n": 64
+    },
+    "browser.preview_frame_ms@8": {
+      "key": "browser.preview_frame_ms@8",
+      "unit": "ms",
+      "p50": 16.69999999999891,
+      "p95": 16.80000000000109,
+      "n": 117
+    },
+    "browser.preview_frame_ms@16": {
+      "key": "browser.preview_frame_ms@16",
+      "unit": "ms",
+      "p50": 16.700000000000728,
+      "p95": 33.30000000000291,
+      "n": 110
+    }
+  }
+}

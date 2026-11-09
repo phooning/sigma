@@ -20,6 +20,7 @@ const MEDIA_CACHE_MAX_BYTES: u64 = 512 * 1024 * 1024;
 const MEDIA_CACHE_MAX_AGE_SECS: u64 = 90 * 24 * 60 * 60;
 const MAX_IMAGE_PREVIEW_DIMENSION: u32 = 4096;
 const MAX_IMAGE_PROBE_BATCH: usize = 64;
+const THUMBNAIL_SEEK_OFFSETS: [&str; 2] = ["00:00:01", "0"];
 
 static MEDIA_CACHE_HITS: AtomicU64 = AtomicU64::new(0);
 static MEDIA_CACHE_MISSES: AtomicU64 = AtomicU64::new(0);
@@ -45,7 +46,10 @@ struct ImageProbe {
     size: u64,
 }
 
+// The frontend reads `frameRate`; without camelCase the field arrived as
+// `frame_rate` and frame stepping silently fell back to 30 fps for every clip.
 #[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 struct MediaMetadata {
     width: u32,
     height: u32,
@@ -140,6 +144,13 @@ fn parse_frame_rate_value(value: &serde_json::Value) -> Option<f64> {
     (frame_rate.is_finite() && frame_rate > 0.0).then_some(frame_rate)
 }
 
+fn media_file_label(path: &str) -> String {
+    Path::new(path)
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "Media file".to_string())
+}
+
 fn probe_media_blocking(path: String) -> Result<MediaMetadata, String> {
     let metadata =
         fs::metadata(&path).map_err(|err| format!("Failed to read media file metadata: {err}"))?;
@@ -166,20 +177,26 @@ fn probe_media_blocking(path: String) -> Result<MediaMetadata, String> {
         ])
         .output()
     {
-        Ok(output) if output.status.success() => output,
-        _ => return Ok(fallback),
-    };
-
-    let json: serde_json::Value = match serde_json::from_slice(&output.stdout) {
-        Ok(json) => json,
+        Ok(output) => output,
+        // ffprobe is an optional system tool: without it, fall back to default
+        // dimensions rather than failing the import.
         Err(_) => return Ok(fallback),
     };
+
+    // ffprobe ran but could not read the file: report it so the UI can warn
+    // instead of silently importing a corrupt file as a 1280x720 video.
+    if !output.status.success() {
+        return Err(format!("{} could not be read as media", media_file_label(&path)));
+    }
+
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .map_err(|_| format!("{} returned unreadable media metadata", media_file_label(&path)))?;
 
     let Some(stream) = json["streams"]
         .as_array()
         .and_then(|streams| streams.iter().find(|stream| stream["codec_type"] == "video"))
     else {
-        return Ok(fallback);
+        return Err(format!("{} has no video stream", media_file_label(&path)));
     };
 
     Ok(MediaMetadata {
@@ -436,33 +453,39 @@ pub(crate) fn generate_video_thumbnail_blocking<R: tauri::Runtime>(
     }
     MEDIA_CACHE_MISSES.fetch_add(1, Ordering::Relaxed);
 
-    let output = Command::new("ffmpeg")
-        .args([
-            "-y",
-            "-loglevel",
-            "error",
-            "-ss",
-            "00:00:01",
-            "-i",
-            &path,
-            "-vframes",
-            "1",
-            "-vf",
-            "scale=320:-1",
-            thumbnail_path.to_str().ok_or("Thumbnail cache path is not valid UTF-8")?,
-        ])
-        .output();
-
-    match output {
-        Ok(result) if result.status.success() => {
+    let thumbnail_arg = thumbnail_path.to_str().ok_or("Thumbnail cache path is not valid UTF-8")?;
+    // Prefer a frame one second in (skips black lead-in frames), but clips
+    // shorter than that have no frame at 1 s: fall back to the first frame.
+    for seek in THUMBNAIL_SEEK_OFFSETS {
+        let output = Command::new("ffmpeg")
+            .args([
+                "-y",
+                "-loglevel",
+                "error",
+                "-ss",
+                seek,
+                "-i",
+                &path,
+                "-vframes",
+                "1",
+                "-vf",
+                "scale=320:-1",
+                thumbnail_arg,
+            ])
+            .output();
+        let wrote_frame = matches!(&output, Ok(result) if result.status.success())
+            && fs::metadata(&thumbnail_path).is_ok_and(|metadata| metadata.len() > 0);
+        if wrote_frame {
             prune_media_cache(&cache_root, MEDIA_CACHE_MAX_BYTES, MEDIA_CACHE_MAX_AGE_SECS)?;
-            Ok(Some(thumbnail_path.to_string_lossy().into_owned()))
+            return Ok(Some(thumbnail_path.to_string_lossy().into_owned()));
         }
-        Ok(_) | Err(_) => {
-            let _ = fs::remove_file(&thumbnail_path);
-            Ok(None)
+        let _ = fs::remove_file(&thumbnail_path);
+        if output.is_err() {
+            // ffmpeg is not installed; retrying with another offset cannot help.
+            break;
         }
     }
+    Ok(None)
 }
 
 #[tauri::command]
@@ -817,6 +840,17 @@ pub fn manage_native_video_state<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     }
 }
 
+/// Manages the preview decode arbiter (also used by IPC tests, where mock
+/// builds do not run `setup`).
+pub fn manage_decode_arbiter<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    if app.try_state::<decode_arbiter::DecodeArbiter>().is_none() {
+        let max_parallel = std::thread::available_parallelism()
+            .map(|threads| threads.get().saturating_sub(1).clamp(1, 4))
+            .unwrap_or(2);
+        app.manage(decode_arbiter::DecodeArbiter::spawn(app.clone(), max_parallel));
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn configure_system_macos_window_frame<R: tauri::Runtime>(
     app: &tauri::App<R>,
@@ -854,15 +888,30 @@ pub fn configure_tauri_builder<R: tauri::Runtime>(builder: tauri::Builder<R>) ->
                     app.asset_protocol_scope().allow_file(&path)?;
                 }
             }
+            // Test builds only: read access to the media corpus and generated
+            // failure fixtures for desktop-tests/media-corpus.ts.
+            #[cfg(all(debug_assertions, feature = "tauri-plugin-wdio-webdriver"))]
+            if let Ok(directories) = std::env::var("SIGMA_DESKTOP_MEDIA_DIRS") {
+                let temp = std::env::temp_dir().canonicalize()?;
+                for directory in std::env::split_paths(&directories) {
+                    let directory = directory.canonicalize()?;
+                    let is_corpus = directory.ends_with("fixtures/clips");
+                    let is_fault_dir = directory.starts_with(&temp)
+                        && directory.file_name().is_some_and(|name| {
+                            name.to_string_lossy().starts_with("sigma-desktop-media-")
+                        });
+                    if !directory.is_dir() || !(is_corpus || is_fault_dir) {
+                        return Err("invalid desktop media directory".into());
+                    }
+                    app.asset_protocol_scope().allow_directory(&directory, true)?;
+                }
+            }
             #[cfg(target_os = "macos")]
             configure_system_macos_window_frame(app)?;
 
             let app_handle = app.handle().clone();
             app.manage(native_video::NativeVideoState::new(&app_handle));
-            let max_parallel = std::thread::available_parallelism()
-                .map(|threads| threads.get().saturating_sub(1).clamp(1, 4))
-                .unwrap_or(2);
-            app.manage(decode_arbiter::DecodeArbiter::spawn(app_handle, max_parallel));
+            manage_decode_arbiter(&app_handle);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1131,5 +1180,71 @@ mod tests {
             differing_pixels, 0,
             "exported screenshot pixels differed from ImageMagick crop: stdout={stdout:?} stderr={stderr:?}"
         );
+    }
+
+    #[test]
+    fn media_metadata_serializes_frame_rate_for_the_frontend_contract() {
+        let value = serde_json::to_value(MediaMetadata {
+            width: 1920,
+            height: 1080,
+            duration: 8.0,
+            frame_rate: 23.976,
+            size: 42,
+        })
+        .expect("serialize metadata");
+        assert_eq!(value["frameRate"], serde_json::json!(23.976));
+        assert!(value.get("frame_rate").is_none(), "snake_case leaked into IPC: {value}");
+    }
+
+    #[test]
+    fn probe_media_rejects_unreadable_media_instead_of_inventing_dimensions() {
+        if !command_available("ffprobe") {
+            eprintln!("skipping: ffprobe unavailable");
+            return;
+        }
+        let root = unique_temp_dir("probe-unreadable");
+        fs::create_dir_all(&root).expect("temp dir");
+        let garbage = root.join("not-a-video.mp4");
+        fs::write(&garbage, b"definitely not an mp4").expect("garbage file");
+        let result = probe_media_blocking(garbage.to_string_lossy().into_owned());
+        let _ = fs::remove_dir_all(&root);
+        let error = match result {
+            Ok(_) => panic!("garbage media must not produce fallback metadata"),
+            Err(error) => error,
+        };
+        assert!(error.contains("not-a-video.mp4"), "{error}");
+        assert!(
+            !error.contains(root.to_string_lossy().as_ref()),
+            "error leaks absolute path: {error}"
+        );
+    }
+
+    #[test]
+    fn sub_second_video_still_gets_a_thumbnail() {
+        if !command_available("ffmpeg") {
+            eprintln!("skipping: ffmpeg unavailable");
+            return;
+        }
+        let root = unique_temp_dir("short-thumbnail");
+        fs::create_dir_all(&root).expect("temp dir");
+        let clip = root.join("short.mp4");
+        let generated = Command::new("ffmpeg")
+            .args(["-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=64x64:rate=15"])
+            .args(["-t", "0.5", "-c:v", "mpeg4"])
+            .arg(&clip)
+            .status()
+            .expect("run ffmpeg");
+        assert!(generated.success(), "could not generate sub-second clip");
+        let app = tauri::test::mock_app();
+        let thumbnail = generate_video_thumbnail_blocking(
+            app.handle().clone(),
+            clip.to_string_lossy().into_owned(),
+        )
+        .expect("thumbnail command");
+        let thumbnail = thumbnail.expect("sub-second clips must fall back to their first frame");
+        let size = fs::metadata(&thumbnail).map(|metadata| metadata.len()).unwrap_or(0);
+        let _ = fs::remove_file(&thumbnail);
+        let _ = fs::remove_dir_all(&root);
+        assert!(size > 0, "thumbnail {thumbnail} is empty");
     }
 }

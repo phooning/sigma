@@ -174,6 +174,25 @@ try {
       lifecycle.on("error", reject);
       lifecycle.on("close", (code) => resolve(code ?? 1));
     });
+    // Optional real-media scenario, requested by scripts/media/run-media-suite.ts.
+    if (process.exitCode === 0 && process.env.SIGMA_DESKTOP_MEDIA_PLAN) {
+      const media = spawn(process.execPath, ["desktop-tests/media-corpus.ts"], {
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      for (const [stream, output] of [
+        [media.stdout, process.stdout],
+        [media.stderr, process.stderr],
+      ]) {
+        stream.on("data", (chunk) => {
+          diagnostics += String(chunk);
+          output.write(chunk);
+        });
+      }
+      process.exitCode = await new Promise((resolve, reject) => {
+        media.on("error", reject);
+        media.on("close", (code) => resolve(code ?? 1));
+      });
+    }
   }
 } catch (error) {
   console.error(error);

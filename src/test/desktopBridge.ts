@@ -1,4 +1,5 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
+import { onDropMedia } from "../components/CanvasActions";
 import { useCanvasSessionStore } from "../stores/useCanvasSessionStore";
 import { loadCanvasFromPath, saveToStorage } from "../utils/fs";
 
@@ -20,6 +21,33 @@ export const desktopBridge = {
   },
   frameInfo() {
     return { packetBytes, packetMagic };
+  },
+  /** Real drop-import path (probe over IPC, item creation, store commit). */
+  async importPaths(paths: string[]) {
+    const started = performance.now();
+    const items = await onDropMedia({
+      paths,
+      viewportRef: { current: useCanvasSessionStore.getState().viewport },
+    });
+    useCanvasSessionStore
+      .getState()
+      .setItems((previous) => [...previous, ...items]);
+    return {
+      ok: true as const,
+      elapsedMs: performance.now() - started,
+      items: items.map((item) => ({
+        id: item.id,
+        filePath: item.filePath,
+        sourceWidth: item.sourceWidth,
+        sourceHeight: item.sourceHeight,
+        duration: item.duration,
+        frameRate: item.frameRate,
+        fileSize: item.fileSize,
+      })),
+    };
+  },
+  sessionItemCount() {
+    return useCanvasSessionStore.getState().items.length;
   },
   firstItem() {
     const item = useCanvasSessionStore.getState().items[0];

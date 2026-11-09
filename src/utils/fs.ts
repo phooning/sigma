@@ -208,6 +208,9 @@ const serializeItemForStorage = (
   height: item.height,
   ...(typeof item.fileSize === "number" ? { fileSize: item.fileSize } : {}),
   ...(typeof item.duration === "number" ? { duration: item.duration } : {}),
+  // Frame stepping depends on the probed rate; without it a reloaded canvas
+  // steps every clip at the 30 fps fallback.
+  ...(typeof item.frameRate === "number" ? { frameRate: item.frameRate } : {}),
   ...(typeof item.sourceWidth === "number"
     ? { sourceWidth: item.sourceWidth }
     : {}),
