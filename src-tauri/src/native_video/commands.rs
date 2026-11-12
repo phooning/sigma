@@ -47,11 +47,14 @@ pub async fn native_video_update_manifest<R: Runtime>(
         validate_media_source_path(&app, &asset.path)?;
     }
     let (respond_to, response) = oneshot::channel();
-    state
+    let permit = state
         .control_tx
-        .send(ControlMessage::UpdateManifest { manifest, respond_to })
+        .reserve()
         .await
         .map_err(|_| "native video controller is not running".to_string())?;
+    crate::lifecycle::while_running(&app, || {
+        permit.send(ControlMessage::UpdateManifest { manifest, respond_to });
+    })?;
 
     let snapshot = response
         .await
@@ -185,6 +188,7 @@ pub async fn native_video_run_base_case_probe<R: Runtime>(
     config: BaseCaseProbeConfig,
     on_frame: Channel<InvokeResponseBody>,
 ) -> Result<BaseCaseProbeReport, String> {
+    let _operation = crate::lifecycle::OperationGuard::start(&app)?;
     let width = config.width.unwrap_or(3840).clamp(64, 3840);
     let height = config.height.unwrap_or(2160).clamp(64, 2160);
     let fps = config.fps.unwrap_or(60).clamp(1, 60);

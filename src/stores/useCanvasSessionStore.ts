@@ -1,6 +1,7 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import { createSessionStorage } from "../lib/sessionStorage";
 import {
   loadFromStorage,
   saveToStorage,
@@ -8,7 +9,6 @@ import {
 } from "../utils/fs";
 import type { MediaItem, Viewport } from "../utils/media.types";
 import { notify } from "../utils/notifications";
-import { markPerformance } from "../utils/performance";
 import { useDevStore } from "./useDevStore";
 import { getSessionSettings, useSettingsStore } from "./useSettingsStore";
 
@@ -17,14 +17,51 @@ const SESSION_STORAGE_KEY = "sigma:canvas-session";
 // Persistence operations share one queue so a load cannot read a destination
 // before an earlier save commits, and writes commit in request order.
 let persistenceTail: Promise<void> = Promise.resolve();
+let pendingPersistence = 0;
 let sessionGeneration = 0;
 let latestLoadRequest = 0;
+let persistenceError: unknown;
+let sessionClosing = false;
+const sessionStorage = createSessionStorage();
+
+export const getSessionGeneration = () => sessionGeneration;
+
+export function resumeSession() {
+  sessionClosing = false;
+}
+
+export function prepareSessionShutdown() {
+  sessionClosing = true;
+  latestLoadRequest += 1;
+  return flushSessionPersistence();
+}
+
+// Drain requested operations, including requests enqueued while waiting. This
+// does not autosave an unsaved canvas or turn a canceled file picker into a save.
+export async function flushSessionPersistence() {
+  let pending: Promise<void>;
+  do {
+    pending = persistenceTail;
+    await pending;
+  } while (pending !== persistenceTail);
+  if (persistenceError) throw persistenceError;
+  // A successfully saved file is also a recovery copy when WebKit storage fails.
+  const state = useCanvasSessionStore.getState();
+  if (state.isDirty || (!state.saveFilePath && state.items.length > 0)) {
+    sessionStorage.assertWritable();
+  }
+}
 
 const enqueuePersistence = <T>(operation: () => Promise<T>): Promise<T> => {
+  pendingPersistence += 1;
   const result = persistenceTail.then(operation);
   persistenceTail = result.then(
-    () => undefined,
-    () => undefined,
+    () => {
+      pendingPersistence -= 1;
+    },
+    () => {
+      pendingPersistence -= 1;
+    },
   );
   return result;
 };
@@ -208,20 +245,6 @@ const normalizeAndReconcileItems = (
   previousItems: MediaItem[],
 ) => reconcileItemIdentities(previousItems, normalizeItems(items));
 
-const createMeasuredLocalStorage = () => ({
-  getItem: (name: string) => localStorage.getItem(name),
-  removeItem: (name: string) => localStorage.removeItem(name),
-  setItem: (name: string, value: string) => {
-    markPerformance("sigma:canvas-session:localStorage:setItem:start");
-
-    try {
-      localStorage.setItem(name, value);
-    } finally {
-      markPerformance("sigma:canvas-session:localStorage:setItem:end");
-    }
-  },
-});
-
 export const useCanvasSessionStore = create<CanvasSessionStore>()(
   persist(
     (set, get) => ({
@@ -230,7 +253,8 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
       saveFilePath: null,
       lastSavedSignature: null,
       isDirty: false,
-      setViewport: (value) =>
+      setViewport: (value) => {
+        if (sessionClosing) return;
         set((state) => {
           const viewport = resolveStateUpdate(value, state.viewport);
           return {
@@ -241,8 +265,10 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
               lastSavedSignature: state.lastSavedSignature,
             }),
           };
-        }),
-      setItems: (value) =>
+        });
+      },
+      setItems: (value) => {
+        if (sessionClosing) return;
         set((state) => {
           const items = normalizeAndReconcileItems(
             resolveStateUpdate(value, state.items),
@@ -256,7 +282,8 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
               lastSavedSignature: state.lastSavedSignature,
             }),
           };
-        }),
+        });
+      },
       refreshDirtyState: () =>
         set((state) => ({
           isDirty: resolveDirtyState({
@@ -266,7 +293,9 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
           }),
         })),
       replaceSession: (snapshot) => {
+        if (sessionClosing) return;
         sessionGeneration += 1;
+        persistenceError = undefined;
         set((state) => {
           const items = normalizeAndReconcileItems(
             snapshot.items ?? state.items,
@@ -295,8 +324,15 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
         });
       },
       saveSessionToFile: () => {
+        if (sessionClosing) return Promise.resolve();
         const { items, viewport, saveFilePath, isDirty } = get();
-        if (!saveFilePath || !isDirty) return Promise.resolve();
+        // A preceding save can still replace the disk snapshot even if the
+        // current edit has been undone back to the last committed signature.
+        if (
+          !saveFilePath ||
+          (!isDirty && pendingPersistence === 0 && !persistenceError)
+        )
+          return Promise.resolve();
         const generation = sessionGeneration;
         const settings = getSessionSettings();
         const devMode = useDevStore.getState().devMode;
@@ -315,6 +351,8 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
           if (generation !== sessionGeneration) return;
           if (!result.ok) {
             if (result.reason !== "cancelled") {
+              persistenceError =
+                result.error ?? new Error("Canvas save failed");
               console.error("Failed to save config:", result.error);
               notify.error("Save failed", {
                 description:
@@ -325,6 +363,7 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
             }
             return;
           }
+          persistenceError = undefined;
           set((state) => ({
             saveFilePath: result.filePath,
             lastSavedSignature: savedSignature,
@@ -336,6 +375,7 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
         });
       },
       saveSessionToNewFile: () => {
+        if (sessionClosing) return Promise.resolve();
         const { items, viewport, saveFilePath } = get();
         const generation = sessionGeneration;
         const settings = getSessionSettings();
@@ -350,6 +390,7 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
             );
           } catch (error) {
             if (generation === sessionGeneration) {
+              persistenceError = error;
               console.error("Failed to select save destination:", error);
               notify.error("Save failed", { description: String(error) });
             }
@@ -366,6 +407,8 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
           if (generation !== sessionGeneration) return;
           if (!result.ok) {
             if (result.reason !== "cancelled") {
+              persistenceError =
+                result.error ?? new Error("Canvas save failed");
               console.error("Failed to save config:", result.error);
               notify.error("Save failed", {
                 description:
@@ -376,6 +419,7 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
             }
             return;
           }
+          persistenceError = undefined;
           set((state) => ({
             saveFilePath: result.filePath,
             lastSavedSignature: savedSignature,
@@ -387,6 +431,7 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
         });
       },
       loadSessionFromFile: () => {
+        if (sessionClosing) return Promise.resolve(false);
         const generation = sessionGeneration;
         const request = ++latestLoadRequest;
         const initial = get();
@@ -449,7 +494,7 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
     }),
     {
       name: SESSION_STORAGE_KEY,
-      storage: createJSONStorage(createMeasuredLocalStorage),
+      storage: createJSONStorage(() => sessionStorage),
       partialize: (state) => ({
         items: state.items,
         viewport: state.viewport,

@@ -13,6 +13,7 @@ use tauri::Manager;
 
 mod canvas_persistence;
 mod decode_arbiter;
+mod lifecycle;
 mod native_video;
 
 const MEDIA_CACHE_DIRS: [&str; 2] = ["image-previews", "video-thumbnails"];
@@ -118,9 +119,13 @@ async fn probe_media<R: tauri::Runtime>(
     path: String,
 ) -> Result<MediaMetadata, String> {
     validate_media_source_path(&app, &path)?;
-    tauri::async_runtime::spawn_blocking(move || probe_media_blocking(path))
-        .await
-        .map_err(|err| format!("Failed to probe media: {err}"))?
+    let operation = lifecycle::OperationGuard::start(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let _operation = operation;
+        probe_media_blocking(path)
+    })
+    .await
+    .map_err(|err| format!("Failed to probe media: {err}"))?
 }
 
 fn parse_frame_rate_value(value: &serde_json::Value) -> Option<f64> {
@@ -223,7 +228,9 @@ async fn probe_images<R: tauri::Runtime>(
     for path in &paths {
         validate_media_source_path(&app, path)?;
     }
+    let operation = lifecycle::OperationGuard::start(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
+        let _operation = operation;
         paths.into_iter().map(probe_image_blocking).collect::<Result<Vec<_>, _>>()
     })
     .await
@@ -420,9 +427,13 @@ async fn generate_video_thumbnail<R: tauri::Runtime>(
     path: String,
 ) -> Result<Option<String>, String> {
     validate_media_source_path(&app, &path)?;
-    tauri::async_runtime::spawn_blocking(move || generate_video_thumbnail_blocking(app, path))
-        .await
-        .map_err(|err| format!("Failed to generate video thumbnail: {err}"))?
+    let operation = lifecycle::OperationGuard::start(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let _operation = operation;
+        generate_video_thumbnail_blocking(app, path)
+    })
+    .await
+    .map_err(|err| format!("Failed to generate video thumbnail: {err}"))?
 }
 
 pub(crate) fn generate_video_thumbnail_blocking<R: tauri::Runtime>(
@@ -495,7 +506,9 @@ async fn generate_image_preview<R: tauri::Runtime>(
     max_dimension: u32,
 ) -> Result<Option<String>, String> {
     validate_media_source_path(&app, &path)?;
+    let operation = lifecycle::OperationGuard::start(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
+        let _operation = operation;
         generate_image_preview_blocking(app, path, max_dimension)
     })
     .await
@@ -565,6 +578,7 @@ async fn request_decode<R: tauri::Runtime>(
     priority: decode_arbiter::DecodePriority,
 ) -> Result<Option<String>, String> {
     let path = validate_media_source_path(&app, &path)?;
+    let _operation = lifecycle::OperationGuard::start(&app)?;
     arbiter
         .request_decode(item_id, path, lod, generation, priority)
         .await
@@ -587,7 +601,9 @@ async fn save_media_screenshot<R: tauri::Runtime>(
     if media_type != "video" && media_type != "image" {
         return Err("Media type must be either video or image".to_string());
     }
+    let operation = lifecycle::OperationGuard::start(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
+        let _operation = operation;
         save_media_screenshot_blocking(path, media_type, output_directory, current_time, crop)
     })
     .await
@@ -605,7 +621,9 @@ async fn export_video<R: tauri::Runtime>(
 ) -> Result<String, String> {
     validate_media_source_path(&app, &path)?;
     validate_video_output_path(&app, &output_path)?;
+    let operation = lifecycle::OperationGuard::start(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
+        let _operation = operation;
         export_video_blocking(path, output_path, crop, start_time, end_time)
     })
     .await
@@ -869,6 +887,15 @@ fn configure_system_macos_window_frame<R: tauri::Runtime>(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn configure_tauri_builder<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     builder
+        .manage(lifecycle::ShutdownState::default())
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if !lifecycle::exit_approved(window.app_handle()) {
+                    api.prevent_close();
+                    lifecycle::request_shutdown(window.app_handle());
+                }
+            }
+        })
         .setup(|app| {
             #[cfg(all(debug_assertions, feature = "tauri-plugin-wdio-webdriver"))]
             if let Ok(directory) = std::env::var("SIGMA_DESKTOP_FIXTURE_DIR") {
@@ -915,6 +942,8 @@ pub fn configure_tauri_builder<R: tauri::Runtime>(builder: tauri::Builder<R>) ->
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            lifecycle::lifecycle_ready,
+            lifecycle::complete_shutdown,
             canvas_persistence::save_canvas_atomic,
             probe_media,
             probe_images,
@@ -941,7 +970,7 @@ pub fn run() {
     let builder = tauri::Builder::default();
     #[cfg(all(debug_assertions, feature = "tauri-plugin-wdio-webdriver"))]
     let builder = builder.plugin(tauri_plugin_wdio_webdriver::init());
-    configure_tauri_builder(
+    let app = configure_tauri_builder(
         builder
             .plugin(tauri_plugin_os::init())
             .plugin(tauri_plugin_dialog::init())
@@ -950,8 +979,19 @@ pub fn run() {
             .plugin(tauri_plugin_shell::init())
             .plugin(tauri_plugin_opener::init()),
     )
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    .build(tauri::generate_context!())
+    .expect("error while building tauri application");
+    #[cfg(target_os = "macos")]
+    lifecycle::install_macos_termination_handler(app.handle())
+        .expect("error while installing macOS termination handler");
+    app.run(|app, event| {
+        if let tauri::RunEvent::ExitRequested { api, .. } = event {
+            if !lifecycle::exit_approved(app) {
+                api.prevent_exit();
+                lifecycle::request_shutdown(app);
+            }
+        }
+    });
 }
 
 #[cfg(test)]

@@ -78,6 +78,10 @@ fn replace_canvas_file(
     before_replace()?;
     fs::rename(&temporary.0, path).map_err(|error| format!("Cannot replace canvas: {error}"))?;
     temporary.1 = false;
+    #[cfg(unix)]
+    File::open(parent)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| format!("Canvas replaced, but cannot sync its directory: {error}"))?;
     Ok(())
 }
 
@@ -90,15 +94,42 @@ pub async fn save_canvas_atomic<R: Runtime>(
     let path = PathBuf::from(path);
     let scope = app.try_fs_scope().ok_or("Filesystem scope is unavailable")?;
     validate_destination(&scope, &path)?;
+    let operation = crate::lifecycle::OperationGuard::start(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
+        let _operation = operation;
         replace_canvas_file(
             &path,
             |file| file.write_all(contents.as_bytes()),
-            || validate_destination(&scope, &path),
+            || {
+                #[cfg(all(debug_assertions, feature = "tauri-plugin-wdio-webdriver"))]
+                desktop_save_barrier(&path)?;
+                validate_destination(&scope, &path)
+            },
         )
     })
     .await
     .map_err(|error| format!("Canvas save task failed: {error}"))?
+}
+
+// Deterministic fault injection exists only in native desktop test builds and
+// only for the runner's canonical, disposable fixture directory.
+#[cfg(all(debug_assertions, feature = "tauri-plugin-wdio-webdriver"))]
+fn desktop_save_barrier(path: &Path) -> Result<(), String> {
+    let Some(directory) = std::env::var_os("SIGMA_DESKTOP_FIXTURE_DIR") else { return Ok(()) };
+    let directory = PathBuf::from(directory).canonicalize().map_err(|error| error.to_string())?;
+    if path.parent() != Some(directory.as_path()) {
+        return Ok(());
+    }
+    let delay = std::env::var("SIGMA_DESKTOP_SAVE_DELAY_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(0)
+        .min(15_000);
+    if delay > 0 {
+        fs::write(directory.join("save-started"), "ready").map_err(|error| error.to_string())?;
+        std::thread::sleep(std::time::Duration::from_millis(delay));
+    }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -243,7 +243,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 
-const isStoredCanvasConfig = (
+export const isStoredCanvasConfig = (
   value: unknown,
 ): value is {
   items: StoredMediaItem[];

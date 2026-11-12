@@ -8,6 +8,20 @@ let packetBytes = 0;
 let packetMagic = "";
 
 export const desktopBridge = {
+  queueFixtureSaves(project: string, positions: number[]) {
+    useCanvasSessionStore.setState({ saveFilePath: project });
+    for (const x of positions) {
+      useCanvasSessionStore
+        .getState()
+        .setItems((items) => items.map((item) => ({ ...item, x })));
+      void useCanvasSessionStore.getState().saveSessionToFile();
+    }
+    return { ok: true, queued: positions.length };
+  },
+  sessionSnapshot() {
+    const { items, viewport, isDirty } = useCanvasSessionStore.getState();
+    return { items, viewport, isDirty, inert: document.documentElement.inert };
+  },
   async captureFrames() {
     packetBytes = 0;
     packetMagic = "";
@@ -100,7 +114,19 @@ export const desktopBridge = {
     };
     const store = useCanvasSessionStore.getState();
     store.replaceSession({
-      items: [item],
+      items: [
+        item,
+        {
+          ...item,
+          id: "lifecycle-second",
+          x: 400,
+          y: 300,
+          width: 160,
+          height: 120,
+          crop: { top: 5, right: 10, bottom: 5, left: 10 },
+        },
+      ],
+      viewport: { x: 10, y: -20, zoom: 0.8 },
       saveFilePath: null,
       lastSavedSignature: null,
     });

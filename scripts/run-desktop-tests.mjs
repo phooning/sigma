@@ -27,7 +27,8 @@ const build = spawnSync(
     "tauri-plugin-wdio-webdriver",
     "--config",
     JSON.stringify({
-      identifier: "com.asynthetic.sigmacanvas.desktoptest",
+      identifier: `com.asynthetic.sigmacanvas.desktoptest.run${Date.now()}`,
+      app: { withGlobalTauri: true },
       build: {
         beforeBuildCommand:
           "pnpm exec tsc && pnpm exec vite build --mode desktop-test --outDir desktop-tests/dist",

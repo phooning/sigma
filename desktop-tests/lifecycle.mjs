@@ -41,12 +41,13 @@ async function request(path, method = "GET", body) {
     throw new Error(`WebDriver ${path}: ${JSON.stringify(result)}`);
   return result.value;
 }
-async function launch(grant) {
+async function launch(grant, saveDelay = 0) {
   port = await choosePort();
   const env = {
     ...process.env,
     TAURI_WEBDRIVER_PORT: String(port),
     WDIO_EMBEDDED_SERVER: "true",
+    SIGMA_DESKTOP_SAVE_DELAY_MS: String(saveDelay),
   };
   if (grant) env.SIGMA_DESKTOP_FIXTURE_DIR = directory;
   else delete env.SIGMA_DESKTOP_FIXTURE_DIR;
@@ -96,14 +97,15 @@ async function execute(id, body, args) {
     throw new Error(`Application operation failed: ${JSON.stringify(value)}`);
   return value;
 }
-async function close(id) {
+async function close(id, applicationQuit = false) {
+  const startedAt = performance.now();
   const stopped = new Promise((ok, fail) => {
     const timer = setTimeout(
       () =>
         fail(
           new Error(`Application ${child.pid} did not exit after window close`),
         ),
-      10000,
+      12000,
     );
     child.once("exit", (code, signal) => {
       clearTimeout(timer);
@@ -111,7 +113,28 @@ async function close(id) {
     });
   });
   try {
-    await request(`/session/${id}/window`, "DELETE");
+    if (applicationQuit) {
+      // NSRunningApplication targets this exact child PID and sends a normal
+      // application termination request (the menu-quit path), never SIGTERM.
+      const quit = spawnSync(
+        "osascript",
+        [
+          "-l",
+          "JavaScript",
+          "-e",
+          `ObjC.import('AppKit'); $.NSRunningApplication.runningApplicationWithProcessIdentifier(${child.pid}).terminate;`,
+        ],
+        { encoding: "utf8" },
+      );
+      assert.equal(quit.status, 0, quit.stderr);
+      assert.equal(
+        quit.stdout.trim(),
+        "true",
+        "Native application quit request was refused",
+      );
+    } else {
+      await request(`/session/${id}/window`, "DELETE");
+    }
   } catch (error) {
     if (
       !["ECONNRESET", "ECONNREFUSED", "UND_ERR_SOCKET"].includes(
@@ -123,6 +146,9 @@ async function close(id) {
   }
   const result = await stopped;
   console.log(`Application ${child.pid} exited: ${JSON.stringify(result)}`);
+  console.log(
+    `${applicationQuit ? "Application quit" : "Window close"} completed in ${(performance.now() - startedAt).toFixed(0)} ms`,
+  );
   assert.equal(
     result.code,
     0,
@@ -195,6 +221,33 @@ async function stopAll(id) {
     [],
   );
 }
+
+async function waitForWrite() {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    try {
+      await readFile(join(directory, "save-started"));
+      return;
+    } catch {}
+    await delay(50);
+  }
+  throw new Error("Save did not reach the pre-replace barrier");
+}
+
+async function queueSaves(id, positions, destination = project) {
+  await rm(join(directory, "save-started"), { force: true });
+  return request(`/session/${id}/execute/sync`, "POST", {
+    script:
+      "return window.__SIGMA_DESKTOP_TEST__.queueFixtureSaves(arguments[0], arguments[1])",
+    args: [destination, positions],
+  });
+}
+
+async function snapshot(id) {
+  return request(`/session/${id}/execute/sync`, "POST", {
+    script: "return window.__SIGMA_DESKTOP_TEST__.sessionSnapshot()",
+    args: [],
+  });
+}
 try {
   const generated = spawnSync(
     "ffmpeg",
@@ -253,6 +306,14 @@ try {
   const saved = JSON.parse(await readFile(project, "utf8"));
   assert.equal(saved.items[0].id, "lifecycle-image");
   assert.equal(saved.items[0].filePath, "fixture.png");
+  assert.equal(saved.items.length, 2);
+  assert.deepEqual(saved.items[1].crop, {
+    top: 5,
+    right: 10,
+    bottom: 5,
+    left: 10,
+  });
+  assert.deepEqual(saved.viewport, { x: 10, y: -20, zoom: 0.8 });
   await execute(
     first,
     `const done = arguments[0];
@@ -304,6 +365,12 @@ try {
   });
   assert.equal(restored.id, "lifecycle-image");
   assert.equal(restored.path, image);
+  const restoredState = await snapshot(second);
+  assert.equal(restoredState.items.length, 2);
+  assert.equal(restoredState.items[1].x, 400);
+  assert.equal(restoredState.items[1].y, 300);
+  assert.deepEqual(restoredState.items[1].crop, saved.items[1].crop);
+  assert.deepEqual(restoredState.viewport, saved.viewport);
   console.log(
     "Canvas session restored its image across restart before reopening the file.",
   );
@@ -335,7 +402,7 @@ try {
     script: "return document.querySelectorAll('.media-item').length",
     args: [],
   });
-  assert.equal(rendered, 1);
+  assert.equal(rendered, 2);
   console.log(
     "Fixture-granted save, persisted scope, reopen and canvas rendering passed.",
   );
@@ -380,6 +447,147 @@ try {
     args: [],
   });
   await close(second);
+
+  // The write barrier runs after fsync of the temporary file, before rename.
+  // Closing here must drain both requested store snapshots in order.
+  const racing = await launch(true, 1500);
+  await execute(
+    racing,
+    `const [project, done] = arguments;
+    window.__SIGMA_DESKTOP_TEST__.reopenFixture(project).then(done);`,
+    [project],
+  );
+  await queueSaves(racing, [100, 200]);
+  await waitForWrite();
+  assert.equal(JSON.parse(await readFile(project, "utf8")).items[0].x, 40);
+  const closeStarted = performance.now();
+  // Repeated requests must join the same pending shutdown.
+  await request(`/session/${racing}/window`, "DELETE");
+  await close(racing);
+  assert.equal(JSON.parse(await readFile(project, "utf8")).items[0].x, 200);
+  console.log(
+    `Close drained two pending saves in ${(performance.now() - closeStarted).toFixed(0)} ms`,
+  );
+
+  // Forced process termination is a separate test, never described as graceful.
+  const crashing = await launch(true, 1500);
+  assert.equal((await snapshot(crashing)).items[0].x, 200);
+  await queueSaves(crashing, [300]);
+  await waitForWrite();
+  const crashed = new Promise((ok) =>
+    child.once("exit", (code, signal) => ok({ code, signal })),
+  );
+  child.kill("SIGKILL");
+  assert.equal((await crashed).signal, "SIGKILL");
+  child = undefined;
+  currentSession = undefined;
+  assert.equal(JSON.parse(await readFile(project, "utf8")).items[0].x, 200);
+  console.log("SIGKILL before rename preserved the previous committed canvas");
+
+  const recovered = await launch(true);
+  await execute(
+    recovered,
+    `const [project, done] = arguments;
+    window.__SIGMA_DESKTOP_TEST__.reopenFixture(project).then(done);`,
+    [project],
+  );
+  assert.equal((await snapshot(recovered)).items[0].x, 200);
+
+  // A rejected native save keeps the process alive, then permits a real retry.
+  await queueSaves(recovered, [400], join(directory, "not-granted.json"));
+  await request(`/session/${recovered}/window`, "DELETE");
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const state = await snapshot(recovered);
+    if (!state.inert && state.isDirty) break;
+    await delay(50);
+  }
+  assert.equal(child.exitCode, null);
+  assert.equal((await snapshot(recovered)).isDirty, true);
+  assert.equal((await snapshot(recovered)).inert, false);
+  await queueSaves(recovered, [401]);
+  await close(recovered);
+  assert.equal(JSON.parse(await readFile(project, "utf8")).items[0].x, 401);
+  console.log(
+    "Failed save prevented exit; successful retry committed before exit",
+  );
+
+  // This command bypasses the frontend store queue: the native operation guard
+  // must still keep the process alive until its atomic replacement completes.
+  const direct = await launch(true, 1500);
+  const directContents = JSON.parse(await readFile(project, "utf8"));
+  directContents.items[0].x = 450;
+  await rm(join(directory, "save-started"), { force: true });
+  await request(`/session/${direct}/execute/sync`, "POST", {
+    script:
+      "window.__TAURI_INTERNALS__.invoke('save_canvas_atomic', {path:arguments[0], contents:arguments[1]}).catch(console.error); return true",
+    args: [project, JSON.stringify(directContents)],
+  });
+  await waitForWrite();
+  await close(direct);
+  assert.equal(JSON.parse(await readFile(project, "utf8")).items[0].x, 450);
+  console.log(
+    "Native shutdown drained a write outside the frontend save queue",
+  );
+
+  const quitting = await launch(true, 1500);
+  await queueSaves(quitting, [475]);
+  await waitForWrite();
+  await close(quitting, true);
+  assert.equal(JSON.parse(await readFile(project, "utf8")).items[0].x, 475);
+  console.log("Native application quit drained the pending save");
+
+  const stalled = await launch(true, 15000);
+  await queueSaves(stalled, [500]);
+  await waitForWrite();
+  await request(`/session/${stalled}/window`, "DELETE");
+  let observedWaiting = false;
+  let observedTimeout = false;
+  for (let attempt = 0; attempt < 130; attempt++) {
+    const state = await snapshot(stalled);
+    observedWaiting ||= state.inert;
+    if (observedWaiting && !state.inert) {
+      observedTimeout = true;
+      break;
+    }
+    await delay(100);
+  }
+  assert.equal(
+    observedTimeout,
+    true,
+    "Shutdown must time out and restore interaction",
+  );
+  assert.equal(child.exitCode, null);
+  // Wait for the original acknowledgment, which is now stale, to arrive.
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (!(await snapshot(stalled)).isDirty) break;
+    await delay(100);
+  }
+  assert.equal(JSON.parse(await readFile(project, "utf8")).items[0].x, 500);
+  await delay(250);
+  assert.equal(
+    child.exitCode,
+    null,
+    "A stale acknowledgment must not exit the process",
+  );
+  await close(stalled);
+  console.log(
+    "Ten-second deadline retained the process; late acknowledgment could not exit it",
+  );
+
+  // Missing source files retain their identity and geometry on reopen.
+  await rm(image);
+  const missing = await launch(true);
+  await execute(
+    missing,
+    `const [project, done] = arguments;
+    window.__SIGMA_DESKTOP_TEST__.reopenFixture(project).then(done);`,
+    [project],
+  );
+  const missingState = await snapshot(missing);
+  assert.equal(missingState.items[0].filePath, image);
+  assert.equal(missingState.items[0].x, 500);
+  await close(missing);
+  console.log("Missing media retained canvas identity and geometry");
 } finally {
   if (child && child.exitCode === null && child.signalCode === null) {
     if (currentSession) {

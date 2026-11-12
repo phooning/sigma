@@ -82,6 +82,25 @@ async function readMediaItemPosition(locator: Locator) {
 }
 
 test.describe("canvas save states", () => {
+  test("preserves corrupt recovery bytes and allows saving new work explicitly", async ({
+    page,
+  }) => {
+    await gotoApp(page);
+    await page.evaluate(() =>
+      localStorage.setItem("sigma:canvas-session", "{broken recovery"),
+    );
+    await page.reload();
+    await expect(
+      page.getByText("Canvas recovery failed", { exact: true }),
+    ).toBeVisible();
+    await dropFiles(page, [droppedVideoPath]);
+    await expect(page.getByText("1 item", { exact: true })).toBeVisible();
+    await saveCanvasAs(page);
+    expect(
+      await page.evaluate(() => localStorage.getItem("sigma:canvas-session")),
+    ).toBe("{broken recovery");
+  });
+
   test("keeps the current canvas when a malformed file is loaded", async ({
     page,
   }) => {

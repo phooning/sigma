@@ -117,8 +117,12 @@ pub(crate) fn spawn_controller(
                     let _ = respond_to.send(snapshot);
                 }
                 ControlMessage::StopAll { respond_to } => {
-                    for worker in workers.drain().map(|(_, worker)| worker) {
+                    let stopped: Vec<_> = workers.drain().map(|(_, worker)| worker).collect();
+                    for worker in &stopped {
                         worker.task.abort();
+                    }
+                    for worker in stopped {
+                        let _ = worker.task.await;
                     }
                     allocations.clear();
                     manifest.assets.clear();

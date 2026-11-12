@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { onDropMedia } from "../components/CanvasActions";
+import { useCanvasSessionStore } from "../stores/useCanvasSessionStore";
 import { useTauriDrop } from "./drag";
 import { notify } from "./notifications";
 
@@ -67,5 +68,42 @@ describe("native drop registration", () => {
     );
     hook.unmount();
     log.mockRestore();
+  });
+
+  it("does not import into a replacement session when an old probe finishes", async () => {
+    register.mockResolvedValue(vi.fn());
+    let finish!: (items: Awaited<ReturnType<typeof onDropMedia>>) => void;
+    vi.mocked(onDropMedia).mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const setItems = vi.fn();
+    const hook = renderHook(() =>
+      useTauriDrop({
+        getViewport: () => ({ x: 0, y: 0, zoom: 1 }),
+        setItems,
+      }),
+    );
+    await act(async () => {
+      register.mock.calls[0][0]({
+        payload: { type: "drop", paths: ["/old.png"] },
+      });
+      useCanvasSessionStore.getState().replaceSession({ items: [] });
+      finish([
+        {
+          id: "old",
+          type: "image",
+          filePath: "/old.png",
+          url: "",
+          x: 0,
+          y: 0,
+          width: 10,
+          height: 10,
+        },
+      ]);
+    });
+    expect(setItems).not.toHaveBeenCalled();
+    hook.unmount();
   });
 });

@@ -1,6 +1,7 @@
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useEffect, useRef } from "react";
 import { onDropMedia } from "../components/CanvasActions";
+import { getSessionGeneration } from "../stores/useCanvasSessionStore";
 import type { MediaItem, Viewport } from "./media.types";
 import { notify } from "./notifications";
 
@@ -44,7 +45,8 @@ export function useTauriDrop({ getViewport, setItems }: UseTauriDropOptions) {
     try {
       const registration = getCurrentWebview().onDragDropEvent((event) => {
         const payload = event.payload;
-        if (payload.type !== "drop") return;
+        if (!isActive || payload.type !== "drop") return;
+        const generation = getSessionGeneration();
 
         void (async () => {
           const items = await onDropMedia({
@@ -52,10 +54,15 @@ export function useTauriDrop({ getViewport, setItems }: UseTauriDropOptions) {
             viewportRef: { current: getViewportRef.current() },
           });
 
-          if (!isActive || items.length === 0) return;
+          if (
+            !isActive ||
+            generation !== getSessionGeneration() ||
+            items.length === 0
+          )
+            return;
           setItemsRef.current((prev) => [...prev, ...items]);
         })().catch((error: unknown) => {
-          if (!isActive) return;
+          if (!isActive || generation !== getSessionGeneration()) return;
           console.error("Failed to import dropped media:", error);
           notify.error("Media import failed", { description: String(error) });
         });

@@ -7,13 +7,17 @@ import {
 import type { MediaItem } from "../utils/media.types";
 import { notify } from "../utils/notifications";
 import {
+  flushSessionPersistence,
   INITIAL_VIEWPORT,
+  prepareSessionShutdown,
+  resumeSession,
   useCanvasSessionStore,
 } from "./useCanvasSessionStore";
 import { useDevStore } from "./useDevStore";
 import { useSettingsStore } from "./useSettingsStore";
 
-vi.mock("../utils/fs", () => ({
+vi.mock("../utils/fs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../utils/fs")>()),
   loadFromStorage: vi.fn(),
   saveToStorage: vi.fn(),
   selectCanvasSavePath: vi.fn(),
@@ -53,6 +57,7 @@ function edit(x: number) {
 
 describe("canvas persistence lifecycle", () => {
   beforeEach(() => {
+    resumeSession();
     vi.resetAllMocks();
     useSettingsStore.getState().replaceSessionSettings({
       screenshotDirectory: "",
@@ -223,5 +228,80 @@ describe("canvas persistence lifecycle", () => {
     picker.resolve("/canvas.json");
     await save;
     expect(saveToStorage).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "{broken",
+    JSON.stringify({ state: { items: "broken" }, version: 0 }),
+    JSON.stringify({ state: { items: [] }, version: 9 }),
+  ])(
+    "preserves invalid recovery data after hydration and later mutations: %s",
+    async (contents) => {
+      localStorage.setItem("sigma:canvas-session", contents);
+      await useCanvasSessionStore.persist.rehydrate();
+      useCanvasSessionStore.getState().setViewport({ x: 20, y: 30, zoom: 1 });
+      expect(localStorage.getItem("sigma:canvas-session")).toBe(contents);
+      expect(notify.error).toHaveBeenCalled();
+      localStorage.removeItem("sigma:canvas-session");
+      await useCanvasSessionStore.persist.rehydrate();
+    },
+  );
+
+  it("waits for both queued snapshots before permitting shutdown and freezes late edits", async () => {
+    useCanvasSessionStore.setState({ saveFilePath: "/canvas.json" });
+    const first = deferred<typeof saved>();
+    const second = deferred<typeof saved>();
+    vi.mocked(saveToStorage)
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    const one = useCanvasSessionStore.getState().saveSessionToFile();
+    edit(25);
+    const two = useCanvasSessionStore.getState().saveSessionToFile();
+    let closed = false;
+    const shutdown = prepareSessionShutdown().then(() => {
+      closed = true;
+    });
+    edit(999);
+    expect(useCanvasSessionStore.getState().items[0].x).toBe(25);
+    first.resolve(saved);
+    await one;
+    expect(closed).toBe(false);
+    second.resolve(saved);
+    await Promise.all([two, shutdown]);
+    expect(closed).toBe(true);
+    expect(useCanvasSessionStore.getState().isDirty).toBe(false);
+    resumeSession();
+    edit(30);
+    expect(useCanvasSessionStore.getState().items[0].x).toBe(30);
+  });
+
+  it("rejects shutdown after a failed write and allows a successful retry", async () => {
+    useCanvasSessionStore.setState({ saveFilePath: "/canvas.json" });
+    vi.mocked(saveToStorage)
+      .mockResolvedValueOnce({ ok: false, reason: "error", error: "disk full" })
+      .mockResolvedValueOnce(saved);
+    await useCanvasSessionStore.getState().saveSessionToFile();
+    await expect(flushSessionPersistence()).rejects.toBe("disk full");
+    await useCanvasSessionStore.getState().saveSessionToFile();
+    await expect(flushSessionPersistence()).resolves.toBeUndefined();
+  });
+
+  it("saves an undo to the last committed state even while an earlier changed snapshot is pending", async () => {
+    useCanvasSessionStore.setState({ saveFilePath: "/canvas.json" });
+    vi.mocked(saveToStorage).mockResolvedValue(saved);
+    await useCanvasSessionStore.getState().saveSessionToFile();
+    const pending = deferred<typeof saved>();
+    vi.mocked(saveToStorage).mockReturnValueOnce(pending.promise);
+    edit(10);
+    const changed = useCanvasSessionStore.getState().saveSessionToFile();
+    await vi.waitFor(() => expect(saveToStorage).toHaveBeenCalledTimes(2));
+    edit(0);
+    expect(useCanvasSessionStore.getState().isDirty).toBe(false);
+    const undone = useCanvasSessionStore.getState().saveSessionToFile();
+    pending.resolve(saved);
+    await Promise.all([changed, undone]);
+    expect(saveToStorage).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(saveToStorage).mock.calls[2][0][0].x).toBe(0);
+    expect(useCanvasSessionStore.getState().isDirty).toBe(false);
   });
 });
