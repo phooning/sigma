@@ -243,6 +243,77 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 
+const validOptionalNumber = (
+  item: Record<string, unknown>,
+  key: string,
+  minimum: number,
+) =>
+  item[key] === undefined ||
+  (isFiniteNumber(item[key]) && item[key] >= minimum);
+
+const validOptionalString = (item: Record<string, unknown>, key: string) =>
+  item[key] === undefined || typeof item[key] === "string";
+
+const validStoredItem = (item: unknown): item is StoredMediaItem => {
+  if (!isRecord(item)) return false;
+  if (
+    typeof item.id !== "string" ||
+    !item.id ||
+    (item.type !== "image" && item.type !== "video") ||
+    typeof item.filePath !== "string" ||
+    !item.filePath ||
+    !isFiniteNumber(item.x) ||
+    !isFiniteNumber(item.y) ||
+    !isFiniteNumber(item.width) ||
+    item.width <= 0 ||
+    !isFiniteNumber(item.height) ||
+    item.height <= 0
+  )
+    return false;
+  if (
+    !validOptionalNumber(item, "fileSize", 0) ||
+    !validOptionalNumber(item, "duration", 0) ||
+    !validOptionalNumber(item, "frameRate", Number.EPSILON) ||
+    !validOptionalNumber(item, "sourceWidth", Number.EPSILON) ||
+    !validOptionalNumber(item, "sourceHeight", Number.EPSILON) ||
+    !validOptionalString(item, "url") ||
+    !validOptionalString(item, "thumbnailPath") ||
+    !validOptionalString(item, "thumbnailUrl") ||
+    !validOptionalString(item, "lowResProxyUrl") ||
+    !validOptionalString(item, "imagePreview256Path") ||
+    !validOptionalString(item, "imagePreview256Url") ||
+    !validOptionalString(item, "imagePreview1024Path") ||
+    !validOptionalString(item, "imagePreview1024Url") ||
+    (item.imageLod !== undefined &&
+      item.imageLod !== "full" &&
+      item.imageLod !== "preview1024" &&
+      item.imageLod !== "preview256") ||
+    (item.videoLod !== undefined &&
+      item.videoLod !== "video" &&
+      item.videoLod !== "thumbnail" &&
+      item.videoLod !== "proxy") ||
+    (item.deferVideoLoad !== undefined &&
+      typeof item.deferVideoLoad !== "boolean")
+  )
+    return false;
+  if (item.crop !== undefined) {
+    const crop = item.crop;
+    if (!isRecord(crop)) return false;
+    if (
+      !isFiniteNumber(crop.top) ||
+      crop.top < 0 ||
+      !isFiniteNumber(crop.right) ||
+      crop.right < 0 ||
+      !isFiniteNumber(crop.bottom) ||
+      crop.bottom < 0 ||
+      !isFiniteNumber(crop.left) ||
+      crop.left < 0
+    )
+      return false;
+  }
+  return true;
+};
+
 export const isStoredCanvasConfig = (
   value: unknown,
 ): value is {
@@ -252,24 +323,15 @@ export const isStoredCanvasConfig = (
   devMode?: boolean;
 } => {
   if (!isRecord(value) || !Array.isArray(value.items)) return false;
-  if (
-    !value.items.every(
-      (item: unknown) =>
-        isRecord(item) &&
-        typeof item.id === "string" &&
-        item.id.length > 0 &&
-        (item.type === "image" || item.type === "video") &&
-        typeof item.filePath === "string" &&
-        item.filePath.length > 0 &&
-        isFiniteNumber(item.x) &&
-        isFiniteNumber(item.y) &&
-        isFiniteNumber(item.width) &&
-        item.width > 0 &&
-        isFiniteNumber(item.height) &&
-        item.height > 0,
-    )
-  )
+  // Older files have no version. A future version must not hydrate into this
+  // schema and then be overwritten by a Save.
+  if (value.schemaVersion !== undefined && value.schemaVersion !== 1)
     return false;
+  const ids = new Set<string>();
+  for (const item of value.items) {
+    if (!validStoredItem(item) || ids.has(item.id)) return false;
+    ids.add(item.id);
+  }
 
   if (value.viewport !== undefined) {
     const viewport = value.viewport;
@@ -302,14 +364,27 @@ export const getCanvasConfigData = (
   sessionSettings?: SessionSettings,
   devMode?: boolean,
 ) => {
+  const source = {
+    items,
+    viewport,
+    ...(sessionSettings !== undefined ? { settings: sessionSettings } : {}),
+    ...(devMode !== undefined ? { devMode } : {}),
+  };
+  if (!isStoredCanvasConfig(source))
+    throw new Error("Canvas contains invalid values and was not saved");
   const projectRoot = getProjectRootForConfig(filePath);
-
-  return JSON.stringify({
+  const stored = {
+    schemaVersion: 1,
     items: items.map((item) => serializeItemForStorage(item, projectRoot)),
     viewport,
-    ...(sessionSettings ? { settings: sessionSettings } : {}),
-    ...(typeof devMode === "boolean" ? { devMode } : {}),
-  });
+    ...(sessionSettings !== undefined ? { settings: sessionSettings } : {}),
+    ...(devMode !== undefined ? { devMode } : {}),
+  };
+  // The source was validated above. Serialization only selects those fields,
+  // turns a nonempty file path into another nonempty string, and adds schema v1.
+  // The round-trip test guards this mapping without validating every item twice
+  // on each save.
+  return JSON.stringify(stored);
 };
 
 const writeCanvasConfig = async (
@@ -402,7 +477,16 @@ export const loadCanvasFromPath = async (
     }
 
     if (!isStoredCanvasConfig(data)) {
-      return { ok: false, reason: "invalid" };
+      const version = isRecord(data) ? data.schemaVersion : undefined;
+      return {
+        ok: false,
+        reason: "invalid",
+        ...(typeof version === "number" && version > 1
+          ? {
+              error: `This canvas uses format version ${version}, which this version of Sigma cannot open. The file was not changed.`,
+            }
+          : {}),
+      };
     }
 
     const projectRoot = getProjectRootForConfig(selected);

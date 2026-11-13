@@ -22,7 +22,9 @@ let sessionGeneration = 0;
 let latestLoadRequest = 0;
 let persistenceError: unknown;
 let sessionClosing = false;
-const sessionStorage = createSessionStorage();
+const sessionStorage = createSessionStorage(() =>
+  useCanvasSessionStore.getState().refreshDirtyState(),
+);
 
 export const getSessionGeneration = () => sessionGeneration;
 
@@ -88,6 +90,8 @@ type CanvasSessionStore = CanvasSessionSnapshot & {
   saveSessionToFile: () => Promise<void>;
   saveSessionToNewFile: () => Promise<void>;
   loadSessionFromFile: () => Promise<boolean>;
+  exportProtectedRecoveryData: (destination?: string) => Promise<boolean>;
+  discardProtectedRecoveryData: () => boolean;
 };
 
 const getDirtySignature = (
@@ -491,6 +495,10 @@ export const useCanvasSessionStore = create<CanvasSessionStore>()(
           return true;
         });
       },
+      exportProtectedRecoveryData: (destination) =>
+        sessionStorage.exportRecoveryData(SESSION_STORAGE_KEY, destination),
+      discardProtectedRecoveryData: () =>
+        sessionStorage.discardRecoveryData(SESSION_STORAGE_KEY),
     }),
     {
       name: SESSION_STORAGE_KEY,

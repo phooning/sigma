@@ -194,6 +194,18 @@ try {
         media.on("close", (code) => resolve(code ?? 1));
       });
     }
+    // Optional bounded native endurance scenario (generated media only).
+    if (process.exitCode === 0 && process.env.SIGMA_DESKTOP_ENDURANCE) {
+      const endurance = spawn(
+        process.execPath,
+        ["desktop-tests/endurance.ts"],
+        { stdio: "inherit" },
+      );
+      process.exitCode = await new Promise((resolve, reject) => {
+        endurance.on("error", reject);
+        endurance.on("close", (code) => resolve(code ?? 1));
+      });
+    }
   }
 } catch (error) {
   console.error(error);

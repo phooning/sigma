@@ -145,9 +145,24 @@ export const performanceGate = ({
   };
 };
 
-/** Overall exit decision: only correctness failures and calibrated perf failures block. */
-export const blockingFailures = (gates: readonly GateResult[]) =>
-  gates.filter((gate) => gate.status === "FAIL");
+/** A full release qualification requires these checks to actually execute. */
+export const CRITICAL_RELEASE_GATES = [
+  "corpus.manifest-current",
+  "native.probe-contract",
+  "native.thumbnails",
+  "browser.media",
+  "desktop.media",
+  "desktop.shutdown-under-load",
+] as const;
+
+export const blockingFailures = (gates: readonly GateResult[], full = false) =>
+  gates.filter(
+    (gate) =>
+      gate.status === "FAIL" ||
+      (full &&
+        (CRITICAL_RELEASE_GATES as readonly string[]).includes(gate.id) &&
+        gate.status !== "PASS"),
+  );
 
 /** Validate runner-level completion before accepting individual browser results. */
 export const browserRunFailure = (
@@ -159,6 +174,24 @@ export const browserRunFailure = (
   if (!report) return "Playwright produced no JSON report";
   if (report.errors?.length) return "Playwright reported runner errors";
   if (!report.suites?.length) return "Playwright reported no suites";
+  return null;
+};
+
+/**
+ * The native desktop runner must exit cleanly and its scenario must report no
+ * error. A complete-looking report is not enough: the runner can fail after
+ * the scenario wrote it (late stage, teardown, timeout).
+ */
+export const desktopRunFailure = (
+  result: { code: number | null; timedOut: boolean },
+  report: { error?: string } | null,
+): string | null => {
+  if (result.timedOut) return "pnpm test:desktop timed out";
+  if (result.code !== 0)
+    return `pnpm test:desktop exited with code ${result.code}`;
+  if (!report) return "desktop scenario produced no report";
+  if (report.error)
+    return `desktop scenario error: ${report.error.split("\n")[0]}`;
   return null;
 };
 

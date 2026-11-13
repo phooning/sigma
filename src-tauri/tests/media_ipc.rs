@@ -172,6 +172,12 @@ fn peak_rss_bytes(who: i32) -> Option<u64> {
 }
 
 /// Child processes (FFmpeg/ffprobe) still attached to this test process.
+/// Open descriptors in this process, for leak detection across soak cycles.
+fn open_fds() -> Option<usize> {
+    let directory = if cfg!(target_os = "linux") { "/proc/self/fd" } else { "/dev/fd" };
+    fs::read_dir(directory).ok().map(Iterator::count)
+}
+
 fn live_children() -> Vec<String> {
     let Ok(output) =
         Command::new("pgrep").args(["-l", "-P", &std::process::id().to_string()]).output()
@@ -367,7 +373,7 @@ fn media_corpus_plan() {
         }
         let stats = invoke(&webview, "media_cache_stats", json!({})).unwrap_or(Value::Null);
         soak.push(json!({ "cycle": cycle, "wallMs": elapsed_ms(start), "failures": failures,
-            "rssBytes": current_rss_bytes(), "liveChildren": live_children(),
+            "rssBytes": current_rss_bytes(), "openFds": open_fds(), "liveChildren": live_children(),
             "cacheBytes": stats.get("totalBytes") }));
     }
 

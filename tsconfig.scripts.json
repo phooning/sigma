@@ -7,6 +7,10 @@
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "noEmit": true
   },
-  "include": ["scripts/media/**/*.ts", "desktop-tests/**/*.ts"],
+  "include": [
+    "scripts/media/**/*.ts",
+    "scripts/fs-faults/**/*.ts",
+    "desktop-tests/**/*.ts"
+  ],
   "exclude": []
 }

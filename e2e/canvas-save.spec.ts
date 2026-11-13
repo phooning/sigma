@@ -93,12 +93,60 @@ test.describe("canvas save states", () => {
     await expect(
       page.getByText("Canvas recovery failed", { exact: true }),
     ).toBeVisible();
+    await setSaveDialogResult(page, "/tmp/sigma-recovery-original.json");
+    await page.getByRole("button", { name: "Export original data" }).click();
+    await expect(page.getByText("Recovery data exported")).toBeVisible();
+    expect(
+      (await getInvokeCalls(page)).some(
+        (call) =>
+          call.cmd === "save_canvas_atomic" &&
+          (call.args as { contents?: string; createOnly?: boolean })
+            .contents === "{broken recovery" &&
+          (call.args as { createOnly?: boolean }).createOnly === true,
+      ),
+    ).toBe(true);
     await dropFiles(page, [droppedVideoPath]);
     await expect(page.getByText("1 item", { exact: true })).toBeVisible();
     await saveCanvasAs(page);
     expect(
       await page.evaluate(() => localStorage.getItem("sigma:canvas-session")),
     ).toBe("{broken recovery");
+  });
+
+  test("exports, deliberately discards, and resumes recovery across reload", async ({
+    page,
+  }) => {
+    await gotoApp(page);
+    await page.evaluate(() =>
+      localStorage.setItem("sigma:canvas-session", "{broken recovery"),
+    );
+    await page.reload();
+    await expect(
+      page.getByText("Canvas recovery failed", { exact: true }),
+    ).toBeVisible();
+    await setSaveDialogResult(page, "/tmp/recovery-raw-export.json");
+    await page.getByRole("button", { name: "Export original data" }).click();
+    await expect(
+      page.getByText("This raw backup may not be a valid Sigma project.", {
+        exact: false,
+      }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(() => localStorage.getItem("sigma:canvas-session")),
+    ).toBe("{broken recovery");
+    await page.getByRole("button", { name: "Discard original data" }).click();
+    await expect(page.getByText("Session recovery resumed")).toBeVisible();
+    await dropFiles(page, [droppedVideoPath]);
+    await expect(page.getByText("1 item", { exact: true })).toBeVisible();
+    const recovered = await page.evaluate(() =>
+      localStorage.getItem("sigma:canvas-session"),
+    );
+    expect(() => JSON.parse(recovered ?? "")).not.toThrow();
+    await page.reload();
+    await expect(
+      page.getByText("Canvas recovery failed", { exact: true }),
+    ).toHaveCount(0);
+    await expect(page.getByText("1 item", { exact: true })).toBeVisible();
   });
 
   test("keeps the current canvas when a malformed file is loaded", async ({
@@ -121,6 +169,32 @@ test.describe("canvas save states", () => {
       page.getByText("Selected file is not a valid Sigma config."),
     ).toBeVisible();
     await expect(mediaItems(page)).toHaveCount(1);
+  });
+
+  test("refuses a canvas from a newer format without touching it", async ({
+    page,
+  }) => {
+    const futurePath = "/tmp/playwright-canvas-future.json";
+    const future = JSON.stringify({ schemaVersion: 2, items: [] });
+    await gotoApp(page);
+    await dropFiles(page, [droppedVideoPath]);
+    await expect(mediaItems(page)).toHaveCount(1);
+    await setMockFileText(page, futurePath, future);
+    await setOpenDialogResult(page, futurePath);
+    await clearInvokeCalls(page);
+
+    await loadButton(page).click();
+
+    await expect(page.getByText("Load failed")).toBeVisible();
+    await expect(page.getByText(/format version 2/)).toBeVisible();
+    await expect(mediaItems(page)).toHaveCount(1);
+    expect(
+      (await getInvokeCalls(page)).some(
+        (call) =>
+          call.cmd === "save_canvas_atomic" &&
+          (call.args as { path?: string }).path === futurePath,
+      ),
+    ).toBe(false);
   });
 
   test("disables Save after saving a newly placed video with Save As", async ({

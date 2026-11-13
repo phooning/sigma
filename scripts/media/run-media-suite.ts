@@ -27,9 +27,12 @@ import {
 import { join, relative } from "node:path";
 import { parseArgs } from "node:util";
 import {
+  blockingFailures,
   browserRunFailure,
   browserScenarioFailures,
+  CRITICAL_RELEASE_GATES,
   correctnessGate,
+  desktopRunFailure,
   performanceGate,
   shutdownFailures,
 } from "../../src/lib/media-corpus/gates.ts";
@@ -608,6 +611,7 @@ type IpcReport = {
     wallMs: number;
     failures: number;
     rssBytes: number | null;
+    openFds?: number | null;
     liveChildren: string[];
     cacheBytes: number | null;
   }>;
@@ -864,6 +868,40 @@ if (!ipc) {
       surface: "rust-ipc",
       workload: `${ipc.soak.length} cycles`,
     });
+    const fds = ipc.soak
+      .map((cycle) => cycle.openFds ?? Number.NaN)
+      .filter(Number.isFinite);
+    const steadyFds = fds.slice(2);
+    const fdGrowth =
+      steadyFds.length >= 4
+        ? Math.max(...steadyFds) - steadyFds[0]
+        : Number.NaN;
+    gate({
+      id: "soak.native-fd-retention",
+      invariant:
+        "open file descriptors after each soak cycle do not keep growing (≤ 2 above the first post-warm-up cycle)",
+      tier,
+      failures: Number.isNaN(fdGrowth)
+        ? null
+        : fdGrowth > 2
+          ? [
+              `descriptors ${steadyFds[0]} → max ${Math.max(...steadyFds)} over ${steadyFds.length} cycles`,
+            ]
+          : [],
+      checked: fds.length,
+      ...(Number.isNaN(fdGrowth)
+        ? {
+            unsupportedReason: `${steadyFds.length} post-warmup samples (need >= 4)`,
+          }
+        : {}),
+    });
+    if (fds.length > 0)
+      addMetric("soak.native_open_fds", fds, {
+        unit: "count",
+        cache: "n/a",
+        surface: "rust-ipc",
+        workload: `${ipc.soak.length} cycles`,
+      });
     gate({
       id: "soak.native-failures",
       invariant: "no command failures across soak cycles",
@@ -1255,15 +1293,15 @@ if (!wantBrowser) {
     },
     "pnpm exec playwright test e2e/media-corpus.spec.ts",
   );
-  if (!browserDone) {
-    gate({
-      id: "browser.media",
-      invariant: "real-media Chromium scenario completes",
-      tier,
-      failures: ["scenario did not complete (see playwright.log)"],
-      checked: 1,
-    });
-  }
+  gate({
+    id: "browser.media",
+    invariant: "real-media Chromium scenario completes",
+    tier,
+    failures: browserDone
+      ? []
+      : ["scenario did not complete (see playwright.log)"],
+    checked: 1,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1364,7 +1402,7 @@ if (!wantNative) {
       const report = readJson<DesktopReport>(desktopReportPath);
       if (!report)
         throw new Error(
-          `desktop scenario produced no report (exit ${result.code}); see desktop.log`,
+          `${desktopRunFailure(result, null)} (exit ${result.code}); see desktop.log`,
         );
       if (report.error)
         limitations.push(
@@ -1587,19 +1625,23 @@ if (!wantNative) {
       limitations.push(
         "Desktop RSS covers the Tauri host process only; WKWebView WebContent and GPU helper processes are separate and not measured.",
       );
+      // Sub-gates above stay for diagnosis, but the aggregate (critical)
+      // desktop.media row must not pass when the runner itself failed.
+      const runFailure = desktopRunFailure(result, report);
+      if (runFailure) throw new Error(`${runFailure}; see desktop.log`);
       return true;
     },
     "SIGMA_DESKTOP_MEDIA_PLAN=… pnpm test:desktop",
   );
-  if (!desktopDone) {
-    gate({
-      id: "desktop.media",
-      invariant: "real Tauri desktop media scenario completes",
-      tier,
-      failures: ["scenario did not complete (see desktop.log)"],
-      checked: 1,
-    });
-  }
+  gate({
+    id: "desktop.media",
+    invariant: "real Tauri desktop media scenario completes",
+    tier,
+    failures: desktopDone
+      ? []
+      : ["scenario did not complete (see desktop.log)"],
+    checked: 1,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1706,6 +1748,20 @@ const exercised = [
       .map((asset) => asset.id),
   ),
 ];
+if (tier === "full") {
+  for (const id of CRITICAL_RELEASE_GATES) {
+    if (!gates.some((entry) => entry.id === id)) {
+      gates.push(
+        correctnessGate({
+          id,
+          invariant: "required release check executed",
+          tier,
+          failures: null,
+        }),
+      );
+    }
+  }
+}
 const results: RunResults = {
   schema: RESULTS_SCHEMA,
   suiteVersion: SUITE_VERSION,
@@ -1758,8 +1814,9 @@ console.log(
     .map(([status, count]) => `${status} ${count}`)
     .join(" · ")}`,
 );
-for (const failed of gates.filter((entry) => entry.status === "FAIL"))
-  console.log(`  FAIL ${failed.id}: ${failed.detail}`);
+const blockers = blockingFailures(gates, tier === "full");
+for (const blocked of blockers)
+  console.log(`  BLOCKED ${blocked.id}: ${blocked.status} ${blocked.detail}`);
 console.log(`Report: ${relative(ROOT, join(outDir, "summary.md"))}`);
-if (counts.FAIL > 0 || steps.some((entry) => entry.status === "failed"))
+if (blockers.length > 0 || steps.some((entry) => entry.status === "failed"))
   process.exitCode = 1;

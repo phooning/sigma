@@ -8,7 +8,17 @@ describe("real Tauri desktop", () => {
     const canvas = await $(".canvas-container");
     await canvas.waitForDisplayed({ timeout: 30000 });
     await $('button[aria-label="Open settings"]').click();
-    await $('[role="dialog"]').waitForDisplayed({ timeout: 10000 });
+    await browser.waitUntil(
+      () =>
+        browser.execute(() => {
+          const dialog = document.querySelector('[role="dialog"]');
+          return (
+            dialog?.getAttribute("data-state") === "open" &&
+            dialog.textContent?.includes("Settings")
+          );
+        }),
+      { timeout: 10000, timeoutMsg: "Settings dialog did not open" },
+    );
     const stats = await browser.executeAsync((done) => {
       window.__TAURI_INTERNALS__.invoke("media_cache_stats").then(
         (value) => done({ value }),

@@ -8,6 +8,16 @@ let packetBytes = 0;
 let packetMagic = "";
 
 export const desktopBridge = {
+  async exportProtectedRecoveryData(path: string) {
+    return {
+      ok: await useCanvasSessionStore
+        .getState()
+        .exportProtectedRecoveryData(path),
+    };
+  },
+  recoveryValue() {
+    return localStorage.getItem("sigma:canvas-session");
+  },
   queueFixtureSaves(project: string, positions: number[]) {
     useCanvasSessionStore.setState({ saveFilePath: project });
     for (const x of positions) {

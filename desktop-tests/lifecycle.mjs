@@ -588,6 +588,105 @@ try {
   assert.equal(missingState.items[0].x, 500);
   await close(missing);
   console.log("Missing media retained canvas identity and geometry");
+
+  // A protected recovery value must survive a launch, an export, and any
+  // ordinary edits until the user deliberately discards it. The exported file
+  // uses the disposable, pre-granted canvas path after its old fixture is gone.
+  await rm(project);
+  const corrupt = "{broken native recovery";
+  const seed = await launch(true);
+  await request(`/session/${seed}/execute/sync`, "POST", {
+    script:
+      "window.__SIGMA_DESKTOP_TEST__.clearFixture(); localStorage.setItem('sigma:canvas-session', arguments[0]); return true",
+    args: [corrupt],
+  });
+  await close(seed);
+  const protectedLaunch = await launch(true);
+  let recoveryShown = false;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    recoveryShown = await request(
+      `/session/${protectedLaunch}/execute/sync`,
+      "POST",
+      {
+        script:
+          "return document.body.innerText.includes('Canvas recovery failed')",
+        args: [],
+      },
+    );
+    if (recoveryShown) break;
+    await delay(100);
+  }
+  assert.equal(
+    recoveryShown,
+    true,
+    "Protected recovery warning was not visible",
+  );
+  await execute(
+    protectedLaunch,
+    `const [path, done] = arguments;
+    window.__SIGMA_DESKTOP_TEST__.exportProtectedRecoveryData(path).then(done);`,
+    [project],
+  );
+  assert.equal(await readFile(project, "utf8"), corrupt);
+  assert.equal(
+    await request(`/session/${protectedLaunch}/execute/sync`, "POST", {
+      script: "return window.__SIGMA_DESKTOP_TEST__.recoveryValue()",
+      args: [],
+    }),
+    corrupt,
+  );
+  let discardClicked = false;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    discardClicked = await request(
+      `/session/${protectedLaunch}/execute/sync`,
+      "POST",
+      {
+        script:
+          "const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.includes('Discard original data')); if (button) button.click(); return !!button",
+        args: [],
+      },
+    );
+    if (discardClicked) break;
+    await delay(100);
+  }
+  assert.equal(
+    discardClicked,
+    true,
+    "Discard action was not visible after export",
+  );
+  const replacement = await request(
+    `/session/${protectedLaunch}/execute/sync`,
+    "POST",
+    {
+      script: "return window.__SIGMA_DESKTOP_TEST__.recoveryValue()",
+      args: [],
+    },
+  );
+  assert.notEqual(replacement, corrupt);
+  assert.deepEqual(JSON.parse(replacement).state.items, []);
+  await close(protectedLaunch);
+  const cleanLaunch = await launch(true);
+  assert.equal(
+    await request(`/session/${cleanLaunch}/execute/sync`, "POST", {
+      script:
+        "return document.body.innerText.includes('Canvas recovery failed')",
+      args: [],
+    }),
+    false,
+  );
+  assert.deepEqual(
+    JSON.parse(
+      await request(`/session/${cleanLaunch}/execute/sync`, "POST", {
+        script: "return window.__SIGMA_DESKTOP_TEST__.recoveryValue()",
+        args: [],
+      }),
+    ).state.items,
+    [],
+  );
+  await close(cleanLaunch);
+  console.log(
+    "Protected recovery exported, explicitly discarded, and stayed clear on relaunch",
+  );
 } finally {
   if (child && child.exitCode === null && child.signalCode === null) {
     if (currentSession) {

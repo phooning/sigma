@@ -8,9 +8,11 @@ import {
   selectRepresentativeSubset,
 } from "./classify";
 import {
+  blockingFailures,
   browserRunFailure,
   browserScenarioFailures,
   correctnessGate,
+  desktopRunFailure,
   performanceGate,
   previewWorkloadFailure,
   shutdownFailures,
@@ -169,6 +171,22 @@ describe("gates", () => {
     expect(result.detail).toContain("0 items imported");
   });
 
+  it("rejects a desktop run that failed after writing a complete report", () => {
+    const complete = {};
+    const ok = { code: 0, timedOut: false };
+    expect(desktopRunFailure(ok, complete)).toBeNull();
+    expect(desktopRunFailure({ code: 1, timedOut: false }, complete)).toContain(
+      "exited with code 1",
+    );
+    expect(
+      desktopRunFailure({ code: null, timedOut: true }, complete),
+    ).toContain("timed out");
+    expect(
+      desktopRunFailure(ok, { error: "AssertionError: late\n  at stack" }),
+    ).toBe("desktop scenario error: AssertionError: late");
+    expect(desktopRunFailure(ok, null)).toContain("no report");
+  });
+
   it("rejects unsuccessful and empty Playwright runs", () => {
     const report = { suites: [{}], errors: [] };
     expect(
@@ -266,6 +284,17 @@ describe("gates", () => {
     });
     expect(failed.status).toBe("FAIL");
     expect(failed.reproduce).toBe("--seed 4");
+  });
+
+  it("blocks a full release when a critical check did not run", () => {
+    const skipped = correctnessGate({
+      id: "desktop.media",
+      invariant: "native media",
+      tier: "full",
+      failures: null,
+    });
+    expect(blockingFailures([skipped])).toEqual([]);
+    expect(blockingFailures([skipped], true)).toEqual([skipped]);
   });
 
   it("is UNCALIBRATED without a matching baseline, enough samples, or the metric", () => {

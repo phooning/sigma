@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  isStoredCanvasConfig,
   loadFromStorage,
   saveToStorage,
   selectCanvasSavePath,
@@ -246,6 +247,35 @@ describe("canvas persistence lifecycle", () => {
       await useCanvasSessionStore.persist.rehydrate();
     },
   );
+
+  it("writes recovery snapshots that the shared validator accepts", async () => {
+    useCanvasSessionStore.getState().setItems([
+      {
+        ...item,
+        crop: { top: 0, right: 2, bottom: 1, left: 0 },
+        sourceWidth: 640,
+      },
+      {
+        ...item,
+        id: "video",
+        type: "video",
+        filePath: "/clip.mp4",
+        duration: 8,
+        frameRate: 24000 / 1001,
+      },
+    ]);
+    useCanvasSessionStore.getState().setViewport({ x: 12, y: -50, zoom: 0.8 });
+    const raw = localStorage.getItem("sigma:canvas-session");
+    expect(raw).not.toBeNull();
+    const envelope = JSON.parse(raw ?? "null") as {
+      state: unknown;
+      version: number;
+    };
+    expect(envelope.version).toBe(0);
+    expect(isStoredCanvasConfig(envelope.state)).toBe(true);
+    await useCanvasSessionStore.persist.rehydrate();
+    expect(useCanvasSessionStore.getState().items).toHaveLength(2);
+  });
 
   it("waits for both queued snapshots before permitting shutdown and freezes late edits", async () => {
     useCanvasSessionStore.setState({ saveFilePath: "/canvas.json" });

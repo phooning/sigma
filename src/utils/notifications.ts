@@ -34,4 +34,5 @@ export const notify = {
   info: createNotifyMethod("info"),
   warning: createNotifyMethod("warning"),
   error: createNotifyMethod("error"),
+  dismiss: toast.dismiss,
 };

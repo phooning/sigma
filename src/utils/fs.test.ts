@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getCanvasConfigData,
   getProjectRootForConfig,
+  isStoredCanvasConfig,
+  loadCanvasFromPath,
   loadFromStorage,
   resolveProjectPath,
   saveToStorage,
@@ -61,6 +63,114 @@ describe("project path helpers", () => {
 describe("canvas config storage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("accepts legacy files and rejects future schemas or malformed media before hydration", async () => {
+    const legacy = { items: [{ ...baseItem, url: undefined }] };
+    expect(isStoredCanvasConfig(legacy)).toBe(true);
+    expect(isStoredCanvasConfig({ ...legacy, schemaVersion: 2 })).toBe(false);
+    vi.mocked(readTextFile).mockResolvedValue(
+      JSON.stringify({ ...legacy, schemaVersion: 2 }),
+    );
+    const future = await loadCanvasFromPath("/project/future.json");
+    expect(future).toMatchObject({ ok: false, reason: "invalid" });
+    expect(String(!future.ok && future.error)).toContain("format version 2");
+    expect(
+      isStoredCanvasConfig({
+        ...legacy,
+        items: [legacy.items[0], legacy.items[0]],
+      }),
+    ).toBe(false);
+    for (const field of [
+      { frameRate: "30" },
+      { sourceWidth: -1 },
+      { thumbnailPath: 7 },
+      { crop: { top: 0, right: 0, bottom: "bad", left: 0 } },
+    ]) {
+      vi.mocked(readTextFile).mockResolvedValue(
+        JSON.stringify({
+          items: [{ ...legacy.items[0], ...field }],
+        }),
+      );
+      const result = await loadCanvasFromPath("/project/bad.json");
+      expect(result.ok).toBe(false);
+    }
+  });
+
+  it("accepts deterministic application-produced image and video documents", () => {
+    for (let seed = 0; seed < 80; seed++) {
+      const items: MediaItem[] = Array.from(
+        { length: seed % 7 },
+        (_, index) => ({
+          ...baseItem,
+          id: `item-${seed}-${index}`,
+          type: index % 2 ? "video" : "image",
+          filePath: `/Users/test/project/assets/${seed}-${index}.mp4`,
+          x: seed * 17 - index * 13,
+          y: index * 23 - seed,
+          width: 1 + seed + index,
+          height: 1 + index * 2,
+          ...(index % 2 ? { duration: seed / 3, frameRate: 24000 / 1001 } : {}),
+          ...(index % 3
+            ? { sourceWidth: 320 + seed, sourceHeight: 240 + index }
+            : {}),
+          ...(index % 4
+            ? { crop: { top: 0, right: index, bottom: seed / 10, left: 0 } }
+            : {}),
+        }),
+      );
+      const text = getCanvasConfigData(
+        items,
+        { x: seed - 30, y: -seed, zoom: 0.1 + seed / 40 },
+        "/Users/test/project/canvas.json",
+      );
+      const parsed: unknown = JSON.parse(text);
+      expect(isStoredCanvasConfig(parsed)).toBe(true);
+      expect(parsed).toMatchObject({ schemaVersion: 1 });
+    }
+  });
+
+  it("rejects invalid numbers and null before JSON can turn them into stored corruption", async () => {
+    const invalidItems: MediaItem[][] = [
+      [{ ...baseItem, x: Number.NaN }],
+      [{ ...baseItem, frameRate: Number.POSITIVE_INFINITY }],
+      [{ ...baseItem, sourceWidth: null as unknown as number }],
+      [{ ...baseItem, url: null as unknown as string }],
+      [{ ...baseItem, imageLod: "bad" as MediaItem["imageLod"] }],
+      [
+        {
+          ...baseItem,
+          crop: { top: 0, right: 0, bottom: Number.NaN, left: 0 },
+        },
+      ],
+    ];
+    for (const items of invalidItems) {
+      expect(() =>
+        getCanvasConfigData(items, { x: 0, y: 0, zoom: 1 }, "/canvas.json"),
+      ).toThrow();
+      const result = await saveToStorage(
+        items,
+        { x: 0, y: 0, zoom: 1 },
+        "/canvas.json",
+      );
+      expect(result.ok).toBe(false);
+    }
+    expect(() =>
+      getCanvasConfigData(
+        [baseItem],
+        { x: 0, y: 0, zoom: Infinity },
+        "/canvas.json",
+      ),
+    ).toThrow();
+    expect(() =>
+      getCanvasConfigData(
+        [baseItem],
+        { x: 0, y: 0, zoom: 1 },
+        "/canvas.json",
+        null as unknown as undefined,
+      ),
+    ).toThrow();
+    expect(invoke).not.toHaveBeenCalled();
   });
 
   it("saves media file paths relative to the config folder", async () => {
